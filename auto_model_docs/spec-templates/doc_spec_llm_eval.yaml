@@ -1,0 +1,74 @@
+slug: llm_eval
+card_title: "LLM Evaluation Report"
+card_description: "Evaluation results for large language model deployments across benchmarks and tasks."
+
+title: "LLM Evaluation Report"
+authors: "AI Platform Team"
+
+sections:
+  - Executive Summary
+  - Model Overview
+  - "Development History: per_model"
+  - Evaluation Methodology
+  - "Benchmark Results: per_model"
+  - "Task-Specific Performance: per_model"
+  - Safety & Alignment Testing
+  - Hallucination & Factuality Analysis
+  - Latency & Cost Analysis
+  - Governance & Risk
+  - Recommendations
+  - Appendix
+
+hints:
+  "Executive Summary": >
+    Summarize the key LLM evaluation findings, highlight top-performing models,
+    and provide a clear recommendation for deployment. Keep it concise and
+    actionable for both technical and non-technical stakeholders. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Model Overview": >
+    Describe each evaluated model including provider, version, parameter count,
+    context window size, and intended use cases. Note any known strengths or
+    limitations documented by the provider. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Evaluation Methodology": >
+    Explain the evaluation framework, benchmark datasets used, scoring criteria,
+    and any human evaluation components. Describe how prompts were constructed
+    and any chain-of-thought or few-shot techniques applied. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Benchmark Results": >
+    Present quantitative benchmark scores across standard LLM benchmarks such as
+    MMLU, HellaSwag, or domain-specific evals. Include comparisons to baseline
+    models where available. Visualize results in tables. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Task-Specific Performance": >
+    Detail performance on tasks relevant to the deployment use case such as
+    summarization, classification, code generation, extraction, or Q&A. Report
+    precision, recall, BLEU, ROUGE, or other task-appropriate metrics. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Safety & Alignment Testing": >
+    Document results of safety evaluations including refusal rates for harmful
+    requests, jailbreak resistance, and alignment with organizational policies.
+    Include examples of failure modes observed. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Hallucination & Factuality Analysis": >
+    Present hallucination rates and factuality scores. Include examples of
+    hallucination patterns observed, the severity of errors, and any grounding
+    or retrieval techniques applied to mitigate them. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Latency & Cost Analysis": >
+    Compare inference latency (p50, p95, p99 in ms) and estimated cost per
+    1K tokens across evaluated models. Include throughput analysis and any
+    batching or caching optimizations considered. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Development History": >
+    Document the models and versions explored during development, as found in the
+    MLflow experiment history and code. Describe what was tried, how candidates
+    compared, and which model was ultimately promoted. These are development
+    candidates — describe them from code and MLflow evidence only. Do not assign
+    them a risk classification, approval state, or any governance status; they
+    were not governed. The absence of governance data here is expected, not a gap. See Governance & Risk for governed model status.
+  "Governance & Risk": >
+    This section describes the governed model(s) of record named in
+    [@governance.model_of_record] — the model(s) tied to the selected governance
+    bundle. State risk tier, intended use, validation status, approval state, and
+    any open findings VERBATIM from the Governance Evidence block, each with its
+    citation. Always name the governed model(s) so governance facts are never read
+    as applying to a development candidate. Do not infer governance facts from
+    code or MLflow; if a fact is not in the Governance Evidence block, omit it.
+
+  "Recommendations": >
+    Provide clear model selection recommendations with justification,
+    deployment considerations, monitoring strategy, and suggested
+    re-evaluation cadence as new model versions are released. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
