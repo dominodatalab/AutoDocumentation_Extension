@@ -1,0 +1,186 @@
+{
+  "data": [
+    {
+      "id": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+      "name": "fraud-detector-v1-governance-bundle",
+      "createdAt": "2026-05-01T12:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
+      },
+      "policyId": "a1111111-1111-1111-1111-111111111101",
+      "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+      "policyVersion": "1.0",
+      "policyName": "ml-governance-policy",
+      "projectId": "aaaaaaaa-bbbb-cccc-dddd-000000000001",
+      "projectName": "demo-project",
+      "projectOwner": "demo-user",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "Medium",
+      "attachments": [
+        {
+          "id": "att-fraud-1",
+          "type": "ModelVersion",
+          "identifier": { "name": "fraud-detector-v1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-01T12:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 2,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "b2222222-2222-2222-2222-222222222201",
+      "name": "churn-predictor-v1-governance-bundle",
+      "createdAt": "2026-05-02T10:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
+      },
+      "policyId": "a1111111-1111-1111-1111-111111111101",
+      "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+      "policyVersion": "1.0",
+      "policyName": "ml-governance-policy",
+      "projectId": "aaaaaaaa-bbbb-cccc-dddd-000000000001",
+      "projectName": "demo-project",
+      "projectOwner": "demo-user",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "High",
+      "attachments": [
+        {
+          "id": "att-churn-1",
+          "type": "ModelVersion",
+          "identifier": { "name": "churn-predictor-v1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-02T10:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 2,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "b2222222-2222-2222-2222-222222222202",
+      "name": "churn-predictor-v1-agentic-bundle",
+      "createdAt": "2026-05-02T11:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
+      },
+      "policyId": "b3333333-3333-3333-3333-333333333301",
+      "policyVersionId": "b3333333-3333-3333-3333-333333333302",
+      "policyVersion": "1.0",
+      "policyName": "agentic-ai-policy",
+      "projectId": "aaaaaaaa-bbbb-cccc-dddd-000000000001",
+      "projectName": "demo-project",
+      "projectOwner": "demo-user",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "High",
+      "attachments": [
+        {
+          "id": "att-churn-2",
+          "type": "ModelVersion",
+          "identifier": { "name": "churn-predictor-v1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-02T11:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 2,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "ccc102fc-9781-411e-a5b0-e9cf6277e9f3",
+      "name": "legacy-classifier-v1-governance-bundle",
+      "createdAt": "2026-05-03T09:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
+      },
+      "policyId": "b3333333-3333-3333-3333-333333333301",
+      "policyVersionId": "b3333333-3333-3333-3333-333333333302",
+      "policyVersion": "1.0",
+      "policyName": "agentic-ai-policy",
+      "projectId": "aaaaaaaa-bbbb-cccc-dddd-000000000001",
+      "projectName": "demo-project",
+      "projectOwner": "demo-user",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "Low",
+      "attachments": [
+        {
+          "id": "att-legacy-1",
+          "type": "ModelVersion",
+          "identifier": { "name": "legacy-classifier-v1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-03T09:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 0,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "d4444444-4444-4444-4444-444444444401",
+      "name": "legacy-archived-bundle",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
+      },
+      "policyId": "a1111111-1111-1111-1111-111111111101",
+      "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+      "policyVersion": "1.0",
+      "policyName": "ml-governance-policy",
+      "projectId": "aaaaaaaa-bbbb-cccc-dddd-000000000001",
+      "projectName": "demo-project",
+      "projectOwner": "demo-user",
+      "stage": "Stage 2",
+      "state": "Archived",
+      "evidenceRestricted": false,
+      "classificationValue": null,
+      "attachments": [],
+      "currentStageInfo": {
+        "status": "Complete",
+        "openFindingsCount": 0,
+        "pendingApprovalsCount": 0
+      }
+    }
+  ],
+  "meta": {
+    "filters": [],
+    "search": null,
+    "pagination": { "offset": 0, "limit": 25, "totalCount": 5 },
+    "sort": []
+  }
+}
