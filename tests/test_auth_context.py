@@ -1,0 +1,118 @@
+"""Tests for auth_context.py -- ContextVar-based auth forwarding."""
+
+from __future__ import annotations
+
+import sys
+import os
+
+import base64
+import json
+
+import pytest
+
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_pkg_dir = os.path.join(_repo_root, "auto_model_docs")
+for p in (_repo_root, _pkg_dir):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+from auth_context import (
+    User,
+    _bearer_token,
+    _decode_jwt_payload,
+    get_request_auth_header,
+    get_viewing_user,
+    set_request_auth_header,
+)
+
+
+class TestSetGetAuthHeader:
+    def test_default_is_none(self):
+        set_request_auth_header(None)
+        assert get_request_auth_header() is None
+
+    def test_set_and_get(self):
+        set_request_auth_header("Bearer test-jwt-token")
+        assert get_request_auth_header() == "Bearer test-jwt-token"
+        set_request_auth_header(None)
+
+    def test_overwrite(self):
+        set_request_auth_header("Bearer first")
+        set_request_auth_header("Bearer second")
+        assert get_request_auth_header() == "Bearer second"
+        set_request_auth_header(None)
+
+    def test_clear(self):
+        set_request_auth_header("Bearer token")
+        set_request_auth_header(None)
+        assert get_request_auth_header() is None
+
+
+def _make_jwt(payload: dict) -> str:
+    header = base64.urlsafe_b64encode(
+        json.dumps({"alg": "none"}).encode()
+    ).rstrip(b"=").decode()
+    body = base64.urlsafe_b64encode(
+        json.dumps(payload).encode()
+    ).rstrip(b"=").decode()
+    return f"{header}.{body}.sig"
+
+
+class TestJwtHelpers:
+    def test_bearer_token_strips_scheme(self):
+        assert _bearer_token("Bearer abc.def.ghi") == "abc.def.ghi"
+
+    def test_decode_jwt_payload(self):
+        token = _make_jwt({"sub": "uid-1", "preferred_username": "alice"})
+        assert _decode_jwt_payload(token) == {
+            "sub": "uid-1",
+            "preferred_username": "alice",
+        }
+
+
+class TestGetViewingUser:
+    def teardown_method(self):
+        set_request_auth_header(None)
+
+    def test_reads_sub_and_preferred_username_from_jwt(self):
+        jwt = _make_jwt(
+            {
+                "sub": "6a3939d1dd4c875bd6f5e0e4",
+                "preferred_username": "integration-test",
+            }
+        )
+        set_request_auth_header(f"Bearer {jwt}")
+
+        u = get_viewing_user()
+
+        assert u.id == "6a3939d1dd4c875bd6f5e0e4"
+        assert u.user_name == "integration-test"
+
+    def test_falls_back_to_userName_claim(self):
+        jwt = _make_jwt({"sub": "uid-42", "userName": "bob"})
+        set_request_auth_header(f"Bearer {jwt}")
+
+        u = get_viewing_user()
+
+        assert u.id == "uid-42"
+        assert u.user_name == "bob"
+
+    def test_raises_without_jwt(self):
+        set_request_auth_header(None)
+        from domino_auth import MissingAuthError
+
+        with pytest.raises(MissingAuthError):
+            get_viewing_user()
+
+    def test_raises_when_jwt_has_no_sub(self):
+        jwt = _make_jwt({"preferred_username": "alice"})
+        set_request_auth_header(f"Bearer {jwt}")
+
+        with pytest.raises(RuntimeError, match="no sub claim"):
+            get_viewing_user()
+
+    def test_raises_when_auth_header_is_not_bearer(self):
+        set_request_auth_header("Token not-a-jwt")
+
+        with pytest.raises(RuntimeError, match="not a bearer token"):
+            get_viewing_user()

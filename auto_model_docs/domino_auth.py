@@ -1,0 +1,137 @@
+"""Domino API host resolution and auth provider configuration.
+
+``user_auth`` forwards the viewer JWT from the incoming HTTP request (Studio).
+Configure once via ``configure_auth(provider)``. Modules such as
+``domino_client`` call ``current_auth()`` when making Domino API requests.
+Governance reads use ``resolve_api_host()`` without client auth headers.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import threading
+from dataclasses import dataclass
+from typing import Callable, Literal, Optional
+
+from auth_context import get_request_auth_header
+
+logger = logging.getLogger(__name__)
+
+
+class MissingAuthError(RuntimeError):
+    """No auth credentials available for a Domino API call."""
+
+
+@dataclass(frozen=True)
+class AuthCredentials:
+    kind: Literal["jwt", "api_key"]
+    token: str
+
+    def to_headers(self) -> dict[str, str]:
+        if self.kind == "jwt":
+            value = self.token if self.token.startswith("Bearer ") else f"Bearer {self.token}"
+            return {"Authorization": value}
+        return {"X-Domino-Api-Key": self.token}
+
+
+AuthProvider = Callable[[], AuthCredentials]
+
+_auth_provider: Optional[AuthProvider] = None
+
+
+def configure_auth(provider: AuthProvider) -> None:
+    """Set the process-wide auth provider (e.g. ``user_auth`` for Studio)."""
+    global _auth_provider
+    _auth_provider = provider
+
+
+def reset_auth() -> None:
+    """Clear the configured provider. Mainly for tests."""
+    global _auth_provider
+    _auth_provider = None
+
+
+def current_auth() -> AuthCredentials:
+    """Return credentials from the configured provider.
+
+    Raises ``MissingAuthError`` if no provider has been configured or
+    if the provider itself cannot build credentials.
+    """
+    if _auth_provider is None:
+        raise MissingAuthError(
+            "Auth provider not configured. Call configure_auth(user_auth) at process startup."
+        )
+    return _auth_provider()
+
+
+def get_user_token() -> str:
+    """Return the forwarded user JWT. Raises if absent."""
+    forwarded = get_request_auth_header()
+    if not forwarded:
+        raise MissingAuthError(
+            "No forwarded user token available. "
+            "Domino API calls require a user token from the incoming request."
+        )
+    return forwarded
+
+
+def user_auth() -> AuthCredentials:
+    """Provider: forwarded user JWT from the current request."""
+    return AuthCredentials(kind="jwt", token=get_user_token())
+
+
+def resolve_api_host() -> str:
+    host = (
+        os.environ.get("DOMINO_USER_HOST")
+        or os.environ.get("DOMINO_API_PROXY")
+        or ""
+    )
+    return host.rstrip("/")
+
+
+def resolve_user_host() -> str:
+    return resolve_api_host()
+
+
+_ui_host: str | None = None
+
+
+def set_ui_host(request_host: str, scheme: str = "https") -> None:
+    global _ui_host
+    if _ui_host is not None:
+        return
+
+    from urllib.parse import urlparse, urlunparse
+
+    raw = (request_host or "").strip()
+    if not raw:
+        return
+
+    if "://" not in raw:
+        raw = f"{scheme}://{raw}"
+
+    parsed = urlparse(raw)
+    hostname = (parsed.hostname or "").strip()
+    if not hostname:
+        return
+
+    if hostname.startswith("apps."):
+        hostname = hostname[len("apps."):]
+    if not hostname:
+        return
+
+    netloc = f"{hostname}:{parsed.port}" if parsed.port else hostname
+    _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
+
+
+def reset_ui_host() -> None:
+    global _ui_host
+    _ui_host = None
+
+
+def resolve_ui_host() -> str:
+    if _ui_host:
+        return _ui_host
+    return (os.environ.get("DOMINO_USER_HOST") or "").rstrip("/")
+
