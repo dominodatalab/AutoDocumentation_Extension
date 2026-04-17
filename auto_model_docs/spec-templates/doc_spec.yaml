@@ -1,0 +1,74 @@
+# Document Specification for Auto Model Documentation
+# This YAML file defines the structure and sections of the generated document.
+
+slug: standard_ml
+card_title: "Standard ML Model Doc"
+card_description: "Full documentation for production ML models with MLflow experiment tracking."
+
+title: "Machine Learning Model Documentation"
+authors: "Data Science Team"
+
+# Sections to include in the document
+# Use "Section Name: per_model" to create separate subsections for each registered model
+sections:
+  - Executive Summary
+  - Data Overview
+  - "Development History: per_model"
+  - Feature Engineering
+  - Model Architecture
+  - Training Pipeline
+  - "Model Performance: per_model"
+  - Validation Results
+  - Governance & Risk
+  - Deployment Considerations
+  - Conclusion
+  - Appendix
+
+# Optional hints to guide content generation for specific sections
+hints:
+  "Executive Summary": >
+    Focus on business impact, key metrics, and high-level model capabilities.
+    Keep it suitable for non-technical stakeholders. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Data Overview": >
+    Describe data sources, volume, quality considerations, and any data
+    preprocessing steps applied before feature engineering. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Feature Engineering": >
+    Document feature transformations, encoding methods, scaling approaches,
+    and feature selection rationale. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Model Architecture": >
+    Include model type, hyperparameters, training configuration,
+    and architectural decisions. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Model Performance": >
+    Present key metrics (accuracy, AUC, F1, etc.), confusion matrix
+    insights, and performance analysis across different segments. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Validation Results": >
+    Document the validation approach used based on what is found in the code.
+    If cross-validation was implemented, cover those results.
+    If only holdout/test set validation was used, document that approach.
+    Include any bias/fairness analysis if it was performed.
+    Do not describe validation methods that were not actually implemented. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Development History": >
+    Document the models and versions explored during development, as found in the
+    MLflow experiment history and code. Describe what was tried, how candidates
+    compared, and which model was ultimately promoted. These are development
+    candidates — describe them from code and MLflow evidence only. Do not assign
+    them a risk classification, approval state, or any governance status; they
+    were not governed. The absence of governance data here is expected, not a gap. See Governance & Risk for governed model status.
+  "Governance & Risk": >
+    This section describes the governed model(s) of record named in
+    [@governance.model_of_record] — the model(s) tied to the selected governance
+    bundle. State risk tier, intended use, validation status, approval state, and
+    any open findings VERBATIM from the Governance Evidence block, each with its
+    citation. Always name the governed model(s) so governance facts are never read
+    as applying to a development candidate. Do not infer governance facts from
+    code or MLflow; if a fact is not in the Governance Evidence block, omit it.
+
+  "Deployment Considerations": >
+    Address inference latency, resource requirements, monitoring strategy,
+    and model refresh cadence. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Conclusion": >
+    Summarize the key model capabilities and performance highlights.
+    Describe recommended monitoring approach based on the model type.
+    Suggest model refresh considerations based on the ML task type.
+    Note any limitations observed in the validation results.
+    Do not introduce new technical details - synthesize what was covered. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
