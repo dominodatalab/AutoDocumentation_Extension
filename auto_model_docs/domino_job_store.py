@@ -2,22 +2,21 @@
 
 Tracks which jobs were submitted by this app, with metadata needed for
 display (user, branch, spec, tier). Actual job status comes live from
-the Domino Jobs API - we don't duplicate it.
+the Domino Jobs API — we don't duplicate it.
 
-The index file lives at ``.autodoc/jobs_index.json`` in the autodoc dataset,
-read/written via DatasetManager. The (dataset_id, snapshot_id) pair is read
-from dataset_ctx and must be set by the caller before invoking any function
-here.
+The index file lives at ``.autodoc/jobs_index.json`` in the autodoc
+dataset, read/written via DatasetStore.
 
 Local queue: jobs waiting for a slot are tracked in the index with
-``domino_run_id: null``. Once submitted, the run id is filled in and status
-comes from Domino.
+``domino_run_id: null``. Once submitted, the run ID is filled in and
+status comes from Domino.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
@@ -27,18 +26,21 @@ logger = logging.getLogger(__name__)
 _INDEX_PATH = ".autodoc/jobs_index.json"
 _MAX_COMPLETED_JOBS = 50  # Keep at most this many completed jobs per user
 _COMPLETED_STATUSES = {"succeeded", "failed", "cancelled"}
+_INDEX_LOCK = threading.Lock()  # Serialize read-modify-write on the JSON index
 
+
+# ---------------------------------------------------------------------------
+# Index I/O
+# ---------------------------------------------------------------------------
 
 def _read_index() -> list[dict[str, Any]]:
     """Load the job index from the dataset."""
-    from dataset_ctx import get_dataset_ctx
-    from dataset_manager import DatasetManager
-
-    ctx = get_dataset_ctx()
+    from dataset_store import get_store
+    store = get_store()
     try:
-        if not DatasetManager.file_exists(ctx.snapshot_id, _INDEX_PATH):
+        if not store.file_exists(_INDEX_PATH):
             return []
-        content = DatasetManager.read_file(ctx.snapshot_id, _INDEX_PATH)
+        content = store.read_file(_INDEX_PATH)
         return json.loads(content)
     except Exception as exc:
         logger.warning("Failed to read job index: %s", exc)
@@ -47,12 +49,13 @@ def _read_index() -> list[dict[str, Any]]:
 
 def _write_index(jobs: list[dict[str, Any]]) -> None:
     """Write the job index to the dataset, pruning old completed jobs."""
-    from dataset_ctx import get_dataset_ctx
-    from dataset_manager import DatasetManager
+    from dataset_store import get_store
 
+    # Prune: keep all active jobs, cap completed jobs per user
     active = [j for j in jobs if j.get("status") not in _COMPLETED_STATUSES]
     completed = [j for j in jobs if j.get("status") in _COMPLETED_STATUSES]
 
+    # Group completed by owner, keep newest N per owner
     by_owner: dict[str, list[dict[str, Any]]] = {}
     for j in completed:
         by_owner.setdefault(j.get("owner_id", ""), []).append(j)
@@ -64,12 +67,20 @@ def _write_index(jobs: list[dict[str, Any]]) -> None:
     jobs = active + pruned_completed
 
     content = json.dumps(jobs, indent=2).encode("utf-8")
-    ctx = get_dataset_ctx()
-    DatasetManager.write_file(ctx.dataset_id, _INDEX_PATH, content)
+    get_store().write_file(_INDEX_PATH, content)
 
 
 def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Public API (same interface as before, minus init_db)
+# ---------------------------------------------------------------------------
+
+def init_db() -> None:
+    """No-op for backwards compatibility. Index is created on first write."""
+    pass
 
 
 def create_job(
@@ -83,23 +94,24 @@ def create_job(
 ) -> str:
     """Record a new job submission in the index."""
     jid = job_id or str(uuid4())
-    jobs = _read_index()
-    jobs.append({
-        "id": jid,
-        "owner_id": owner_id,
-        "domino_run_id": None,
-        "branch": branch,
-        "hardware_tier": tier,
-        "status": "queued",
-        "domino_status": None,
-        "job_url": None,
-        "spec_path": spec_path,
-        "command": command,
-        "submitted_at": _now_iso(),
-        "completed_at": None,
-        "project_id": project_id,
-    })
-    _write_index(jobs)
+    with _INDEX_LOCK:
+        jobs = _read_index()
+        jobs.append({
+            "id": jid,
+            "owner_id": owner_id,
+            "domino_run_id": None,
+            "branch": branch,
+            "hardware_tier": tier,
+            "status": "queued",
+            "domino_status": None,
+            "job_url": None,
+            "spec_path": spec_path,
+            "command": command,
+            "submitted_at": _now_iso(),
+            "completed_at": None,
+            "project_id": project_id,
+        })
+        _write_index(jobs)
     return jid
 
 
@@ -107,12 +119,13 @@ def update_job(job_id: str, **fields: Any) -> None:
     """Update fields on a job record in the index."""
     if not fields:
         return
-    jobs = _read_index()
-    for job in jobs:
-        if job["id"] == job_id:
-            job.update(fields)
-            break
-    _write_index(jobs)
+    with _INDEX_LOCK:
+        jobs = _read_index()
+        for job in jobs:
+            if job["id"] == job_id:
+                job.update(fields)
+                break
+        _write_index(jobs)
 
 
 def get_job(job_id: str) -> Optional[dict[str, Any]]:
@@ -173,31 +186,33 @@ def get_queued_owner_ids() -> list[str]:
 
 def reconcile_stale_jobs() -> None:
     """Mark submitted/running jobs with no run ID as failed (app restarted)."""
-    jobs = _read_index()
-    changed = False
-    for job in jobs:
-        if (
-            job.get("status") in ("submitted", "pending", "running")
-            and not job.get("domino_run_id")
-        ):
-            job["status"] = "failed"
-            job["domino_status"] = "App restarted"
-            changed = True
-    if changed:
-        _write_index(jobs)
+    with _INDEX_LOCK:
+        jobs = _read_index()
+        changed = False
+        for job in jobs:
+            if (
+                job.get("status") in ("submitted", "pending", "running")
+                and not job.get("domino_run_id")
+            ):
+                job["status"] = "failed"
+                job["domino_status"] = "App restarted"
+                changed = True
+        if changed:
+            _write_index(jobs)
 
 
 def cancel_queued_jobs(owner_id: str) -> None:
     """Cancel all queued (not yet submitted) jobs for an owner."""
-    jobs = _read_index()
-    changed = False
-    for job in jobs:
-        if (
-            job.get("owner_id") == owner_id
-            and job.get("status") == "queued"
-            and not job.get("domino_run_id")
-        ):
-            job["status"] = "cancelled"
-            changed = True
-    if changed:
-        _write_index(jobs)
+    with _INDEX_LOCK:
+        jobs = _read_index()
+        changed = False
+        for job in jobs:
+            if (
+                job.get("owner_id") == owner_id
+                and job.get("status") == "queued"
+                and not job.get("domino_run_id")
+            ):
+                job["status"] = "cancelled"
+                changed = True
+        if changed:
+            _write_index(jobs)

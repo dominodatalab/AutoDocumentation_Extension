@@ -18,13 +18,13 @@ from domino_auth import configure_auth, user_auth
 configure_auth(user_auth)
 
 from studio.state import (
+    _DOMINO_AVAILABLE,
     _STARTUP_WARNINGS,
-    bootstrap_dataset_ctx,
+    _set_target_project,
     _get_default_code_root,
     _get_default_spec_path,
     domino_client,
     domino_job_store,
-    log_buffer,
     logger,
 )
 from studio.styles import STUDIO_CSS
@@ -40,12 +40,6 @@ from studio.job_engine import (
 from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
-
-
-# Projects for which we've run the once-per-startup stale-job reconciliation
-# this process lifetime. Not a cross-user leak: the value is only used to
-# skip redundant work, never to answer a request.
-_reconciled_projects: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +64,12 @@ app, rt = fast_app(
 # ---------------------------------------------------------------------------
 
 @rt("/")
-async def index(req: Request):
-    host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
-    scheme = req.headers.get("x-forwarded-proto", "https")
-    domino_client.set_ui_host(host, scheme)
+def index(req: Request):
+    # Cache the external host on first request so Domino job URLs resolve correctly.
+    if _DOMINO_AVAILABLE:
+        host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
+        scheme = req.headers.get("x-forwarded-proto", "https")
+        domino_client.set_ui_host(host, scheme)
 
     # Guard: projectId query param is required.  Domino's reverse proxy
     # strips query params from the iframe URL, so if it's missing we serve
@@ -182,47 +178,48 @@ async def index(req: Request):
             ),
         )
 
-    bootstrap_dataset_ctx(project_id)
-    if project_id not in _reconciled_projects:
-        _reconciled_projects.add(project_id)
+    if _set_target_project(project_id) and _DOMINO_AVAILABLE:
         _reconcile_stale_jobs()
 
+    # Resolve display name from the (now-cached) target project.
     project_display_name: Optional[str] = None
-    if project_id:
-        info = domino_client.resolve_project(project_id)
+    if _DOMINO_AVAILABLE and project_id:
+        info = domino_client.resolve_project(project_id)  # hits _project_cache
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
 
     default_spec = _get_default_spec_path()
-    import auth_context
+    from auth_context import get_viewing_user
     try:
-        owner_id = auth_context.get_viewing_user().id
+        owner_id = get_viewing_user().id
     except Exception:
         owner_id = ""
     _current_model = "kimi-k2-0905-preview"
 
+    # Pre-fetch branches and hardware tiers for server-side rendering
     branch_options = []
     tier_data = []
     default_tier = ""
-    tier_options = []
-    if project_id:
+    if _DOMINO_AVAILABLE:
+        if project_id:
+            try:
+                _branches_raw = domino_client.list_branches_api(project_id)
+                branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
+            except Exception:
+                pass
         try:
-            _branches_raw = domino_client.list_branches_api(project_id)
-            branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
+            tier_data = domino_client.list_hardware_tiers(project_id=project_id)
+            default_tier = domino_client.get_project_default_tier()
+            tier_options = []
+            for t in tier_data:
+                tid = t.get("id", "")
+                tname = t.get("name") or tid
+                is_default = t.get("isDefault", False) or tid == default_tier
+                tier_options.append(Option(tname, value=tid, selected=is_default))
         except Exception:
-            pass
-    try:
-        tier_data = domino_client.list_hardware_tiers(project_id=project_id)
-        default_tier = domino_client.get_project_default_tier()
-        for t in tier_data:
-            tid = t.get("id", "")
-            tname = t.get("name") or tid
-            is_default = t.get("isDefault", False) or tid == default_tier
-            tier_options.append(Option(tname, value=tid, selected=is_default))
-    except Exception:
-        tier_options = []
-    if not tier_options:
-        tier_options = [Option("(default)", value="")]
+            tier_options = []
+        if not tier_options:
+            tier_options = [Option("(default)", value="")]
 
     # ── Build the 3-column layout ────────────────────────────────────────
 
@@ -646,9 +643,6 @@ async def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
-                A("Logs", href="logs", target="_blank", rel="noopener",
-                  style="margin-left:auto;align-self:flex-start;color:var(--primary);"
-                        "font-size:12px;font-weight:600;text-decoration:underline;"),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
@@ -690,15 +684,6 @@ register_spec_routes(rt)
 register_job_routes(rt)
 
 
-@rt("/logs")
-def logs():
-    """Plain-text dump of the in-process log ring buffer for troubleshooting."""
-    from starlette.responses import PlainTextResponse
-    lines = log_buffer.snapshot()
-    body = "\n".join(lines) if lines else "(no log records buffered yet)"
-    return PlainTextResponse(body)
-
-
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
@@ -730,32 +715,15 @@ app.add_middleware(
 
 @app.middleware("http")
 async def capture_auth_context(request, call_next):
-    from studio.state import auth_context as _auth_context
-
-    try:
-        hdr_dump = {k: v for k, v in request.headers.items()}
-    except Exception as _e:
-        hdr_dump = {"_error": str(_e)}
-    _auth_variants = {
-        "authorization": request.headers.get("authorization"),
-        "Authorization": request.headers.get("Authorization"),
-        "x-authorization": request.headers.get("x-authorization"),
-        "x-forwarded-authorization": request.headers.get("x-forwarded-authorization"),
-        "x-domino-api-key": request.headers.get("x-domino-api-key"),
-        "x-domino-token": request.headers.get("x-domino-token"),
-        "x-forwarded-user": request.headers.get("x-forwarded-user"),
-        "x-remote-user": request.headers.get("x-remote-user"),
-        "cookie": request.headers.get("cookie"),
-    }
-
-    import threading as _threading
-    forwarded = request.headers.get("authorization")
-    _auth_context.set_request_auth_header(forwarded)
-    _after_set = _auth_context.get_request_auth_header()
+    from studio.state import auth_context as _auth_context, _DOMINO_AVAILABLE as _da
+    if _da:
+        forwarded = request.headers.get("authorization")
+        _auth_context.set_request_auth_header(forwarded)
     try:
         response = await call_next(request)
     finally:
-        _auth_context.set_request_auth_header(None)
+        if _da:
+            _auth_context.set_request_auth_header(None)
     return response
 
 
@@ -767,6 +735,8 @@ async def capture_auth_context(request, call_next):
 async def _on_startup():
     import studio.state as _state
     _state._STARTUP_WARNINGS = _validate_environment()
+    for w in _state._STARTUP_WARNINGS:
+        logger.warning(f"Startup: [{w.level}] {w.message} {w.action}")
 
 
 # ---------------------------------------------------------------------------

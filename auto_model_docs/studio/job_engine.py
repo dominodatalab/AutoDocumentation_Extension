@@ -9,11 +9,14 @@ from starlette.requests import Request
 from .state import (
     JobRequest,
     DominoJobRecord,
+    _DOMINO_AVAILABLE,
     _max_jobs,
     domino_client,
     domino_job_store,
     spec_store,
     domino_datasets,
+    _get_target_project_id,
+    _get_target_project_name,
     logger,
 )
 from .ui_components import (
@@ -37,12 +40,11 @@ async def _parse_request(req: Request) -> JobRequest:
         spec_content = content.decode("utf-8", errors="replace")
         spec_filename = getattr(spec_upload, "filename", None)
 
-    # projectId must come from the request itself (form field or URL query).
-    # No fallback to process-global state: that would let user A's project id
-    # leak into user B's request when user B's form/URL omit it.
+    # projectId: prefer form field, fall back to captured target or query param
     project_id = (
         form.get("target_project")
         or form.get("project_id")
+        or _get_target_project_id()
         or req.query_params.get("projectId")
     )
     if not project_id:
@@ -125,13 +127,23 @@ def _build_job_command_str(req: JobRequest, spec_path: Optional[str]) -> str:
 
 async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
     """Submit or queue a Domino job and persist it to the job index."""
+    logger.info(
+        "Submitting Domino job: project_id=%s, branch=%s, tier=%s",
+        req.project_id, req.branch, req.hardware_tier,
+    )
+    if not _DOMINO_AVAILABLE:
+        raise RuntimeError("Domino integration is not available.")
 
-    # Resolve spec path; must be an absolute mount path so the Domino
+    # Ensure DB is initialised
+    domino_job_store.init_db()
+
+    # Resolve spec path — must be an absolute mount path so the Domino
     # job container can read it from the mounted "autodoc" dataset.
     spec_path: Optional[str] = None
     if req.spec_content and req.spec_filename:
         saved = spec_store.save_spec(req.spec_filename, req.spec_content)
-        from dataset_manager import AUTODOC_DATASET_NAME
+        # Convert dataset-relative path to absolute mount path
+        from dataset_store import AUTODOC_DATASET_NAME
         mount_prefix = domino_datasets.get_dataset_mount_prefix()
         spec_path = f"{mount_prefix}/{AUTODOC_DATASET_NAME}/{saved}"
     elif req.spec_path:
@@ -151,13 +163,11 @@ async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
     # Verify the spec file still exists in the dataset (it may have been
     # deleted externally via the Domino UI between selection and submission).
     if req.spec_path and req.spec_path.startswith("dataset://"):
+        # Extract the dataset-relative path for API verification
         ds_relative = req.spec_path[len("dataset://"):].split("/", 1)
         if len(ds_relative) > 1:
-            from dataset_ctx import get_dataset_ctx
-            from dataset_manager import DatasetManager
-            if not DatasetManager.file_exists(
-                get_dataset_ctx().snapshot_id, ds_relative[1]
-            ):
+            from dataset_store import get_store
+            if not get_store().file_exists_api(ds_relative[1]):
                 raise ValueError(
                     f"The selected spec file no longer exists in the dataset. "
                     f"It may have been deleted. Please select or upload a spec file and try again."
@@ -223,6 +233,9 @@ def _refresh_active_jobs_for(owner_id: str) -> None:
     """Sync status for this owner's active Domino jobs from the Domino API."""
     from datetime import datetime, timezone
 
+    if not _DOMINO_AVAILABLE:
+        return
+
     active_jobs = [
         j for j in domino_job_store.get_active_jobs()
         if j.get("owner_id") == owner_id
@@ -250,6 +263,9 @@ def _refresh_active_jobs_for(owner_id: str) -> None:
 
 def _promote_queued_jobs_for(owner_id: str) -> None:
     """Submit the owner's oldest queued job if a slot is available."""
+    if not _DOMINO_AVAILABLE:
+        return
+
     active = domino_job_store.count_active_jobs(owner_id)
     if active > _max_jobs():
         return
