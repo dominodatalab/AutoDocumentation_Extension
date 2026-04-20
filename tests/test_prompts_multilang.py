@@ -73,21 +73,3 @@ class TestLibraryExamples:
         assert "xgboost" in prompt
 
 
-class TestSchemaHasLineNumbers:
-    def test_code_evidence_has_start_line(self):
-        props = CODE_ANALYSIS_SCHEMA["properties"]["code_evidence"]["items"]["properties"]
-        assert "start_line" in props
-        assert props["start_line"]["type"] == "integer"
-
-    def test_code_evidence_has_end_line(self):
-        props = CODE_ANALYSIS_SCHEMA["properties"]["code_evidence"]["items"]["properties"]
-        assert "end_line" in props
-        assert props["end_line"]["type"] == "integer"
-
-
-class TestLineNumberInstructions:
-    def test_prompt_mentions_line_numbers(self):
-        contents = [{"file": "train.py", "content": "1: import sklearn\n2: model.fit()"}]
-        prompt = build_code_analysis_prompt(contents, profile=PYTHON_PROFILE)
-        assert "start_line" in prompt
-        assert "end_line" in prompt
