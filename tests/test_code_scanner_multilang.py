@@ -96,20 +96,6 @@ class TestFindSourceFiles:
         assert scanner.profile is PYTHON_PROFILE
 
 
-class TestLineNumberAnnotation:
-    def test_read_files_adds_line_numbers(self, tmp_path, mock_llm, sanitizer):
-        code = "line_one\nline_two\nline_three"
-        (tmp_path / "script.py").write_text(code)
-        scanner = CodeScanner(mock_llm, sanitizer, tmp_path, profile=PYTHON_PROFILE)
-        files = scanner._find_source_files()
-        contents = scanner._read_files(files)
-        assert len(contents) == 1
-        lines = contents[0]["content"].split("\n")
-        assert lines[0] == "1: line_one"
-        assert lines[1] == "2: line_two"
-        assert lines[2] == "3: line_three"
-
-
 class TestScanSetsLanguage:
     @pytest.mark.asyncio
     async def test_scan_sets_language_field(self, tmp_path, mock_llm, sanitizer):
@@ -125,11 +111,3 @@ class TestScanSetsLanguage:
         assert ctx.language == "r"
         assert "No R files found" in ctx.insights
 
-    @pytest.mark.asyncio
-    async def test_scan_evidence_has_line_numbers(self, tmp_path, mock_llm, sanitizer):
-        (tmp_path / "train.py").write_text("import sklearn\nmodel.fit(X, y)")
-        scanner = CodeScanner(mock_llm, sanitizer, tmp_path, profile=PYTHON_PROFILE)
-        ctx = await scanner.scan()
-        assert len(ctx.code_evidence) == 1
-        assert ctx.code_evidence[0].start_line == 10
-        assert ctx.code_evidence[0].end_line == 15

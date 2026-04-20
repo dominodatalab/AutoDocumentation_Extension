@@ -286,9 +286,7 @@ class TestProgressCallbacks:
             progress_log.append((phase, frac))
 
         spec = _make_spec()
-        asyncio.get_event_loop().run_until_complete(
-            orch.generate(spec, on_progress=on_progress)
-        )
+        asyncio.run(orch.generate(spec, on_progress=on_progress))
 
         phases_seen = []
         for phase, _ in progress_log:
@@ -322,7 +320,7 @@ class TestProgressCallbacks:
         orch.builder.build = AsyncMock(return_value=Path("/tmp/out.docx"))
 
         calls = []
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             orch.generate(_make_spec(), on_progress=lambda p, f: calls.append((p, f)))
         )
 
