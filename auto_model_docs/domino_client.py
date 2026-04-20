@@ -53,11 +53,11 @@ _project_cache: dict[str, ProjectInfo] = {}
 # ---------------------------------------------------------------------------
 
 from domino_auth import resolve_api_host as _resolve_api_host
-from domino_auth import get_auth_headers as _raw_get_auth_headers
+from domino_auth import current_auth as _current_auth
 
 
 def _get_auth_headers() -> dict[str, str]:
-    return _raw_get_auth_headers(required=False)
+    return _current_auth().to_headers()
 
 
 # ---------------------------------------------------------------------------

@@ -16,11 +16,20 @@ from unittest.mock import patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Ensure auto_model_docs is importable
+# Ensure auto_model_docs is importable (both as a package via repo_root and
+# as bare modules via auto_model_docs/ on sys.path).
+#
+# The bare path must be FIRST so bare imports (e.g. ``import domino_auth``)
+# resolve to the same module object that call sites inside auto_model_docs/
+# use. Otherwise you get two copies of auth_context / domino_auth and
+# ContextVars / module-level state diverge across tests.
 # ---------------------------------------------------------------------------
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_pkg_dir = os.path.join(_repo_root, "auto_model_docs")
+if _pkg_dir not in sys.path:
+    sys.path.insert(0, _pkg_dir)
 if _repo_root not in sys.path:
-    sys.path.insert(0, _repo_root)
+    sys.path.insert(1, _repo_root)
 
 # ---------------------------------------------------------------------------
 # Stub exception hierarchy — used only when the real ones aren't available yet
@@ -46,22 +55,22 @@ class _DominoAPIError(Exception):
 def _load_exceptions():
     """Import real exception classes from domino_client, falling back to stubs."""
     try:
-        from auto_model_docs.domino_client import ProjectNotFoundError
+        from domino_client import ProjectNotFoundError
     except ImportError:
         ProjectNotFoundError = _ProjectNotFoundError
 
     try:
-        from auto_model_docs.domino_client import ProjectForbiddenError
+        from domino_client import ProjectForbiddenError
     except ImportError:
         ProjectForbiddenError = _ProjectForbiddenError
 
     try:
-        from auto_model_docs.domino_client import ProjectAPIError
+        from domino_client import ProjectAPIError
     except ImportError:
         ProjectAPIError = _ProjectAPIError
 
     try:
-        from auto_model_docs.domino_client import DominoAPIError
+        from domino_client import DominoAPIError
     except ImportError:
         DominoAPIError = _DominoAPIError
 
@@ -80,7 +89,7 @@ def _load_exceptions():
 # ProjectInfo stub — the real dataclass is being added in the parallel branch
 # ---------------------------------------------------------------------------
 try:
-    from auto_model_docs.domino_client import ProjectInfo
+    from domino_client import ProjectInfo
 except ImportError:
 
     @dataclass
@@ -105,10 +114,22 @@ def _clean_env(monkeypatch):
         "DOMINO_USER_API_KEY": "test-api-key",
         "DOMINO_PROJECT_OWNER": "test_owner",
         "DOMINO_PROJECT_NAME": "test_project",
-        "DOMINO_STARTING_USERNAME": "test_user",
     }
     for key, val in defaults.items():
         monkeypatch.setenv(key, val)
+
+
+@pytest.fixture(autouse=True)
+def _configure_default_auth():
+    """Default to cli_auth for tests that do not opt in to a specific mode.
+
+    Individual tests can override by calling ``configure_auth`` themselves
+    or by using ``reset_auth``.
+    """
+    from domino_auth import cli_auth, configure_auth, reset_auth
+    configure_auth(cli_auth)
+    yield
+    reset_auth()
 
 
 @pytest.fixture

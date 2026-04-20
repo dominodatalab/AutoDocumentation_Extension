@@ -53,7 +53,7 @@ def _mock_dependencies(monkeypatch):
     @dataclass
     class DominoJobRecord:
         id: str
-        username: str
+        owner_id: str
         domino_run_id: Optional[str] = None
         branch: Optional[str] = None
         hardware_tier: Optional[str] = None
@@ -183,7 +183,7 @@ class TestDbRecordToDataclass:
         ui = _import_ui()
         row = {
             "id": "job-1",
-            "username": "alice",
+            "owner_id": "alice",
             "domino_run_id": "run-1",
             "branch": "main",
             "hardware_tier": "tier-1",
@@ -197,13 +197,13 @@ class TestDbRecordToDataclass:
         }
         record = ui._db_record_to_dataclass(row)
         assert record.id == "job-1"
-        assert record.username == "alice"
+        assert record.owner_id == "alice"
         assert record.status == "running"
         assert record.domino_run_id == "run-1"
 
     def test_handles_missing_optional_fields(self):
         ui = _import_ui()
-        row = {"id": "job-2", "username": "bob"}
+        row = {"id": "job-2", "owner_id": "bob"}
         record = ui._db_record_to_dataclass(row)
         assert record.id == "job-2"
         assert record.status == "queued"  # default
@@ -303,7 +303,7 @@ class TestRenderDominoStatus:
         ui = _import_ui()
         DominoJobRecord = _mock_dependencies["state"].DominoJobRecord
         record = DominoJobRecord(
-            id="job-1", username="alice", status="running",
+            id="job-1", owner_id="alice", status="running",
             domino_run_id="run-1", job_url="https://domino/jobs/1",
             submitted_at="2026-01-01T00:00:00",
             domino_status="Executing",
@@ -314,7 +314,7 @@ class TestRenderDominoStatus:
     def test_renders_queued_with_banner(self, _mock_dependencies):
         ui = _import_ui()
         DominoJobRecord = _mock_dependencies["state"].DominoJobRecord
-        record = DominoJobRecord(id="job-2", username="alice", status="queued")
+        record = DominoJobRecord(id="job-2", owner_id="alice", status="queued")
         result = ui._render_domino_status(record)
         assert result is not None
 
@@ -322,7 +322,7 @@ class TestRenderDominoStatus:
         ui = _import_ui()
         DominoJobRecord = _mock_dependencies["state"].DominoJobRecord
         record = DominoJobRecord(
-            id="job-3", username="alice", status="succeeded",
+            id="job-3", owner_id="alice", status="succeeded",
             submitted_at="2026-01-01T00:00:00",
             completed_at="2026-01-01T01:00:00",
             domino_status="Succeeded",

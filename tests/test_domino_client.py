@@ -290,8 +290,6 @@ def _make_job_request(**overrides) -> Any:
         spec_content=None,
         provider="anthropic",
         model=None,
-        api_key=None,
-        base_url=None,
         code_root=None,
         max_files=None,
         workers=None,
@@ -305,7 +303,6 @@ def _make_job_request(**overrides) -> Any:
         verbose=False,
         branch="main",
         hardware_tier="small",
-        api_key_source="domino_env",
         spec_filename=None,
     )
     defaults.update(overrides)

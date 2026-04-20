@@ -5,9 +5,10 @@ from __future__ import annotations
 from fasthtml.common import *
 from starlette.requests import Request
 
+from auth_context import get_viewing_user
+
 from .state import (
     _DOMINO_AVAILABLE,
-    _get_username,
     domino_client,
     domino_job_store,
 )
@@ -17,6 +18,7 @@ from .ui_components import (
 from .job_engine import (
     _parse_request,
     _submit_domino_job,
+    sync_jobs_for,
 )
 
 
@@ -25,41 +27,42 @@ def register_job_routes(rt):
 
     async def run(req: Request):
         job_request = await _parse_request(req)
-        username = _get_username()
+        owner_id = get_viewing_user().id
         if not job_request.project_id:
             job_id = domino_job_store.create_job(
-                username=username, branch=None, tier=None, spec_path=None,
+                owner_id=owner_id, branch=None, tier=None, spec_path=None,
             )
             domino_job_store.update_job(
                 job_id, status="failed",
                 domino_status="No target project ID. Reload the app with ?projectId= in the URL.",
             )
-            return _render_job_history_table(username)
+            return _render_job_history_table(owner_id)
         try:
-            await _submit_domino_job(job_request, username)
+            await _submit_domino_job(job_request, owner_id)
         except Exception as exc:
             job_id = domino_job_store.create_job(
-                username=username, branch=job_request.branch,
+                owner_id=owner_id, branch=job_request.branch,
                 tier=job_request.hardware_tier, spec_path=job_request.spec_path,
                 project_id=job_request.project_id,
             )
             domino_job_store.update_job(job_id, status="failed", domino_status=str(exc))
-        return _render_job_history_table(username)
+        return _render_job_history_table(owner_id)
 
     rt("/run")(run)
 
     def job_history():
-        username = _get_username()
-        return _render_job_history_table(username)
+        owner_id = get_viewing_user().id
+        sync_jobs_for(owner_id)
+        return _render_job_history_table(owner_id)
 
     rt("/job-history")(job_history)
 
     def cancel_queued_jobs():
         """Cancel all queued (not yet submitted) jobs for the current user."""
-        username = _get_username()
+        owner_id = get_viewing_user().id
         if _DOMINO_AVAILABLE:
-            domino_job_store.cancel_queued_jobs(username)
-        return _render_job_history_table(username)
+            domino_job_store.cancel_queued_jobs(owner_id)
+        return _render_job_history_table(owner_id)
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
 
@@ -67,9 +70,11 @@ def register_job_routes(rt):
         """Stop a job and return the updated history table."""
         form = await req.form()
         job_id = form.get("job_id")
-        username = _get_username()
+        owner_id = get_viewing_user().id
         if job_id and _DOMINO_AVAILABLE:
             row = domino_job_store.get_job(job_id)
+            if row and row.get("owner_id") != owner_id:
+                return _render_job_history_table(owner_id)
             if row and row.get("domino_run_id"):
                 try:
                     domino_client.stop_job(
@@ -80,6 +85,6 @@ def register_job_routes(rt):
                     pass
             if row:
                 domino_job_store.update_job(job_id, status="cancelled")
-        return _render_job_history_table(username)
+        return _render_job_history_table(owner_id)
 
     rt("/stop-job-history")(stop_job_history)

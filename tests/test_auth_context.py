@@ -14,10 +14,15 @@ for p in (_repo_root, _pkg_dir):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from unittest.mock import MagicMock, patch
+
 from auth_context import (
+    User,
     get_request_auth_header,
     get_user_auth_headers,
+    get_viewing_user,
     set_request_auth_header,
+    set_viewing_user,
 )
 
 
@@ -61,3 +66,98 @@ class TestGetUserAuthHeaders:
         headers = get_user_auth_headers()
         assert headers["Authorization"] == "Token custom-scheme-value"
         set_request_auth_header(None)
+
+
+class TestGetViewingUser:
+    def setup_method(self):
+        set_viewing_user(None)
+        set_request_auth_header(None)
+
+    def teardown_method(self):
+        set_viewing_user(None)
+        set_request_auth_header(None)
+
+    def test_returns_cached_value_without_http_call(self):
+        set_viewing_user(User(id="uid-1", user_name="alice"))
+        with patch("httpx.Client") as mock_client_cls:
+            u = get_viewing_user()
+        assert u.id == "uid-1"
+        assert u.user_name == "alice"
+        mock_client_cls.assert_not_called()
+
+    def test_fetches_from_self_endpoint(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        set_request_auth_header("Bearer jwt")
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"id": "uid-42", "userName": "bob"}
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        from domino_auth import configure_auth, user_auth
+        configure_auth(user_auth)
+
+        with patch("httpx.Client", return_value=mock_client):
+            u = get_viewing_user()
+
+        assert u.id == "uid-42"
+        assert u.user_name == "bob"
+        call_url = mock_client.get.call_args.args[0]
+        assert call_url.endswith("/v4/users/self")
+
+    def test_caches_across_calls(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        set_request_auth_header("Bearer jwt")
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"id": "uid-1", "userName": "alice"}
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        from domino_auth import configure_auth, user_auth
+        configure_auth(user_auth)
+
+        with patch("httpx.Client", return_value=mock_client):
+            get_viewing_user()
+            get_viewing_user()
+            get_viewing_user()
+
+        assert mock_client.get.call_count == 1
+
+    def test_raises_without_jwt(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        set_request_auth_header(None)
+        from domino_auth import MissingAuthError, configure_auth, user_auth
+        configure_auth(user_auth)
+        with pytest.raises(MissingAuthError):
+            get_viewing_user()
+
+    def test_raises_when_host_missing(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        with pytest.raises(RuntimeError, match="DOMINO_API_HOST"):
+            get_viewing_user()
+
+    def test_raises_when_response_has_no_id(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        set_request_auth_header("Bearer jwt")
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"userName": "alice"}
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        from domino_auth import configure_auth, user_auth
+        configure_auth(user_auth)
+
+        with patch("httpx.Client", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="no id"):
+                get_viewing_user()

@@ -25,6 +25,9 @@ from autodoc.core.models import DocumentSpec
 from autodoc.llm import LLMClient
 from autodoc.orchestrator import Orchestrator
 from autodoc.scanning import ContentSanitizer
+from domino_auth import configure_auth, cli_auth
+
+configure_auth(cli_auth)
 
 
 console = Console()

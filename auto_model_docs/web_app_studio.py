@@ -7,23 +7,22 @@ assembles the application.
 
 from __future__ import annotations
 
-import asyncio
 import os
 from typing import Optional
 
 from fasthtml.common import *
 from starlette.requests import Request
 
-from autodoc.core.config import Settings
+from domino_auth import configure_auth, user_auth
+
+configure_auth(user_auth)
 
 from studio.state import (
     _DOMINO_AVAILABLE,
-    _POLL_TASK,
     _STARTUP_WARNINGS,
     _set_target_project,
     _get_default_code_root,
     _get_default_spec_path,
-    _get_username,
     domino_client,
     domino_job_store,
     logger,
@@ -36,7 +35,6 @@ from studio.ui_components import (
     _validate_environment,
 )
 from studio.job_engine import (
-    _poll_domino_jobs,
     _reconcile_stale_jobs,
 )
 from studio.routes_api import register_api_routes
@@ -191,14 +189,12 @@ def index(req: Request):
             project_display_name = f"{info.owner_username}/{info.name}"
 
     default_spec = _get_default_spec_path()
-    username = _get_username()
+    from auth_context import get_viewing_user
     try:
-        _settings = Settings()
-        _current_model = "kimi-k2-0905-preview"
-        _current_base_url = _settings.openai_base_url or "https://api.moonshot.ai/v1"
+        owner_id = get_viewing_user().id
     except Exception:
-        _current_model = "kimi-k2-0905-preview"
-        _current_base_url = "https://api.moonshot.ai/v1"
+        owner_id = ""
+    _current_model = "kimi-k2-0905-preview"
 
     # Pre-fetch branches and hardware tiers for server-side rendering
     branch_options = []
@@ -500,43 +496,6 @@ def index(req: Request):
 
     # More run settings (expandable)
     more_settings_children = []
-    more_settings_children.append(
-        Div(
-            Label("API key"),
-            Div(
-                Label(
-                    Input(type="radio", name="api_key_source", value="domino_env", checked=True),
-                    "Domino environment variable (recommended)",
-                    cls="api-key-source-option",
-                ),
-                Label(
-                    Input(type="radio", name="api_key_source", value="pass_now"),
-                    "Set key",
-                    cls="api-key-source-option",
-                ),
-                cls="api-key-source",
-            ),
-            Div(id="api-key-callout", cls="api-key-callout"),
-            cls="field",
-            id="api-key-source-field",
-        )
-    )
-    more_settings_children.append(
-        Div(
-            Label("API key", Span(" *", cls="required-star"), for_="field-api_key"),
-            Input(
-                name="api_key",
-                id="field-api_key",
-                type="password",
-                placeholder="Paste your API key",
-                autocomplete="new-password",
-                spellcheck="false",
-            ),
-            cls="field",
-            id="api-key-pass-field",
-            style="display: none;",
-        )
-    )
     # Gear button to open advanced settings modal
     more_settings_children.append(
         Button(
@@ -609,23 +568,6 @@ def index(req: Request):
             id="model-name-field",
             style="display: none;",
         ),
-        Div(
-            Div(
-                Label("Base URL", for_="field-base_url"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="For OpenAI-compatible APIs (e.g., Moonshot, Azure)"),
-                cls="label-row",
-            ),
-            Input(
-                name="base_url",
-                id="field-base_url",
-                type="text",
-                value=_current_base_url,
-                placeholder="https://api.moonshot.ai/v1",
-            ),
-            cls="field",
-            id="base-url-field",
-            style="display: none;",
-        ),
         Label(
             Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
             Span("Generate notebook"),
@@ -687,7 +629,7 @@ def index(req: Request):
     right_col_children.append(
         Div(
             Div(
-                _render_job_history_table(username),
+                _render_job_history_table(owner_id),
                 id="job-history-content",
             ),
             cls="output-panel",
@@ -746,22 +688,29 @@ register_job_routes(rt)
 # Middleware
 # ---------------------------------------------------------------------------
 
+from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from autodoc.core.config import Settings as _AppSettings
 
 HOST = os.environ.get("APP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("APP_PORT", "8888"))
 
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+try:
+    _app_settings = _AppSettings()
+    _cors_origins = _app_settings.cors_origins
+    _allowed_hosts = _app_settings.allowed_hosts
+except Exception:
+    _cors_origins = ["*"]
+    _allowed_hosts = ["*"]
 
-
-@app.middleware("http")
-async def add_security_headers(request, call_next):
-    response = await call_next(request)
-    response.headers["X-Frame-Options"] = "ALLOWALL"
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "HX-Request, HX-Target, HX-Current-URL, Content-Type"
-    return response
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["HX-Request", "HX-Target", "HX-Current-URL", "Content-Type"],
+)
 
 
 @app.middleware("http")
@@ -788,18 +737,6 @@ async def _on_startup():
     _state._STARTUP_WARNINGS = _validate_environment()
     for w in _state._STARTUP_WARNINGS:
         logger.warning(f"Startup: [{w.level}] {w.message} {w.action}")
-    if _DOMINO_AVAILABLE:
-        # NOTE: init_db() and _reconcile_stale_jobs() are deferred to
-        # _set_target_project() — the DB path depends on the target project
-        # which is only known after the first page load provides ?projectId.
-        _state._POLL_TASK = asyncio.create_task(_poll_domino_jobs())
-
-
-@app.on_event("shutdown")
-async def _on_shutdown():
-    import studio.state as _state
-    if _state._POLL_TASK:
-        _state._POLL_TASK.cancel()
 
 
 # ---------------------------------------------------------------------------

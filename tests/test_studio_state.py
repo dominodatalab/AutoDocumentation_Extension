@@ -76,11 +76,11 @@ class TestJobRequest:
         jr = state_module.JobRequest
         field_names = {f.name for f in fields(jr)}
         expected = {
-            "spec_path", "spec_content", "provider", "model", "api_key",
-            "base_url", "code_root", "max_files", "workers",
+            "spec_path", "spec_content", "provider", "model",
+            "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
             "experiment_names", "model_names", "latest_only", "verbose",
-            "branch", "hardware_tier", "api_key_source", "spec_filename",
+            "branch", "hardware_tier", "spec_filename",
             "project_id",
         }
         assert expected.issubset(field_names)
@@ -88,7 +88,7 @@ class TestJobRequest:
 
 class TestDominoJobRecord:
     def test_defaults(self, state_module):
-        rec = state_module.DominoJobRecord(id="x", username="u")
+        rec = state_module.DominoJobRecord(id="x", owner_id="u")
         assert rec.status == "queued"
         assert rec.domino_run_id is None
         assert rec.project_id is None
@@ -102,20 +102,6 @@ class TestEnvironmentWarning:
         assert w.level == "warning"
         assert w.message == "Test"
         assert w.action == "Fix it"
-
-
-# ---------------------------------------------------------------------------
-# _get_username
-# ---------------------------------------------------------------------------
-
-class TestGetUsername:
-    def test_returns_env_var(self, state_module, monkeypatch):
-        monkeypatch.setenv("DOMINO_STARTING_USERNAME", "alice")
-        assert state_module._get_username() == "alice"
-
-    def test_defaults_to_local_user(self, state_module, monkeypatch):
-        monkeypatch.delenv("DOMINO_STARTING_USERNAME", raising=False)
-        assert state_module._get_username() == "local_user"
 
 
 # ---------------------------------------------------------------------------

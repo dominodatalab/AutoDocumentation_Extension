@@ -55,14 +55,14 @@ def _write_index(jobs: list[dict[str, Any]]) -> None:
     active = [j for j in jobs if j.get("status") not in _COMPLETED_STATUSES]
     completed = [j for j in jobs if j.get("status") in _COMPLETED_STATUSES]
 
-    # Group completed by user, keep newest N per user
-    by_user: dict[str, list[dict[str, Any]]] = {}
+    # Group completed by owner, keep newest N per owner
+    by_owner: dict[str, list[dict[str, Any]]] = {}
     for j in completed:
-        by_user.setdefault(j.get("username", ""), []).append(j)
+        by_owner.setdefault(j.get("owner_id", ""), []).append(j)
     pruned_completed = []
-    for user_jobs in by_user.values():
-        user_jobs.sort(key=lambda j: j.get("submitted_at", ""), reverse=True)
-        pruned_completed.extend(user_jobs[:_MAX_COMPLETED_JOBS])
+    for owner_jobs in by_owner.values():
+        owner_jobs.sort(key=lambda j: j.get("submitted_at", ""), reverse=True)
+        pruned_completed.extend(owner_jobs[:_MAX_COMPLETED_JOBS])
 
     jobs = active + pruned_completed
 
@@ -84,7 +84,7 @@ def init_db() -> None:
 
 
 def create_job(
-    username: str,
+    owner_id: str,
     branch: Optional[str],
     tier: Optional[str],
     spec_path: Optional[str],
@@ -98,7 +98,7 @@ def create_job(
         jobs = _read_index()
         jobs.append({
             "id": jid,
-            "username": username,
+            "owner_id": owner_id,
             "domino_run_id": None,
             "branch": branch,
             "hardware_tier": tier,
@@ -137,30 +137,30 @@ def get_job(job_id: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def get_user_jobs(username: str, limit: int = 50) -> list[dict[str, Any]]:
-    """Return the most recent jobs for a user, newest first."""
+def get_user_jobs(owner_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    """Return the most recent jobs for an owner, newest first."""
     jobs = _read_index()
-    user_jobs = [j for j in jobs if j.get("username") == username]
-    user_jobs.sort(key=lambda j: j.get("submitted_at", ""), reverse=True)
-    return user_jobs[:limit]
+    owner_jobs = [j for j in jobs if j.get("owner_id") == owner_id]
+    owner_jobs.sort(key=lambda j: j.get("submitted_at", ""), reverse=True)
+    return owner_jobs[:limit]
 
 
-def count_active_jobs(username: str) -> int:
-    """Count queued + submitted + pending + running jobs for a user."""
+def count_active_jobs(owner_id: str) -> int:
+    """Count queued + submitted + pending + running jobs for an owner."""
     active_statuses = {"queued", "submitted", "pending", "running"}
     jobs = _read_index()
     return sum(
         1 for j in jobs
-        if j.get("username") == username and j.get("status") in active_statuses
+        if j.get("owner_id") == owner_id and j.get("status") in active_statuses
     )
 
 
-def get_oldest_queued_job(username: str) -> Optional[dict[str, Any]]:
-    """Return the oldest queued job for a user, or None."""
+def get_oldest_queued_job(owner_id: str) -> Optional[dict[str, Any]]:
+    """Return the oldest queued job for an owner, or None."""
     jobs = _read_index()
     queued = [
         j for j in jobs
-        if j.get("username") == username and j.get("status") == "queued"
+        if j.get("owner_id") == owner_id and j.get("status") == "queued"
     ]
     if not queued:
         return None
@@ -175,11 +175,11 @@ def get_active_jobs() -> list[dict[str, Any]]:
     return [j for j in jobs if j.get("status") in active_statuses]
 
 
-def get_queued_usernames() -> list[str]:
-    """Return distinct usernames that have queued jobs."""
+def get_queued_owner_ids() -> list[str]:
+    """Return distinct owner ids that have queued jobs."""
     jobs = _read_index()
     return list({
-        j["username"] for j in jobs
+        j["owner_id"] for j in jobs
         if j.get("status") == "queued"
     })
 
@@ -201,14 +201,14 @@ def reconcile_stale_jobs() -> None:
             _write_index(jobs)
 
 
-def cancel_queued_jobs(username: str) -> None:
-    """Cancel all queued (not yet submitted) jobs for a user."""
+def cancel_queued_jobs(owner_id: str) -> None:
+    """Cancel all queued (not yet submitted) jobs for an owner."""
     with _INDEX_LOCK:
         jobs = _read_index()
         changed = False
         for job in jobs:
             if (
-                job.get("username") == username
+                job.get("owner_id") == owner_id
                 and job.get("status") == "queued"
                 and not job.get("domino_run_id")
             ):

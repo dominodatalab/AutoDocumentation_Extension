@@ -155,6 +155,18 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AUTODOC_PLANNING_WORKERS", "PLANNING_WORKERS"),
     )
 
+    # HTTP server security
+    cors_origins: list[str] = Field(
+        default=["*"],
+        description="Allowed origins for CORS. Default permits all; restrict in production.",
+        validation_alias=AliasChoices("AUTODOC_CORS_ORIGINS", "CORS_ORIGINS"),
+    )
+    allowed_hosts: list[str] = Field(
+        default=["*"],
+        description="Allowed Host headers (TrustedHostMiddleware). Default permits all.",
+        validation_alias=AliasChoices("AUTODOC_ALLOWED_HOSTS", "ALLOWED_HOSTS"),
+    )
+
     # MLflow Configuration
     mlflow_tracking_uri: Optional[str] = Field(
         default=None,

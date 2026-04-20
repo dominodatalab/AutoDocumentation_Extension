@@ -70,7 +70,7 @@ class TestCreateAndGetJob:
         jid = store.create_job("alice", "main", "small", "/spec.yaml")
         job = store.get_job(jid)
         assert job is not None
-        assert job["username"] == "alice"
+        assert job["owner_id"] == "alice"
         assert job["branch"] == "main"
         assert job["hardware_tier"] == "small"
         assert job["spec_path"] == "/spec.yaml"
@@ -202,11 +202,11 @@ class TestIndexPersistence:
         assert _mock_store.file_exists(".autodoc/jobs_index.json")
         content = json.loads(_mock_store.read_file(".autodoc/jobs_index.json"))
         assert len(content) == 1
-        assert content[0]["username"] == "alice"
+        assert content[0]["owner_id"] == "alice"
 
     def test_survives_read_cycle(self, _mock_store):
         store.create_job("alice", "main", "s", "/a.yaml", job_id="j1")
         store.create_job("bob", "main", "s", "/b.yaml", job_id="j2")
         # Read back
-        assert store.get_job("j1")["username"] == "alice"
-        assert store.get_job("j2")["username"] == "bob"
+        assert store.get_job("j1")["owner_id"] == "alice"
+        assert store.get_job("j2")["owner_id"] == "bob"

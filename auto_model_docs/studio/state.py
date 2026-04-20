@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util as _imputil
 import logging
 import os
@@ -90,8 +89,6 @@ class JobRequest:
     spec_content: Optional[str]
     provider: str
     model: Optional[str]
-    api_key: Optional[str]
-    base_url: Optional[str]
     code_root: Optional[str]
     max_files: Optional[int]
     workers: Optional[int]
@@ -105,7 +102,6 @@ class JobRequest:
     verbose: bool  # Enable verbose logging
     branch: Optional[str] = None
     hardware_tier: Optional[str] = None
-    api_key_source: str = "domino_env"  # "domino_env" | "pass_now"
     spec_filename: Optional[str] = None  # original uploaded filename
     project_id: Optional[str] = None     # target Domino project (from ?projectId=)
 
@@ -113,7 +109,7 @@ class JobRequest:
 @dataclass
 class DominoJobRecord:
     id: str                              # local UUID
-    username: str
+    owner_id: str                        # Domino user id (from /v4/users/self)
     domino_run_id: Optional[str] = None
     branch: Optional[str] = None
     hardware_tier: Optional[str] = None
@@ -139,13 +135,18 @@ class EnvironmentWarning:
 # Mutable global state
 # ---------------------------------------------------------------------------
 
-_POLL_TASK: Optional[asyncio.Task] = None
 _STARTUP_WARNINGS: list = []
 
 # Target project context — captured from the ?projectId query param on
 # first request and used by all components so that specs, jobs, output,
 # and history are scoped to the target project, not the app's own project.
 _TARGET_PROJECT_ID: Optional[str] = None
+# TODO: revisit _TARGET_PROJECT_NAME. It is process-global and captured from the
+# first request to land, which means a second concurrent user looking at a
+# different project can see the first project's name (display only). Prefer
+# resolving the name per request from the forwarded project id, or scope it to
+# a request/ContextVar. Low risk today (display only, Domino proxies per-user),
+# but a latent cross-request leak.
 _TARGET_PROJECT_NAME: Optional[str] = None
 
 
@@ -246,10 +247,6 @@ def _get_default_code_root() -> Path:
 
 def _get_default_spec_path() -> Path:
     return Path(__file__).resolve().parent.parent / "doc_spec.yaml"
-
-
-def _get_username() -> str:
-    return os.environ.get("DOMINO_STARTING_USERNAME", "local_user")
 
 
 def _max_jobs() -> int:

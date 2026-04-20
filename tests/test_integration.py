@@ -156,7 +156,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_state.auth_context = auth_context
     mock_state._TARGET_PROJECT_ID = "proj-integration"
     mock_state._TARGET_PROJECT_NAME = "test-project"
-    mock_state._get_username = lambda: "integration_user"
     mock_state._max_jobs = lambda: 2
     mock_state._get_target_project_id = lambda: "proj-integration"
     mock_state._get_target_project_name = lambda: "test-project"
@@ -196,7 +195,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     @dataclass
     class DominoJobRecord:
         id: str
-        username: str
+        owner_id: str
         domino_run_id: Optional[str] = None
         branch: Optional[str] = None
         hardware_tier: Optional[str] = None
@@ -366,8 +365,10 @@ def integration_env(tmp_path, monkeypatch):
     """Provide a wired test app with real HTTP transport."""
     monkeypatch.setenv("DOMINO_API_HOST", "https://domino.test")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
-    monkeypatch.setenv("DOMINO_STARTING_USERNAME", "integration_user")
     monkeypatch.setenv("AUTODOC_MAX_JOBS", "2")
+
+    from auth_context import User, set_viewing_user
+    set_viewing_user(User(id="integration_user", user_name="integration_user"))
 
     saved_modules = {}
     for key in ("studio", "studio.state", "studio.ui_components", "studio.job_engine",
@@ -527,7 +528,7 @@ class TestJobRoutesIntegration:
 
         jobs = store.get_user_jobs("integration_user")
         assert len(jobs) >= 1
-        assert jobs[0]["username"] == "integration_user"
+        assert jobs[0]["owner_id"] == "integration_user"
 
     def test_cancel_queued_jobs(self, client, integration_env):
         """Cancel via HTTP, verify status change in job index."""

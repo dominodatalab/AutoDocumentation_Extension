@@ -55,7 +55,7 @@ class _MockJobRequest:
 @dataclass
 class _MockDominoJobRecord:
     id: str
-    username: str
+    owner_id: str
     domino_run_id: Optional[str] = None
     branch: Optional[str] = None
     hardware_tier: Optional[str] = None
@@ -91,7 +91,8 @@ def _mock_studio_modules():
     # state module
     mock_state = ModuleType("studio.state")
     mock_state._DOMINO_AVAILABLE = True
-    mock_state._get_username = MagicMock(return_value="test_user")
+    from auth_context import User, set_viewing_user
+    set_viewing_user(User(id="test_user", user_name="test_user"))
     mock_state._max_jobs = MagicMock(return_value=1)
     mock_state._get_target_project_id = MagicMock(return_value="proj-123")
     mock_state._get_target_project_name = MagicMock(return_value="my-project")
@@ -128,7 +129,7 @@ def _mock_studio_modules():
     mock_ui._sanitize_optional_int = _safe_int
     mock_ui._sanitize_optional_float = _safe_float
     mock_ui._db_record_to_dataclass = lambda row: _MockDominoJobRecord(
-        id=row["id"], username=row["username"],
+        id=row["id"], owner_id=row["owner_id"],
     )
 
     # job_engine module
@@ -137,6 +138,7 @@ def _mock_studio_modules():
         spec_path="/spec.yaml", project_id="proj-123",
     ))
     mock_job_engine._submit_domino_job = AsyncMock()
+    mock_job_engine.sync_jobs_for = MagicMock()
 
     # fasthtml.common — provide real Response import + FT component stubs
     from starlette.responses import Response as StarletteResponse, FileResponse as StarletteFileResponse
@@ -404,11 +406,26 @@ class TestJobRoutes:
         store = _mock_studio_modules["state"].domino_job_store
         store.get_job.return_value = {
             "id": "j1", "domino_run_id": "run-1", "project_id": "proj-123",
+            "owner_id": "test_user",
         }
         req = _make_request(form_data={"job_id": "j1"})
         await routes["/stop-job-history"](req)
         _mock_studio_modules["state"].domino_client.stop_job.assert_called_once()
         store.update_job.assert_called_with("j1", status="cancelled")
+
+    @pytest.mark.asyncio
+    async def test_stop_job_rejects_other_owner(self, _mock_studio_modules):
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        store = _mock_studio_modules["state"].domino_job_store
+        store.get_job.return_value = {
+            "id": "j1", "domino_run_id": "run-1", "project_id": "proj-123",
+            "owner_id": "someone_else",
+        }
+        req = _make_request(form_data={"job_id": "j1"})
+        await routes["/stop-job-history"](req)
+        _mock_studio_modules["state"].domino_client.stop_job.assert_not_called()
+        store.update_job.assert_not_called()
 
 
 # ===========================================================================
