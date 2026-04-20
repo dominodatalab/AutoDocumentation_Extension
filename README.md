@@ -253,7 +253,17 @@ See [sample_projects/README.md](./sample_projects/README.md) for the full walkth
 
 ## Testing
 
-Two test suites cover the codebase:
+Minimum setup to run **all** tests (no API keys required for normal pytest runs):
+
+1. Python 3.10 or newer.
+2. Install the package with dev extras from `auto_model_docs` (declared dependencies include Studio, Domino HTTP client, and the doc pipeline; dev adds pytest):
+
+```bash
+cd auto_model_docs
+pip install -e ".[dev]"
+```
+
+3. Run pytest from the **repository root** (the directory that contains both `auto_model_docs/` and `tests/`).
 
 ```bash
 # Core library tests (scanning, generation, LLM client, config)
