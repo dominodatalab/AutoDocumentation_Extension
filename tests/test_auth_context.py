@@ -140,6 +140,7 @@ class TestGetViewingUser:
 
     def test_raises_when_host_missing(self, monkeypatch):
         monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         with pytest.raises(RuntimeError, match="DOMINO_API_HOST"):
             get_viewing_user()
 

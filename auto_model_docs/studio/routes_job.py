@@ -65,7 +65,7 @@ def register_job_routes(rt):
 
     rt("/run")(run)
 
-    def job_history():
+    async def job_history():
         owner_id = _current_owner_id()
         if not owner_id:
             return _render_job_history_table(owner_id)
@@ -74,7 +74,7 @@ def register_job_routes(rt):
 
     rt("/job-history")(job_history)
 
-    def cancel_queued_jobs():
+    async def cancel_queued_jobs():
         """Cancel all queued (not yet submitted) jobs for the current user."""
         owner_id = _current_owner_id()
         if owner_id and _DOMINO_AVAILABLE:

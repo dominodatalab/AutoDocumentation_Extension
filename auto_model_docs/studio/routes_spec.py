@@ -65,7 +65,7 @@ def register_spec_routes(rt):
 
     rt("/save-spec")(save_spec_route)
 
-    def spec_list(req: Request):
+    async def spec_list(req: Request):
         """Return HTML list of saved spec files."""
         if not _DOMINO_AVAILABLE:
             return Div(P("Domino not available.", cls="history-empty"))

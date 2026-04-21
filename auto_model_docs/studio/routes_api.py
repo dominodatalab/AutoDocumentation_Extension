@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
-    def api_branches(req: Request):
+    async def api_branches(req: Request):
         """Return an HTML fragment for branch selection.
 
         Fetches branches from the target project's git repo via the
@@ -43,7 +43,7 @@ def register_api_routes(rt):
 
     rt("/api/branches")(api_branches)
 
-    def api_hardware_tiers(req: Request):
+    async def api_hardware_tiers(req: Request):
         """Return an HTML <select> fragment with available hardware tiers."""
         if not _DOMINO_AVAILABLE:
             return Select(Option("(Domino not available)", value=""), name="hardware_tier", id="field-hardware_tier")
@@ -94,7 +94,7 @@ def register_api_routes(rt):
 
     rt("/api/detect-language")(api_detect_language)
 
-    def api_datasets(req: Request):
+    async def api_datasets(req: Request):
         """List writable datasets for the project."""
         if not _DOMINO_AVAILABLE:
             return Response(json.dumps([]), media_type="application/json")
@@ -114,7 +114,7 @@ def register_api_routes(rt):
 
     rt("/api/datasets")(api_datasets)
 
-    def api_dataset_files(req: Request):
+    async def api_dataset_files(req: Request):
         """Browse files in a dataset (directories + yaml only)."""
         if not _DOMINO_AVAILABLE:
             return Response(json.dumps([]), media_type="application/json")
@@ -254,7 +254,7 @@ def register_api_routes(rt):
 
     rt("/api/download-template")(api_download_template)
 
-    def api_resolve_project(req: Request):
+    async def api_resolve_project(req: Request):
         """Return resolved project name for a given project ID."""
         pid = req.query_params.get("projectId", "").strip()
         if not pid or not _DOMINO_AVAILABLE:
