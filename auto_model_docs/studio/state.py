@@ -91,11 +91,11 @@ try:
 except Exception:
     pass
 
-# Domino module references — may be None if import fails
+import auth_context  # type: ignore  # normal import; must not be re-loaded via _import_sibling or ContextVars duplicate
+
 domino_client: Any = None
 domino_job_store: Any = None
 spec_store: Any = None
-auth_context: Any = None
 domino_datasets: Any = None
 _DOMINO_AVAILABLE: bool = False
 
@@ -103,7 +103,6 @@ try:
     domino_client = _import_sibling("domino_client")
     domino_job_store = _import_sibling("domino_job_store")
     spec_store = _import_sibling("spec_store")
-    auth_context = _import_sibling("auth_context")
     domino_datasets = _import_sibling("domino_datasets")
     _DOMINO_AVAILABLE = True
 except Exception as _import_exc:
