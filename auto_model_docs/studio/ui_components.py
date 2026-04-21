@@ -12,7 +12,6 @@ from fasthtml.common import *
 from .state import (
     DominoJobRecord,
     EnvironmentWarning,
-    _DOMINO_AVAILABLE,
     _get_default_code_root,
     _max_jobs,
     domino_job_store,
@@ -266,8 +265,6 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
 
 def _render_job_history_table(owner_id: str) -> FT:
     """Render the job history table for a user."""
-    if not _DOMINO_AVAILABLE:
-        return Div()
     try:
         jobs = domino_job_store.get_user_jobs(owner_id, limit=50)
     except RuntimeError:

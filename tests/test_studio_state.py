@@ -206,7 +206,6 @@ class TestSetTargetProject:
         mock_info = MagicMock()
         mock_info.name = "resolved-name"
         state_module.domino_client.resolve_project.return_value = mock_info
-        state_module._DOMINO_AVAILABLE = True
 
         # _set_target_project references itself via import, mock that
         with patch.dict(sys.modules, {"studio.state": state_module}):

@@ -45,7 +45,6 @@ def _mock_dependencies(monkeypatch):
 
     # Build a real-ish state mock
     mock_state = ModuleType("studio.state")
-    mock_state._DOMINO_AVAILABLE = True
     mock_state._get_default_code_root = lambda: Path("/mnt/code")
     mock_state._max_jobs = lambda: 1
     mock_state.domino_job_store = MagicMock()
@@ -336,12 +335,6 @@ class TestRenderDominoStatus:
 # ---------------------------------------------------------------------------
 
 class TestRenderJobHistoryTable:
-    def test_returns_empty_when_domino_unavailable(self, _mock_dependencies):
-        ui = _import_ui()
-        ui._DOMINO_AVAILABLE = False
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
     def test_renders_empty_message_when_no_jobs(self, _mock_dependencies):
         ui = _import_ui()
         _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = []

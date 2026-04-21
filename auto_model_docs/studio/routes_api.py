@@ -12,7 +12,6 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
 from .state import (
-    _DOMINO_AVAILABLE,
     _get_default_code_root,
     _resolve_request_project_id,
     domino_client,
@@ -33,7 +32,7 @@ def register_api_routes(rt):
         """
         project_id = req.query_params.get("projectId") or None
         search = req.query_params.get("search", "")
-        if project_id and _DOMINO_AVAILABLE:
+        if project_id:
             branches = domino_client.list_branches_api(project_id, search=search)
             if branches:
                 options = [Option(b["name"], value=b["name"]) for b in branches]
@@ -45,8 +44,6 @@ def register_api_routes(rt):
 
     async def api_hardware_tiers(req: Request):
         """Return an HTML <select> fragment with available hardware tiers."""
-        if not _DOMINO_AVAILABLE:
-            return Select(Option("(Domino not available)", value=""), name="hardware_tier", id="field-hardware_tier")
         project_id = req.query_params.get("projectId") or None
         tiers = domino_client.list_hardware_tiers(project_id=project_id)
         default_tier = domino_client.get_project_default_tier()
@@ -96,8 +93,6 @@ def register_api_routes(rt):
 
     async def api_datasets(req: Request):
         """List writable datasets for the project."""
-        if not _DOMINO_AVAILABLE:
-            return Response(json.dumps([]), media_type="application/json")
         pid = _resolve_request_project_id(req)
         logger.info("GET /api/datasets — project=%s", pid)
         try:
@@ -116,9 +111,6 @@ def register_api_routes(rt):
 
     async def api_dataset_files(req: Request):
         """Browse files in a dataset (directories + yaml only)."""
-        if not _DOMINO_AVAILABLE:
-            return Response(json.dumps([]), media_type="application/json")
-
         dataset_id = req.query_params.get("datasetId", "")
         snapshot_id = req.query_params.get("snapshotId", "")
         path = req.query_params.get("path", "")
@@ -162,12 +154,6 @@ def register_api_routes(rt):
         Uses the unified 'autodoc' dataset (not the legacy 'autodoc-specs').
         Specs live under the specs/ subdirectory within this dataset.
         """
-        if not _DOMINO_AVAILABLE:
-            return Response(
-                json.dumps({"error": "Domino not available"}),
-                status_code=400,
-                media_type="application/json",
-            )
         pid = _resolve_request_project_id(req)
         logger.info("POST /api/ensure-autodoc-specs — project=%s", pid)
         try:
@@ -196,13 +182,6 @@ def register_api_routes(rt):
 
     async def api_upload_spec_to_dataset(req: Request):
         """Upload a spec file via the DatasetStore."""
-        if not _DOMINO_AVAILABLE:
-            return Response(
-                json.dumps({"error": "Domino not available"}),
-                status_code=400,
-                media_type="application/json",
-            )
-
         form = await req.form()
         file_upload = form.get("file")
 
@@ -257,7 +236,7 @@ def register_api_routes(rt):
     async def api_resolve_project(req: Request):
         """Return resolved project name for a given project ID."""
         pid = req.query_params.get("projectId", "").strip()
-        if not pid or not _DOMINO_AVAILABLE:
+        if not pid:
             return Div(id="project-id-resolved")
         info = domino_client.resolve_project(pid)
         if info:

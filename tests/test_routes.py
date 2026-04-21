@@ -90,7 +90,6 @@ def _mock_studio_modules():
     """Set up mock studio modules for route imports."""
     # state module
     mock_state = ModuleType("studio.state")
-    mock_state._DOMINO_AVAILABLE = True
     from auth_context import User, set_viewing_user
     set_viewing_user(User(id="test_user", user_name="test_user"))
     mock_state._max_jobs = MagicMock(return_value=1)
@@ -291,14 +290,6 @@ class TestApiRoutes:
         client.list_hardware_tiers.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_hardware_tiers_when_domino_unavailable(self, _mock_studio_modules):
-        _mock_studio_modules["state"]._DOMINO_AVAILABLE = False
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        req = _make_request()
-        await routes["/api/hardware-tiers"](req)
-
-    @pytest.mark.asyncio
     async def test_datasets_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
@@ -307,16 +298,6 @@ class TestApiRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/api/datasets"](req)
         ds.list_datasets.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_datasets_returns_empty_when_domino_unavailable(self, _mock_studio_modules):
-        _mock_studio_modules["state"]._DOMINO_AVAILABLE = False
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        req = _make_request()
-        result = await routes["/api/datasets"](req)
-        body = json.loads(result.body.decode())
-        assert body == []
 
     @pytest.mark.asyncio
     async def test_datasets_error_returns_500(self, _mock_studio_modules):

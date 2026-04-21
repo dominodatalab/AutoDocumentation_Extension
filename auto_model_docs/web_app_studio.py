@@ -18,7 +18,6 @@ from domino_auth import configure_auth, user_auth
 configure_auth(user_auth)
 
 from studio.state import (
-    _DOMINO_AVAILABLE,
     _STARTUP_WARNINGS,
     _set_target_project,
     _get_default_code_root,
@@ -66,11 +65,9 @@ app, rt = fast_app(
 
 @rt("/")
 async def index(req: Request):
-    # Cache the external host on first request so Domino job URLs resolve correctly.
-    if _DOMINO_AVAILABLE:
-        host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
-        scheme = req.headers.get("x-forwarded-proto", "https")
-        domino_client.set_ui_host(host, scheme)
+    host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
+    scheme = req.headers.get("x-forwarded-proto", "https")
+    domino_client.set_ui_host(host, scheme)
 
     # Guard: projectId query param is required.  Domino's reverse proxy
     # strips query params from the iframe URL, so if it's missing we serve
@@ -179,13 +176,12 @@ async def index(req: Request):
             ),
         )
 
-    if _set_target_project(project_id) and _DOMINO_AVAILABLE:
+    if _set_target_project(project_id):
         _reconcile_stale_jobs()
 
-    # Resolve display name from the (now-cached) target project.
     project_display_name: Optional[str] = None
-    if _DOMINO_AVAILABLE and project_id:
-        info = domino_client.resolve_project(project_id)  # hits _project_cache
+    if project_id:
+        info = domino_client.resolve_project(project_id)
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
 
@@ -197,30 +193,28 @@ async def index(req: Request):
         owner_id = ""
     _current_model = "kimi-k2-0905-preview"
 
-    # Pre-fetch branches and hardware tiers for server-side rendering
     branch_options = []
     tier_data = []
     default_tier = ""
-    if _DOMINO_AVAILABLE:
-        if project_id:
-            try:
-                _branches_raw = domino_client.list_branches_api(project_id)
-                branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
-            except Exception:
-                pass
+    tier_options = []
+    if project_id:
         try:
-            tier_data = domino_client.list_hardware_tiers(project_id=project_id)
-            default_tier = domino_client.get_project_default_tier()
-            tier_options = []
-            for t in tier_data:
-                tid = t.get("id", "")
-                tname = t.get("name") or tid
-                is_default = t.get("isDefault", False) or tid == default_tier
-                tier_options.append(Option(tname, value=tid, selected=is_default))
+            _branches_raw = domino_client.list_branches_api(project_id)
+            branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
         except Exception:
-            tier_options = []
-        if not tier_options:
-            tier_options = [Option("(default)", value="")]
+            pass
+    try:
+        tier_data = domino_client.list_hardware_tiers(project_id=project_id)
+        default_tier = domino_client.get_project_default_tier()
+        for t in tier_data:
+            tid = t.get("id", "")
+            tname = t.get("name") or tid
+            is_default = t.get("isDefault", False) or tid == default_tier
+            tier_options.append(Option(tname, value=tid, selected=is_default))
+    except Exception:
+        tier_options = []
+    if not tier_options:
+        tier_options = [Option("(default)", value="")]
 
     # ── Build the 3-column layout ────────────────────────────────────────
 
@@ -728,7 +722,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def capture_auth_context(request, call_next):
-    from studio.state import auth_context as _auth_context, _DOMINO_AVAILABLE as _da
+    from studio.state import auth_context as _auth_context
 
     try:
         hdr_dump = {k: v for k, v in request.headers.items()}
@@ -755,26 +749,24 @@ async def capture_auth_context(request, call_next):
     logger.info("DEBUG_AUTH_HEADERS %s", _auth_variants)
 
     import threading as _threading
-    if _da:
-        forwarded = request.headers.get("authorization")
-        logger.info(
-            "DEBUG_FORWARDED_JWT thread=%s present=%s value_prefix=%s",
-            _threading.current_thread().name,
-            bool(forwarded),
-            (forwarded[:30] + "...") if forwarded else None,
-        )
-        _auth_context.set_request_auth_header(forwarded)
-        _after_set = _auth_context.get_request_auth_header()
-        logger.info(
-            "DEBUG_CTXVAR_AFTER_SET_IN_MW thread=%s present=%s",
-            _threading.current_thread().name,
-            bool(_after_set),
-        )
+    forwarded = request.headers.get("authorization")
+    logger.info(
+        "DEBUG_FORWARDED_JWT thread=%s present=%s value_prefix=%s",
+        _threading.current_thread().name,
+        bool(forwarded),
+        (forwarded[:30] + "...") if forwarded else None,
+    )
+    _auth_context.set_request_auth_header(forwarded)
+    _after_set = _auth_context.get_request_auth_header()
+    logger.info(
+        "DEBUG_CTXVAR_AFTER_SET_IN_MW thread=%s present=%s",
+        _threading.current_thread().name,
+        bool(_after_set),
+    )
     try:
         response = await call_next(request)
     finally:
-        if _da:
-            _auth_context.set_request_auth_header(None)
+        _auth_context.set_request_auth_header(None)
     return response
 
 
