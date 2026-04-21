@@ -14,8 +14,6 @@ from .state import (
     domino_job_store,
     spec_store,
     domino_datasets,
-    _get_target_project_id,
-    _get_target_project_name,
     logger,
 )
 from .ui_components import (
@@ -39,11 +37,12 @@ async def _parse_request(req: Request) -> JobRequest:
         spec_content = content.decode("utf-8", errors="replace")
         spec_filename = getattr(spec_upload, "filename", None)
 
-    # projectId: prefer form field, fall back to captured target or query param
+    # projectId must come from the request itself (form field or URL query).
+    # No fallback to process-global state: that would let user A's project id
+    # leak into user B's request when user B's form/URL omit it.
     project_id = (
         form.get("target_project")
         or form.get("project_id")
-        or _get_target_project_id()
         or req.query_params.get("projectId")
     )
     if not project_id:

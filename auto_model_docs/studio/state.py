@@ -161,13 +161,6 @@ _STARTUP_WARNINGS: list = []
 # first request and used by all components so that specs, jobs, output,
 # and history are scoped to the target project, not the app's own project.
 _TARGET_PROJECT_ID: Optional[str] = None
-# TODO: revisit _TARGET_PROJECT_NAME. It is process-global and captured from the
-# first request to land, which means a second concurrent user looking at a
-# different project can see the first project's name (display only). Prefer
-# resolving the name per request from the forwarded project id, or scope it to
-# a request/ContextVar. Low risk today (display only, Domino proxies per-user),
-# but a latent cross-request leak.
-_TARGET_PROJECT_NAME: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -193,8 +186,6 @@ def _set_target_project(project_id: str) -> bool:
 
     info = domino_client.resolve_project(project_id)
     if info:
-        _self._TARGET_PROJECT_NAME = info.name
-
         init_layout()
 
         try:
@@ -235,16 +226,6 @@ def _set_target_project(project_id: str) -> bool:
     return True
 
 
-def _get_target_project_id() -> Optional[str]:
-    """Return the captured target project ID."""
-    return _TARGET_PROJECT_ID
-
-
-def _get_target_project_name() -> Optional[str]:
-    """Return the resolved target project name."""
-    return _TARGET_PROJECT_NAME
-
-
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
@@ -268,11 +249,14 @@ def _max_jobs() -> int:
 
 
 def _resolve_request_project_id(req) -> Optional[str]:
-    """Extract project ID from request query params or captured state."""
+    """Extract project ID from request query params.
+
+    Intentionally does NOT fall back to any process-global target project;
+    that would leak the first-arriving user's project to later requests from
+    other users. Callers must supply ``projectId`` on every request.
+    """
     for key in ("projectId", "project_id"):
         pid = req.query_params.get(key)
         if pid:
             return pid
-    if _TARGET_PROJECT_ID:
-        return _TARGET_PROJECT_ID
     return None

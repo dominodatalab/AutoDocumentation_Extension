@@ -154,11 +154,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_state.domino_datasets = mock_datasets
     mock_state.auth_context = auth_context
     mock_state._TARGET_PROJECT_ID = "proj-integration"
-    mock_state._TARGET_PROJECT_NAME = "test-project"
     mock_state._max_jobs = lambda: 2
     mock_state._get_target_project_id = lambda: "proj-integration"
-    mock_state._get_target_project_name = lambda: "test-project"
-    mock_state._resolve_target_project_name = lambda pid=None: "test-project"
     mock_state._resolve_request_project_id = lambda req: "proj-integration"
     mock_state._get_default_code_root = lambda: Path("/mnt/code")
     mock_state.logger = MagicMock()
