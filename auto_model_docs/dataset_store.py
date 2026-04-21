@@ -96,8 +96,6 @@ class DatasetStore:
                     json={"filePaths": [path], "fileCollisionSetting": "Overwrite"},
                     headers=headers,
                 )
-                if resp.status_code >= 400:
-                    pass
                 resp.raise_for_status()
 
             upload_key = resp.json()
@@ -131,8 +129,6 @@ class DatasetStore:
                     files={path: (path, io.BytesIO(content), "application/octet-stream")},
                     headers=chunk_headers,
                 )
-                if resp.status_code >= 400:
-                    pass
                 resp.raise_for_status()
 
             # Step 3: finalize
@@ -183,8 +179,6 @@ class DatasetStore:
                 params={"path": path},
                 headers=_get_auth_headers(),
             )
-            if resp.status_code >= 400:
-                pass
             resp.raise_for_status()
 
         return resp.content

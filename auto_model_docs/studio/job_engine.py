@@ -206,6 +206,7 @@ async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
             status="failed",
             domino_status=str(exc),
         )
+        logger.error("Domino job submission failed: %s", exc, exc_info=True)
 
     row = domino_job_store.get_job(job_id)
     return _db_record_to_dataclass(row)
@@ -246,7 +247,7 @@ def _refresh_active_jobs_for(owner_id: str) -> None:
             if updates:
                 domino_job_store.update_job(row["id"], **updates)
         except Exception as exc:
-            pass
+            logger.warning("Status sync failed for run %s: %s", run_id, exc)
 
 
 def _promote_queued_jobs_for(owner_id: str) -> None:
@@ -273,7 +274,7 @@ def _promote_queued_jobs_for(owner_id: str) -> None:
             job_url=job_url,
         )
     except Exception as exc:
-        pass
+        logger.warning("Failed to promote queued job %s: %s", oldest["id"], exc)
 
 
 def sync_jobs_for(owner_id: str) -> None:
@@ -282,7 +283,7 @@ def sync_jobs_for(owner_id: str) -> None:
         _refresh_active_jobs_for(owner_id)
         _promote_queued_jobs_for(owner_id)
     except Exception as exc:
-        pass
+        logger.warning("sync_jobs_for(%s) failed: %s", owner_id, exc)
 
 
 def _reconcile_stale_jobs() -> None:
@@ -290,4 +291,4 @@ def _reconcile_stale_jobs() -> None:
     try:
         domino_job_store.reconcile_stale_jobs()
     except Exception as exc:
-        pass
+        logger.warning("Reconcile stale jobs failed: %s", exc)
