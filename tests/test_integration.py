@@ -299,18 +299,19 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     def _wrap(handler):
         """Wrap a route handler into a proper Starlette endpoint."""
+        sig = inspect.signature(handler)
+        params = list(sig.parameters.keys())
         if inspect.iscoroutinefunction(handler):
             async def endpoint(request):
-                result = await handler(request)
+                if params:
+                    result = await handler(request)
+                else:
+                    result = await handler()
                 if isinstance(result, Response):
                     return result
                 return Response(str(result), media_type="text/html")
             return endpoint
         else:
-            # Check if handler takes no args (like api_download_template)
-            sig = inspect.signature(handler)
-            params = list(sig.parameters.keys())
-
             async def endpoint(request):
                 if params:
                     result = handler(request)

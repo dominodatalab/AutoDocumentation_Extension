@@ -39,24 +39,39 @@ def _reset_provider():
 
 class TestResolveApiHost:
     def test_returns_host_from_env(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
         assert resolve_api_host() == "https://domino.example.com"
 
     def test_strips_trailing_slash(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com/")
         assert resolve_api_host() == "https://domino.example.com"
 
     def test_strips_multiple_trailing_slashes(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com///")
         assert resolve_api_host() == "https://domino.example.com"
 
     def test_returns_empty_when_unset(self, monkeypatch):
         monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         assert resolve_api_host() == ""
 
     def test_returns_empty_when_blank(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         monkeypatch.setenv("DOMINO_API_HOST", "")
         assert resolve_api_host() == ""
+
+    def test_prefers_proxy_over_host(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
+        assert resolve_api_host() == "http://localhost:8899"
+
+    def test_falls_back_to_host_when_proxy_unset(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
+        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
+        assert resolve_api_host() == "https://nucleus:80"
 
 
 class TestGetUserToken:

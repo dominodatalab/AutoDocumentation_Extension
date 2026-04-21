@@ -252,29 +252,33 @@ def _register(mod, register_fn_name="register_api_routes"):
 # ===========================================================================
 
 class TestApiRoutes:
-    def test_branches_returns_select_when_available(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_branches_returns_select_when_available(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
         client.list_branches_api.return_value = [{"name": "main"}, {"name": "develop"}]
         req = _make_request(query_params={"projectId": "proj-123"})
-        routes["/api/branches"](req)
+        await routes["/api/branches"](req)
         client.list_branches_api.assert_called_once_with("proj-123", search="")
 
-    def test_branches_fallback_when_no_branches(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_branches_fallback_when_no_branches(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         _mock_studio_modules["state"].domino_client.list_branches_api.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
-        routes["/api/branches"](req)  # should not raise
+        await routes["/api/branches"](req)  # should not raise
 
-    def test_branches_fallback_when_no_project_id(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_branches_fallback_when_no_project_id(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={})
-        routes["/api/branches"](req)  # should not raise
+        await routes["/api/branches"](req)  # should not raise
 
-    def test_hardware_tiers_returns_select(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_hardware_tiers_returns_select(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
@@ -283,58 +287,64 @@ class TestApiRoutes:
         ]
         client.get_project_default_tier.return_value = "tier-1"
         req = _make_request(query_params={"projectId": "proj-123"})
-        routes["/api/hardware-tiers"](req)
+        await routes["/api/hardware-tiers"](req)
         client.list_hardware_tiers.assert_called_once()
 
-    def test_hardware_tiers_when_domino_unavailable(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_hardware_tiers_when_domino_unavailable(self, _mock_studio_modules):
         _mock_studio_modules["state"]._DOMINO_AVAILABLE = False
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request()
-        routes["/api/hardware-tiers"](req)
+        await routes["/api/hardware-tiers"](req)
 
-    def test_datasets_returns_json(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_datasets_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         ds = _mock_studio_modules["state"].domino_datasets
         ds.list_datasets.return_value = [{"id": "ds-1", "name": "test-ds"}]
         req = _make_request(query_params={"projectId": "proj-123"})
-        result = routes["/api/datasets"](req)
+        result = await routes["/api/datasets"](req)
         ds.list_datasets.assert_called_once()
 
-    def test_datasets_returns_empty_when_domino_unavailable(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_datasets_returns_empty_when_domino_unavailable(self, _mock_studio_modules):
         _mock_studio_modules["state"]._DOMINO_AVAILABLE = False
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request()
-        result = routes["/api/datasets"](req)
+        result = await routes["/api/datasets"](req)
         body = json.loads(result.body.decode())
         assert body == []
 
-    def test_datasets_error_returns_500(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_datasets_error_returns_500(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         ds = _mock_studio_modules["state"].domino_datasets
         ds.list_datasets.side_effect = RuntimeError("API error")
         req = _make_request(query_params={"projectId": "proj-123"})
-        result = routes["/api/datasets"](req)
+        result = await routes["/api/datasets"](req)
         assert result.status_code == 500
 
-    def test_dataset_files_requires_dataset_id(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_dataset_files_requires_dataset_id(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={})
-        result = routes["/api/dataset-files"](req)
+        result = await routes["/api/dataset-files"](req)
         assert result.status_code == 400
 
-    def test_dataset_files_returns_files(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_dataset_files_returns_files(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         ds = _mock_studio_modules["state"].domino_datasets
         ds.get_rw_snapshot_id.return_value = "snap-1"
         ds.list_files.return_value = [{"fileName": "spec.yaml"}]
         req = _make_request(query_params={"datasetId": "ds-1", "projectId": "proj-123"})
-        result = routes["/api/dataset-files"](req)
+        result = await routes["/api/dataset-files"](req)
         ds.list_files.assert_called_once()
 
     def test_download_template(self, _mock_studio_modules):
@@ -344,7 +354,8 @@ class TestApiRoutes:
         # Either FileResponse (exists) or Response(404)
         assert result is not None
 
-    def test_resolve_project(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_resolve_project(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
@@ -353,14 +364,15 @@ class TestApiRoutes:
         mock_info.owner_username = "alice"
         client.resolve_project.return_value = mock_info
         req = _make_request(query_params={"projectId": "proj-123"})
-        routes["/api/resolve-project"](req)
+        await routes["/api/resolve-project"](req)
         client.resolve_project.assert_called_with("proj-123")
 
-    def test_resolve_project_empty_id(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_resolve_project_empty_id(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={})
-        routes["/api/resolve-project"](req)  # should not raise
+        await routes["/api/resolve-project"](req)  # should not raise
 
 
 # ===========================================================================
@@ -387,16 +399,18 @@ class TestJobRoutes:
         await routes["/run"](req)
         store.update_job.assert_called()
 
-    def test_job_history(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_job_history(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        routes["/job-history"]()
+        await routes["/job-history"]()
         _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("test_user")
 
-    def test_cancel_queued_jobs(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_cancel_queued_jobs(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        routes["/cancel-queued-jobs"]()
+        await routes["/cancel-queued-jobs"]()
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("test_user")
 
     @pytest.mark.asyncio
@@ -413,21 +427,23 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_client.stop_job.assert_called_once()
         store.update_job.assert_called_with("j1", status="cancelled")
 
-    def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules):
         from auth_context import set_viewing_user
         set_viewing_user(None)
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        routes["/job-history"]()
+        await routes["/job-history"]()
         _mock_studio_modules["job_engine"].sync_jobs_for.assert_not_called()
         _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("")
 
-    def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules):
         from auth_context import set_viewing_user
         set_viewing_user(None)
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        routes["/cancel-queued-jobs"]()
+        await routes["/cancel-queued-jobs"]()
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_not_called()
 
     @pytest.mark.asyncio
@@ -514,7 +530,8 @@ class TestSpecRoutes:
         result = await routes["/save-spec"](req)
         store.save_spec.assert_called_once()
 
-    def test_spec_list_with_specs(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_spec_list_with_specs(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
         store = _mock_studio_modules["state"].spec_store
@@ -522,15 +539,16 @@ class TestSpecRoutes:
             {"name": "spec1.yaml", "size_kb": "2.1"},
         ]
         req = _make_request(query_params={"projectId": "proj-123"})
-        routes["/spec-list"](req)
+        await routes["/spec-list"](req)
         store.list_specs.assert_called_once()
 
-    def test_spec_list_empty(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_spec_list_empty(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
         _mock_studio_modules["state"].spec_store.list_specs.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
-        routes["/spec-list"](req)
+        await routes["/spec-list"](req)
 
     # delete_spec and cleanup_specs routes removed — Domino Datasets API
     # does not support file-level deletion.

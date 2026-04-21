@@ -65,7 +65,7 @@ app, rt = fast_app(
 # ---------------------------------------------------------------------------
 
 @rt("/")
-def index(req: Request):
+async def index(req: Request):
     # Cache the external host on first request so Domino job URLs resolve correctly.
     if _DOMINO_AVAILABLE:
         host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
