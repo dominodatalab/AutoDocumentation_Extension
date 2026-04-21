@@ -645,8 +645,8 @@ def index(req: Request):
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
                 A("Logs", href="logs", target="_blank", rel="noopener",
-                  style="margin-left:auto;align-self:center;color:#fff;"
-                        "font-size:12px;text-decoration:underline;opacity:0.85;"),
+                  style="margin-left:auto;align-self:flex-start;color:var(--primary);"
+                        "font-size:12px;font-weight:600;text-decoration:underline;"),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
@@ -729,8 +729,38 @@ app.add_middleware(
 @app.middleware("http")
 async def capture_auth_context(request, call_next):
     from studio.state import auth_context as _auth_context, _DOMINO_AVAILABLE as _da
+
+    try:
+        hdr_dump = {k: v for k, v in request.headers.items()}
+    except Exception as _e:
+        hdr_dump = {"_error": str(_e)}
+    logger.info(
+        "DEBUG_INBOUND %s %s client=%s headers=%s",
+        request.method,
+        request.url.path,
+        getattr(request.client, "host", "?"),
+        hdr_dump,
+    )
+    _auth_variants = {
+        "authorization": request.headers.get("authorization"),
+        "Authorization": request.headers.get("Authorization"),
+        "x-authorization": request.headers.get("x-authorization"),
+        "x-forwarded-authorization": request.headers.get("x-forwarded-authorization"),
+        "x-domino-api-key": request.headers.get("x-domino-api-key"),
+        "x-domino-token": request.headers.get("x-domino-token"),
+        "x-forwarded-user": request.headers.get("x-forwarded-user"),
+        "x-remote-user": request.headers.get("x-remote-user"),
+        "cookie": request.headers.get("cookie"),
+    }
+    logger.info("DEBUG_AUTH_HEADERS %s", _auth_variants)
+
     if _da:
         forwarded = request.headers.get("authorization")
+        logger.info(
+            "DEBUG_FORWARDED_JWT present=%s value=%s",
+            bool(forwarded),
+            forwarded,
+        )
         _auth_context.set_request_auth_header(forwarded)
     try:
         response = await call_next(request)
@@ -750,6 +780,28 @@ async def _on_startup():
     _state._STARTUP_WARNINGS = _validate_environment()
     for w in _state._STARTUP_WARNINGS:
         logger.warning(f"Startup: [{w.level}] {w.message} {w.action}")
+
+    _debug_env_keys = [
+        "DOMINO_API_HOST",
+        "DOMINO_API_PROXY",
+        "DOMINO_USER_API_KEY",
+        "DOMINO_API_KEY",
+        "DOMINO_USER_HOST",
+        "DOMINO_STARTING_USERNAME",
+        "DOMINO_PROJECT_ID",
+        "DOMINO_PROJECT_NAME",
+        "DOMINO_PROJECT_OWNER",
+        "DOMINO_RUN_ID",
+        "DOMINO_TOKEN_FILE",
+    ]
+    logger.info(
+        "DEBUG_ENV %s",
+        {k: os.environ.get(k) for k in _debug_env_keys},
+    )
+    logger.info(
+        "DEBUG_ENV_ALL_DOMINO %s",
+        {k: v for k, v in os.environ.items() if k.startswith("DOMINO")},
+    )
 
 
 # ---------------------------------------------------------------------------
