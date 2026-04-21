@@ -85,7 +85,6 @@ class DatasetStore:
         """
         base_url = _resolve_api_host().rstrip("/")
         ds_id = self._dataset_id
-        logger.info("DatasetStore.write_file('%s', %d bytes)", path, len(content))
 
         upload_key = None
         try:
@@ -98,7 +97,7 @@ class DatasetStore:
                     headers=headers,
                 )
                 if resp.status_code >= 400:
-                    logger.warning("Upload start failed: %s body=%s", resp.status_code, resp.text[:500])
+                    pass
                 resp.raise_for_status()
 
             upload_key = resp.json()
@@ -133,7 +132,7 @@ class DatasetStore:
                     headers=chunk_headers,
                 )
                 if resp.status_code >= 400:
-                    logger.warning("Upload chunk failed: %s body=%s", resp.status_code, resp.text[:500])
+                    pass
                 resp.raise_for_status()
 
             # Step 3: finalize
@@ -146,7 +145,6 @@ class DatasetStore:
 
             # Cache locally so subsequent reads don't hit stale snapshot
             self._cache[path] = content
-            logger.info("DatasetStore.write_file('%s') complete", path)
 
         except Exception:
             # Cancel upload on failure (only if we obtained an upload key)
@@ -174,12 +172,10 @@ class DatasetStore:
         """
         # Return cached content if available (write-through cache)
         if path in self._cache:
-            logger.info("DatasetStore.read_file('%s') [cache hit]", path)
             return self._cache[path]
 
         base_url = _resolve_api_host().rstrip("/")
         snap_id = self._snapshot_id
-        logger.info("DatasetStore.read_file('%s')", path)
 
         with httpx.Client(timeout=60.0) as client:
             resp = client.get(
@@ -188,7 +184,7 @@ class DatasetStore:
                 headers=_get_auth_headers(),
             )
             if resp.status_code >= 400:
-                logger.warning("Read failed: %s body=%s", resp.status_code, resp.text[:500])
+                pass
             resp.raise_for_status()
 
         return resp.content
@@ -292,13 +288,8 @@ def init_store(dataset_id: str, snapshot_id: str, project_id: str) -> DatasetSto
     if _store is not None:
         if _store.dataset_id == dataset_id:
             return _store
-        logger.warning(
-            "init_store called with different dataset: %s (current: %s). Ignoring.",
-            dataset_id, _store.dataset_id,
-        )
         return _store
     _store = DatasetStore(dataset_id, snapshot_id, project_id)
-    logger.info("DatasetStore initialized: dataset=%s snapshot=%s", dataset_id, snapshot_id)
     return _store
 
 

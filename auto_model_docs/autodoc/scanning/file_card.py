@@ -89,7 +89,6 @@ def extract_file_card(
     try:
         content = filepath.read_text(encoding="utf-8", errors="ignore")
     except Exception:
-        logger.warning("Could not read file for card: %s", rel_path)
         return FileCard(path=rel_path, language=language, size=size)
 
     try:
@@ -98,7 +97,6 @@ def extract_file_card(
         else:
             imports, symbols, docstring, snippets = _extract_regex_card(content, language)
     except Exception:
-        logger.warning("Card extraction failed for %s, using metadata-only", rel_path)
         # Metadata-only fallback: first 500 chars as snippet
         fallback_snippet = content[:500].strip()
         return FileCard(

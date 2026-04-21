@@ -121,10 +121,6 @@ class CodeScanner:
 
             # Select top files for deep analysis
             selected_paths = ranked_files[:self.max_selected_files]
-            logger.info(
-                "Stage 2: Selected %d/%d files for deep analysis",
-                len(selected_paths), len(file_cards),
-            )
 
             # ── README ────────────────────────────────────────────────
             readme_content = self._read_readme()
@@ -149,10 +145,7 @@ class CodeScanner:
             context.scan_incomplete = len(skipped_files) > 0
 
             if skipped_files:
-                logger.warning(
-                    "Scan incomplete: %d files skipped due to batch failures: %s",
-                    len(skipped_files), skipped_files,
-                )
+                pass
 
             report(1.0)
             return context
@@ -224,7 +217,6 @@ class CodeScanner:
                     pass
             cards.append(card)
 
-        logger.info("Stage 1: Built %d file cards", len(cards))
         return cards
 
     # ──────────────────────────────────────────────────────────────────
@@ -269,15 +261,9 @@ class CodeScanner:
             if not ranked_paths:
                 raise ValueError("LLM ranking returned no valid paths")
 
-            logger.info(
-                "Stage 2: LLM ranked %d files (top roles: %s)",
-                len(ranked_paths),
-                ", ".join(f"{p}: {file_roles[p]}" for p in ranked_paths[:3]),
-            )
             return ranked_paths, file_roles
 
         except Exception as e:
-            logger.warning("Stage 2 LLM ranking failed (%s), using heuristic fallback", e)
             # Heuristic fallback: files are already sorted by priority_keywords
             return [c.path for c in file_cards], file_roles
 
@@ -301,10 +287,6 @@ class CodeScanner:
         for i in range(0, len(selected_paths), self.batch_size):
             batches.append(selected_paths[i : i + self.batch_size])
 
-        logger.info(
-            "Stage 3: Analyzing %d files in %d batches (workers=%d)",
-            len(selected_paths), len(batches), self.scan_workers,
-        )
 
         # Run batches with semaphore for concurrency control
         semaphore = asyncio.Semaphore(self.scan_workers)
@@ -317,10 +299,6 @@ class CodeScanner:
                     result = await self._analyze_single_batch(batch_paths, file_roles)
                     results[batch_idx] = result
                 except Exception as e:
-                    logger.warning(
-                        "Batch %d failed (%d files): %s",
-                        batch_idx, len(batch_paths), e,
-                    )
                     skipped_files.extend(batch_paths)
 
                 # Update progress (Stage 3 spans 0.25 to 0.90)
@@ -364,7 +342,6 @@ class CodeScanner:
                     "content": sanitized.sanitized_content,
                 })
             except Exception:
-                logger.warning("Could not read file for batch analysis: %s", rel_path)
                 continue
 
         if not code_contents:
@@ -389,10 +366,6 @@ class CodeScanner:
                 break
             except asyncio.TimeoutError:
                 if attempt < self.scan_retries:
-                    logger.warning(
-                        "Batch timeout (attempt %d/%d), retrying...",
-                        attempt + 1, self.scan_retries + 1,
-                    )
                     continue
                 raise
             except Exception:

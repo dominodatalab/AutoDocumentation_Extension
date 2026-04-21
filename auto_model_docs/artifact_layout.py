@@ -54,7 +54,6 @@ def init_layout() -> ArtifactLayout:
     if _layout is not None:
         return _layout
     _layout = ArtifactLayout()
-    logger.info("Artifact layout initialized")
     return _layout
 
 

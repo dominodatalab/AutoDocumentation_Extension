@@ -232,7 +232,6 @@ def _set_target_project(project_id: str) -> bool:
         domino_job_store.init_db()
         return True
 
-    logger.warning("Could not resolve project name for %s", project_id)
     return True
 
 

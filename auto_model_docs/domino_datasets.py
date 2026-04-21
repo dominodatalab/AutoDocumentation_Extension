@@ -55,7 +55,6 @@ def _api_request(
         raise RuntimeError("No Domino API host configured")
 
     url = f"{base}{path}"
-    logger.debug("Datasets API %s %s", method, path)
     last_exc: Exception | None = None
 
     for attempt in range(max_retries + 1):
@@ -73,17 +72,10 @@ def _api_request(
                 )
                 if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < max_retries:
                     backoff = 2 ** attempt
-                    logger.warning(
-                        "Datasets API %s %s → %s, retry in %ss (%s/%s)",
-                        method, path, resp.status_code, backoff, attempt + 1, max_retries,
-                    )
                     time.sleep(backoff)
                     continue
                 if resp.status_code >= 400:
-                    logger.warning(
-                        "Datasets API %s %s → %s body=%s",
-                        method, path, resp.status_code, resp.text[:500],
-                    )
+                    pass
                 resp.raise_for_status()
                 return resp
         except httpx.HTTPStatusError:
@@ -110,7 +102,6 @@ def list_datasets(project_id: Optional[str] = None) -> list[dict[str, Any]]:
     """
     pid = _resolve_project_id(project_id)
 
-    logger.info("Listing datasets for project %s", pid)
 
     datasets: list[dict[str, Any]] = []
     offset = 0
@@ -144,7 +135,6 @@ def list_datasets(project_id: Optional[str] = None) -> list[dict[str, Any]]:
             break
         offset += page_size
 
-    logger.info("Found %d datasets for project %s", len(datasets), pid)
     return datasets
 
 
@@ -169,7 +159,6 @@ def _create_dataset(
                 json=payload,
             )
             data = resp.json()
-            logger.info("Create dataset response: %s", data)
             # API may wrap the dataset object: {"dataset": {...}, "metadata": {...}}
             ds = data.get("dataset", data) if isinstance(data, dict) else data
             snapshot_ids = ds.get("snapshotIds") or []
@@ -202,16 +191,14 @@ def ensure_dataset(
     # Try create first (single fast call)
     try:
         created = _create_dataset(pid, name, description)
-        logger.info("Created dataset '%s' in project %s", name, pid)
         return created
     except Exception:
-        logger.debug("Create failed for '%s', looking up existing", name, exc_info=True)
+        pass
 
     # Find existing
     datasets = list_datasets(pid)
     for ds in datasets:
         if ds["name"] == name:
-            logger.info("Found existing dataset '%s' (id=%s)", name, ds["id"])
             return ds
 
     raise RuntimeError(f"Failed to create or find dataset '{name}' in project {pid}")
@@ -242,7 +229,7 @@ def get_rw_snapshot_id(
         if snapshots:
             return snapshots[0].get("id")
     except Exception:
-        logger.warning("Failed to get snapshots for dataset %s", dataset_id, exc_info=True)
+        pass
     return None
 
 
@@ -258,7 +245,6 @@ def list_files(
     """List files in a dataset snapshot, returning only directories and yaml files."""
     pid = _resolve_project_id(project_id)
 
-    logger.debug("Browsing files in snapshot %s, path='%s'", snapshot_id, path)
 
     resp = _api_request(
         "GET", f"/v4/datasetrw/files/{snapshot_id}",
@@ -283,7 +269,6 @@ def list_files(
 
         # Strip parent path prefix if the API returned the full relative path
         if path_prefix and filename.startswith(path_prefix):
-            logger.debug("Stripping path prefix '%s' from fileName '%s'", path_prefix, filename)
             filename = filename[len(path_prefix):]
 
         if is_dir or filename.lower().endswith((".yaml", ".yml")):
@@ -294,8 +279,6 @@ def list_files(
                 "lastModified": row.get("lastModified"),
             })
 
-    logger.info("Listed %d items (from %d total) in snapshot %s path='%s'",
-                len(files), len(rows), snapshot_id, path)
     return files
 
 
@@ -320,7 +303,6 @@ async def upload_file(
     headers = _get_auth_headers()
     base = _resolve_api_host()
     base_url = base.rstrip("/")
-    logger.info("Uploading '%s' (%d bytes) to dataset %s", file_path, len(content), dataset_id)
 
     # Step 1: start upload session
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -331,7 +313,7 @@ async def upload_file(
             headers=headers,
         )
         if resp.status_code >= 400:
-            logger.warning("Upload start failed: %s body=%s", resp.status_code, resp.text[:500])
+            pass
         resp.raise_for_status()
 
     upload_key = resp.json()
@@ -365,7 +347,7 @@ async def upload_file(
                 headers=chunk_headers,
             )
             if resp.status_code >= 400:
-                logger.warning("Upload chunk failed: %s body=%s", resp.status_code, resp.text[:500])
+                pass
             resp.raise_for_status()
 
         # Step 3: finalize
@@ -376,7 +358,6 @@ async def upload_file(
                 headers=headers,
             )
             resp.raise_for_status()
-        logger.info("Upload complete: '%s' → dataset %s", file_path, dataset_id)
 
     except Exception:
         try:

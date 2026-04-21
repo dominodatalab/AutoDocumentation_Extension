@@ -728,13 +728,6 @@ async def capture_auth_context(request, call_next):
         hdr_dump = {k: v for k, v in request.headers.items()}
     except Exception as _e:
         hdr_dump = {"_error": str(_e)}
-    logger.info(
-        "DEBUG_INBOUND %s %s client=%s headers=%s",
-        request.method,
-        request.url.path,
-        getattr(request.client, "host", "?"),
-        hdr_dump,
-    )
     _auth_variants = {
         "authorization": request.headers.get("authorization"),
         "Authorization": request.headers.get("Authorization"),
@@ -746,23 +739,11 @@ async def capture_auth_context(request, call_next):
         "x-remote-user": request.headers.get("x-remote-user"),
         "cookie": request.headers.get("cookie"),
     }
-    logger.info("DEBUG_AUTH_HEADERS %s", _auth_variants)
 
     import threading as _threading
     forwarded = request.headers.get("authorization")
-    logger.info(
-        "DEBUG_FORWARDED_JWT thread=%s present=%s value_prefix=%s",
-        _threading.current_thread().name,
-        bool(forwarded),
-        (forwarded[:30] + "...") if forwarded else None,
-    )
     _auth_context.set_request_auth_header(forwarded)
     _after_set = _auth_context.get_request_auth_header()
-    logger.info(
-        "DEBUG_CTXVAR_AFTER_SET_IN_MW thread=%s present=%s",
-        _threading.current_thread().name,
-        bool(_after_set),
-    )
     try:
         response = await call_next(request)
     finally:
@@ -779,7 +760,7 @@ async def _on_startup():
     import studio.state as _state
     _state._STARTUP_WARNINGS = _validate_environment()
     for w in _state._STARTUP_WARNINGS:
-        logger.warning(f"Startup: [{w.level}] {w.message} {w.action}")
+        pass
 
     _debug_env_keys = [
         "DOMINO_API_HOST",
@@ -794,14 +775,6 @@ async def _on_startup():
         "DOMINO_RUN_ID",
         "DOMINO_TOKEN_FILE",
     ]
-    logger.info(
-        "DEBUG_ENV %s",
-        {k: os.environ.get(k) for k in _debug_env_keys},
-    )
-    logger.info(
-        "DEBUG_ENV_ALL_DOMINO %s",
-        {k: v for k, v in os.environ.items() if k.startswith("DOMINO")},
-    )
 
 
 # ---------------------------------------------------------------------------

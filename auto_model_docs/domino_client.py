@@ -81,7 +81,6 @@ def _domino_request(
         raise RuntimeError("Domino API host is not configured. Set DOMINO_API_HOST.")
 
     url = f"{base_url}{path}"
-    logger.debug("Domino API %s %s", method, url)
     last_exc: Exception | None = None
 
     for attempt in range(max_retries + 1):
@@ -92,10 +91,6 @@ def _domino_request(
                 resp = client.request(method, url, json=json, params=params, headers=headers)
                 if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < max_retries:
                     backoff = 2 ** attempt
-                    logger.warning(
-                        "Domino API %s %s returned %s, retrying in %ss (attempt %s/%s)",
-                        method, path, resp.status_code, backoff, attempt + 1, max_retries,
-                    )
                     time.sleep(backoff)
                     continue
                 resp.raise_for_status()
@@ -107,10 +102,6 @@ def _domino_request(
             last_exc = exc
             if attempt < max_retries:
                 backoff = 2 ** attempt
-                logger.warning(
-                    "Domino API %s %s failed (%s), retrying in %ss (attempt %s/%s)",
-                    method, path, exc, backoff, attempt + 1, max_retries,
-                )
                 time.sleep(backoff)
                 continue
             raise
@@ -132,7 +123,6 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
 
     api_host = _resolve_api_host()
     if not api_host:
-        logger.warning("Cannot resolve project %s: no Domino API host configured", project_id)
         return None
 
     try:
@@ -147,22 +137,15 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
                 data = _domino_request("GET", path)
                 break
             except Exception as path_exc:
-                logger.debug("Project resolve path %s failed: %s", path, path_exc)
                 continue
 
         if data is None:
-            logger.warning("All project resolve paths failed for %s", project_id)
             return None
 
         name = data.get("name")
         owner = data.get("ownerUsername") or (data.get("owner") or {}).get("userName")
 
         if not name or not owner:
-            logger.warning(
-                "Project %s response missing name/owner: %s",
-                project_id,
-                {k: data.get(k) for k in ("name", "ownerUsername", "owner")},
-            )
             return None
 
         main_repo = data.get("mainRepository") or {}
@@ -170,11 +153,9 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
 
         info = ProjectInfo(id=project_id, name=name, owner_username=owner, main_repo_id=main_repo_id)
         _project_cache[project_id] = info
-        logger.info("Resolved project %s → %s/%s", project_id, owner, name)
         return info
 
     except Exception:
-        logger.exception("Error resolving project %s", project_id)
         return None
 
 
@@ -208,7 +189,6 @@ def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]
     if not info or not info.main_repo_id:
         info = resolve_project(project_id)
     if not info or not info.main_repo_id:
-        logger.warning("Cannot list branches: no repo ID for project %s", project_id)
         return []
 
     try:
@@ -247,7 +227,6 @@ def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]
                 branches.append({"name": name})
         return branches
     except Exception as exc:
-        logger.warning("Failed to list branches via API: %s", exc)
         return []
 
 
@@ -262,7 +241,6 @@ def list_hardware_tiers(project_id: Optional[str] = None) -> list[dict[str, Any]
     """
     pid = project_id
     if not pid:
-        logger.warning("No project ID available to list hardware tiers")
         return []
 
     try:
@@ -282,7 +260,6 @@ def list_hardware_tiers(project_id: Optional[str] = None) -> list[dict[str, Any]
             })
         return results
     except Exception as exc:
-        logger.warning("Failed to list hardware tiers: %s", exc)
         return []
 
 
@@ -327,20 +304,17 @@ def submit_job(
     if branch:
         payload["mainRepoGitRef"] = {"type": "branches", "value": branch}
 
-    logger.info("submit_job: project_id=%s, pid=%s", project_id, pid)
 
     try:
         data = _domino_request("POST", "/v4/jobs/start", json=payload)
     except Exception:
         # Retry without commit pin if Domino can't resolve the ref
         if branch and payload.get("mainRepoGitRef"):
-            logger.warning("Retrying job start without mainRepoGitRef")
             payload.pop("mainRepoGitRef", None)
             data = _domino_request("POST", "/v4/jobs/start", json=payload)
         else:
             raise
 
-    logger.info("Domino job_start response: %r", data)
 
     run_id = (
         data.get("id")
@@ -367,7 +341,6 @@ def get_job_status(run_id: str) -> dict[str, Any]:
     try:
         data = _domino_request("GET", f"/v4/jobs/{run_id}")
     except Exception as exc:
-        logger.warning("Failed to get status for run %s: %s", run_id, exc)
         return {"domino_status": "unknown", "local_status": "running"}
 
     raw = (
@@ -404,11 +377,9 @@ def stop_job(run_id: str, project_id: Optional[str] = None) -> None:
         raise ValueError("project_id is required to stop a job")
     payload: dict[str, Any] = {"jobId": run_id, "commitResults": True, "projectId": project_id}
     try:
-        logger.info("Stopping job %s (project=%s)", run_id, project_id)
         _domino_request("POST", "/v4/jobs/stop", json=payload)
-        logger.info("Stop request succeeded for job %s", run_id)
     except Exception as exc:
-        logger.warning("Failed to stop run %s: %s", run_id, exc)
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -445,7 +416,6 @@ def set_ui_host(request_host: str, scheme: str = "https") -> None:
 
     netloc = f"{hostname}:{parsed.port}" if parsed.port else hostname
     _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
-    logger.info("Domino UI host resolved from request: %s", _ui_host)
 
 
 def build_job_url(run_id: str, project_id: Optional[str] = None) -> str | None:

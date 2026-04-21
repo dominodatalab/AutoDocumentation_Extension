@@ -101,12 +101,9 @@ class Orchestrator:
         self.detected_file_count: int = detected_count
 
         if detected_profile:
-            logger.info(
-                f"Detected language: {detected_profile.display_name} "
-                f"({detected_count} files)"
-            )
+            pass
         else:
-            logger.info("No supported files detected, defaulting to Python")
+            pass
 
         # Create sanitizer with language-specific secret patterns
         # Separate regex patterns from file-name patterns
@@ -233,12 +230,9 @@ class Orchestrator:
             raise
 
         # Log scan summary for debugging
-        logger.info("=== SCAN SUMMARY ===")
-        logger.info(f"Models found: {len(artifact_ctx.models)}")
         for m in artifact_ctx.models:
             metrics_list = list(m.metrics.keys()) if m.metrics else []
             artifacts_list = m.artifacts if m.artifacts else []
-            logger.info(f"  {m.name} v{m.version}: metrics={metrics_list}, artifacts={len(artifacts_list)}")
 
         if on_progress:
             on_progress("Scanning", 1.0)
@@ -532,7 +526,6 @@ class Orchestrator:
             section_num += 1
 
         total_planning_operations = len(planning_tasks)
-        logger.info(f"Planning {total_planning_operations} sections/subsections across {len(spec.sections)} document sections")
 
         async def plan_one_section(
             section: SectionSpec, context: GenerationContext, number: str
@@ -601,7 +594,6 @@ class Orchestrator:
                     try:
                         return ("ok", await self.generator.generate(block, context))
                     except Exception as e:
-                        logger.error(f"Content generation failed for {block.type.value}: {e}")
                         return ("err", f"{block.type.value}: {str(e)}")
 
             results_raw = await asyncio.gather(
