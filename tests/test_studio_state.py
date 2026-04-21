@@ -61,7 +61,6 @@ def state_module():
     mod = _get_state_module()
     # Reset mutable globals
     mod._TARGET_PROJECT_ID = None
-    mod._TARGET_PROJECT_NAME = None
     mod._POLL_TASK = None
     mod._STARTUP_WARNINGS = []
     yield mod
@@ -182,12 +181,13 @@ class TestResolveRequestProjectId:
         result = state_module._resolve_request_project_id(req)
         assert result == "from-snake"
 
-    def test_falls_back_to_captured_target(self, state_module):
+    def test_does_not_fall_back_to_captured_target(self, state_module):
+        """Must NOT leak the process-global target to a request that omits projectId."""
         state_module._TARGET_PROJECT_ID = "captured-id"
         req = MagicMock()
         req.query_params = {}
         result = state_module._resolve_request_project_id(req)
-        assert result == "captured-id"
+        assert result is None
 
     def test_returns_none_when_nothing_available(self, state_module):
         state_module._TARGET_PROJECT_ID = None

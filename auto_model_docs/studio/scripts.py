@@ -492,6 +492,18 @@ MAIN_DOM_JS = r"""
             }
         });
 
+        // Ensure every HTMX request carries projectId from the page URL so
+        // server handlers never fall back to process-global state that may
+        // belong to a different user.
+        document.body.addEventListener('htmx:configRequest', function(e) {
+            var pid = new URLSearchParams(window.location.search).get('projectId');
+            if (!pid) return;
+            var path = e.detail.path || '';
+            if (/[?&]projectId=/.test(path)) return;
+            e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
+                'projectId=' + encodeURIComponent(pid);
+        });
+
         // Poll job history — pause while an HTMX request targets the history panel
         var _htmxBusy = false;
         document.body.addEventListener('htmx:beforeRequest', function(e) {
@@ -514,7 +526,7 @@ MAIN_DOM_JS = r"""
                 wasOpen = details.open;
                 prevCount = details.querySelectorAll('tbody tr').length;
             }
-            fetch('job-history')
+            fetch('job-history?' + getProjectIdParam().replace(/^&/, ''))
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (!_htmxBusy) {
