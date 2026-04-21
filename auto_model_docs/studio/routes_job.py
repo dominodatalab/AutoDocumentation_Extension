@@ -5,9 +5,15 @@ from __future__ import annotations
 from fasthtml.common import *
 from starlette.requests import Request
 
-from auth_context import get_viewing_user
+import auth_context
+from authorization import (
+    require_domino_job_list,
+    require_domino_job_start,
+    require_domino_job_stop,
+)
 
 from .state import (
+    _resolve_request_project_id,
     domino_client,
     domino_job_store,
 )
@@ -29,7 +35,7 @@ def _current_owner_id() -> str:
     index route's behavior.
     """
     try:
-        return get_viewing_user().id
+        return auth_context.get_viewing_user().id
     except Exception:
         return ""
 
@@ -51,6 +57,7 @@ def register_job_routes(rt):
                 domino_status="No target project ID. Reload the app with ?projectId= in the URL.",
             )
             return _render_job_history_table(owner_id)
+        require_domino_job_start(job_request.project_id)
         try:
             await _submit_domino_job(job_request, owner_id)
         except Exception as exc:
@@ -64,20 +71,29 @@ def register_job_routes(rt):
 
     rt("/run")(run)
 
-    async def job_history():
+    async def job_history(req: Request):
         owner_id = _current_owner_id()
         if not owner_id:
             return _render_job_history_table(owner_id)
+        project_id = _resolve_request_project_id(req)
+        if not project_id:
+            return _render_job_history_table(owner_id)
+        require_domino_job_list(project_id)
         sync_jobs_for(owner_id)
         return _render_job_history_table(owner_id)
 
     rt("/job-history")(job_history)
 
-    async def cancel_queued_jobs():
+    async def cancel_queued_jobs(req: Request):
         """Cancel all queued (not yet submitted) jobs for the current user."""
         owner_id = _current_owner_id()
-        if owner_id:
-            domino_job_store.cancel_queued_jobs(owner_id)
+        if not owner_id:
+            return _render_job_history_table(owner_id)
+        project_id = _resolve_request_project_id(req)
+        if not project_id:
+            return _render_job_history_table(owner_id)
+        require_domino_job_list(project_id)
+        domino_job_store.cancel_queued_jobs(owner_id)
         return _render_job_history_table(owner_id)
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
@@ -94,6 +110,7 @@ def register_job_routes(rt):
             if row and row.get("owner_id") != owner_id:
                 return _render_job_history_table(owner_id)
             if row and row.get("domino_run_id"):
+                require_domino_job_stop(row["domino_run_id"])
                 try:
                     domino_client.stop_job(
                         row["domino_run_id"],

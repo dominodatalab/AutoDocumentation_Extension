@@ -268,6 +268,16 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     sys.modules["autodoc.core"] = ModuleType("autodoc.core")
     sys.modules["autodoc.core.models"] = mock_models
 
+    # Mock authorization module — default to "allow everything" so integration
+    # tests exercise route bodies. Tests that want to exercise deny behaviour
+    # can override the require_* attributes on this mock post-build.
+    mock_authz = ModuleType("authorization")
+    mock_authz.require_domino_job_start = MagicMock()
+    mock_authz.require_domino_job_stop = MagicMock()
+    mock_authz.require_domino_job_list = MagicMock()
+    mock_authz.require_project_write = MagicMock()
+    sys.modules["authorization"] = mock_authz
+
     # Load route modules fresh
     for mod_name in ("studio.ui_components", "studio.job_engine",
                      "studio.routes_api", "studio.routes_job", "studio.routes_spec"):
@@ -352,6 +362,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         "domino_datasets": mock_datasets,
         "auth_context": auth_context,
         "doc_spec": mock_doc_spec,
+        "authz": mock_authz,
         "_restore": None,
     }
 
@@ -367,8 +378,12 @@ def integration_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
     monkeypatch.setenv("AUTODOC_MAX_JOBS", "2")
 
-    from auth_context import User, set_viewing_user
-    set_viewing_user(User(id="integration_user", user_name="integration_user"))
+    import auth_context as _auth_ctx
+    from auth_context import User
+    monkeypatch.setattr(
+        _auth_ctx, "get_viewing_user",
+        lambda: User(id="integration_user", user_name="integration_user"),
+    )
 
     saved_modules = {}
     for key in ("studio", "studio.state", "studio.ui_components", "studio.job_engine",
@@ -578,6 +593,67 @@ class TestJobRoutesIntegration:
 # ===========================================================================
 # Auth context middleware integration
 # ===========================================================================
+
+class TestAuthorizationIntegration:
+    """End-to-end: authz deny should return 403 from sensitive routes."""
+
+    @staticmethod
+    def _deny(authz, attr):
+        from starlette.exceptions import HTTPException
+        getattr(authz, attr).side_effect = HTTPException(status_code=403, detail="denied")
+
+    def test_run_denied_returns_403(self, client, integration_env):
+        self._deny(integration_env["authz"], "require_domino_job_start")
+        resp = client.post("/run", data={
+            "spec_path": "dataset://autodoc-specs/spec.yaml",
+            "provider": "anthropic",
+            "target_project": "proj-integration",
+        })
+        assert resp.status_code == 403
+
+    def test_stop_job_denied_returns_403(self, client, integration_env):
+        store = integration_env["store"]
+        job_id = store.create_job(
+            "integration_user", "main", "small", "/spec.yaml",
+            project_id="proj-integration",
+        )
+        store.update_job(job_id, status="submitted", domino_run_id="run-denied")
+        self._deny(integration_env["authz"], "require_domino_job_stop")
+        resp = client.post("/stop-job-history", data={"job_id": job_id})
+        assert resp.status_code == 403
+        integration_env["domino_client"].stop_job.assert_not_called()
+
+    def test_job_history_denied_returns_403(self, client, integration_env):
+        self._deny(integration_env["authz"], "require_domino_job_list")
+        resp = client.get("/job-history?projectId=proj-integration")
+        assert resp.status_code == 403
+
+    def test_cancel_queued_denied_returns_403(self, client, integration_env):
+        self._deny(integration_env["authz"], "require_domino_job_list")
+        resp = client.post("/cancel-queued-jobs?projectId=proj-integration")
+        assert resp.status_code == 403
+
+    def test_datasets_denied_returns_403(self, client, integration_env):
+        self._deny(integration_env["authz"], "require_project_write")
+        resp = client.get("/api/datasets?projectId=proj-integration")
+        assert resp.status_code == 403
+
+    def test_upload_spec_denied_returns_403(self, client, integration_env):
+        self._deny(integration_env["authz"], "require_project_write")
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("spec.yaml", b"title: Test\n", "application/x-yaml")},
+        )
+        assert resp.status_code == 403
+
+    def test_save_spec_denied_returns_403(self, client, integration_env):
+        self._deny(integration_env["authz"], "require_project_write")
+        resp = client.post("/save-spec?projectId=proj-integration", data={
+            "spec_filename": "test.yaml",
+            "spec_content": "title: Test\n",
+        })
+        assert resp.status_code == 403
+
 
 class TestAuthMiddlewareIntegration:
 
