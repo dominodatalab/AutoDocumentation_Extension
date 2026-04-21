@@ -754,14 +754,22 @@ async def capture_auth_context(request, call_next):
     }
     logger.info("DEBUG_AUTH_HEADERS %s", _auth_variants)
 
+    import threading as _threading
     if _da:
         forwarded = request.headers.get("authorization")
         logger.info(
-            "DEBUG_FORWARDED_JWT present=%s value=%s",
+            "DEBUG_FORWARDED_JWT thread=%s present=%s value_prefix=%s",
+            _threading.current_thread().name,
             bool(forwarded),
-            forwarded,
+            (forwarded[:30] + "...") if forwarded else None,
         )
         _auth_context.set_request_auth_header(forwarded)
+        _after_set = _auth_context.get_request_auth_header()
+        logger.info(
+            "DEBUG_CTXVAR_AFTER_SET_IN_MW thread=%s present=%s",
+            _threading.current_thread().name,
+            bool(_after_set),
+        )
     try:
         response = await call_next(request)
     finally:
