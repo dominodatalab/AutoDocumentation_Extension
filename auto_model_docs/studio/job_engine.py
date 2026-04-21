@@ -9,7 +9,6 @@ from starlette.requests import Request
 from .state import (
     JobRequest,
     DominoJobRecord,
-    _DOMINO_AVAILABLE,
     _max_jobs,
     domino_client,
     domino_job_store,
@@ -131,10 +130,7 @@ async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
         "Submitting Domino job: project_id=%s, branch=%s, tier=%s",
         req.project_id, req.branch, req.hardware_tier,
     )
-    if not _DOMINO_AVAILABLE:
-        raise RuntimeError("Domino integration is not available.")
 
-    # Ensure DB is initialised
     domino_job_store.init_db()
 
     # Resolve spec path — must be an absolute mount path so the Domino
@@ -233,9 +229,6 @@ def _refresh_active_jobs_for(owner_id: str) -> None:
     """Sync status for this owner's active Domino jobs from the Domino API."""
     from datetime import datetime, timezone
 
-    if not _DOMINO_AVAILABLE:
-        return
-
     active_jobs = [
         j for j in domino_job_store.get_active_jobs()
         if j.get("owner_id") == owner_id
@@ -263,9 +256,6 @@ def _refresh_active_jobs_for(owner_id: str) -> None:
 
 def _promote_queued_jobs_for(owner_id: str) -> None:
     """Submit the owner's oldest queued job if a slot is available."""
-    if not _DOMINO_AVAILABLE:
-        return
-
     active = domino_job_store.count_active_jobs(owner_id)
     if active > _max_jobs():
         return

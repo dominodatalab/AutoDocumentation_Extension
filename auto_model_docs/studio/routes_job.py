@@ -8,7 +8,6 @@ from starlette.requests import Request
 from auth_context import get_viewing_user
 
 from .state import (
-    _DOMINO_AVAILABLE,
     domino_client,
     domino_job_store,
 )
@@ -77,7 +76,7 @@ def register_job_routes(rt):
     async def cancel_queued_jobs():
         """Cancel all queued (not yet submitted) jobs for the current user."""
         owner_id = _current_owner_id()
-        if owner_id and _DOMINO_AVAILABLE:
+        if owner_id:
             domino_job_store.cancel_queued_jobs(owner_id)
         return _render_job_history_table(owner_id)
 
@@ -90,7 +89,7 @@ def register_job_routes(rt):
             return _render_job_history_table(owner_id)
         form = await req.form()
         job_id = form.get("job_id")
-        if job_id and _DOMINO_AVAILABLE:
+        if job_id:
             row = domino_job_store.get_job(job_id)
             if row and row.get("owner_id") != owner_id:
                 return _render_job_history_table(owner_id)

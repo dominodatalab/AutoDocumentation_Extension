@@ -83,7 +83,6 @@ def _load_module(name: str, path: str) -> ModuleType:
 def _build_mock_state():
     """Create a module-like object for studio.state."""
     mock_state = ModuleType("studio.state")
-    mock_state._DOMINO_AVAILABLE = True
     mock_state._get_username = MagicMock(return_value="test_user")
     mock_state._max_jobs = MagicMock(return_value=1)
     mock_state._get_target_project_id = MagicMock(return_value="proj-123")
@@ -264,15 +263,6 @@ class TestSubmitDominoJob:
             await je._submit_domino_job(req, "test_user")
 
     @pytest.mark.asyncio
-    async def test_raises_when_domino_unavailable(self, _mock_studio):
-        je = _import_job_engine()
-        # Patch the module-level reference
-        with patch.object(je, "_DOMINO_AVAILABLE", False):
-            req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
-            with pytest.raises(RuntimeError, match="not available"):
-                await je._submit_domino_job(req, "test_user")
-
-    @pytest.mark.asyncio
     async def test_submission_failure_marks_job_failed(self, _mock_studio):
         je = _import_job_engine()
         store = _mock_studio.domino_job_store
@@ -409,16 +399,6 @@ class TestSyncJobsFor:
 
         client.get_job_status.assert_called_once_with("run-1")
         store.update_job.assert_called()
-
-    def test_skips_when_domino_unavailable(self, _mock_studio):
-        je = _import_job_engine()
-        original = je._DOMINO_AVAILABLE
-        je._DOMINO_AVAILABLE = False
-        try:
-            je.sync_jobs_for("alice")
-        finally:
-            je._DOMINO_AVAILABLE = original
-        _mock_studio.domino_job_store.get_active_jobs.assert_not_called()
 
     def test_promotes_queued_jobs_for_owner(self, _mock_studio):
         je = _import_job_engine()

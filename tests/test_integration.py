@@ -148,7 +148,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     sys.modules["studio"] = studio_pkg
 
     mock_state = ModuleType("studio.state")
-    mock_state._DOMINO_AVAILABLE = True
     mock_state.domino_client = mock_client
     mock_state.domino_job_store = store
     mock_state.spec_store = spec_store
