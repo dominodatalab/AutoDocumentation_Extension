@@ -186,9 +186,9 @@ async def index(req: Request):
             project_display_name = f"{info.owner_username}/{info.name}"
 
     default_spec = _get_default_spec_path()
-    from auth_context import get_viewing_user
+    import auth_context
     try:
-        owner_id = get_viewing_user().id
+        owner_id = auth_context.get_viewing_user().id
     except Exception:
         owner_id = ""
     _current_model = "kimi-k2-0905-preview"

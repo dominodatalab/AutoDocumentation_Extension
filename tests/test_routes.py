@@ -85,13 +85,24 @@ def _load_module(name: str, path: str) -> ModuleType:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+def _drop_viewer(monkeypatch):
+    """Override the autouse viewer stub so get_viewing_user() raises."""
+    import auth_context
+    def _raise():
+        raise RuntimeError("no forwarded token")
+    monkeypatch.setattr(auth_context, "get_viewing_user", _raise)
+
+
 @pytest.fixture(autouse=True)
-def _mock_studio_modules():
+def _mock_studio_modules(monkeypatch):
     """Set up mock studio modules for route imports."""
-    # state module
+    import auth_context
+    from auth_context import User
+    monkeypatch.setattr(
+        auth_context, "get_viewing_user",
+        lambda: User(id="test_user", user_name="test_user"),
+    )
     mock_state = ModuleType("studio.state")
-    from auth_context import User, set_viewing_user
-    set_viewing_user(User(id="test_user", user_name="test_user"))
     mock_state._max_jobs = MagicMock(return_value=1)
     mock_state._get_target_project_id = MagicMock(return_value="proj-123")
     mock_state._get_target_project_name = MagicMock(return_value="my-project")
@@ -158,6 +169,14 @@ def _mock_studio_modules():
     mock_autodoc_models.detect_language = MagicMock()
     mock_autodoc_models.LANGUAGE_PROFILES = {}
 
+    # authorization — default to "allow everything" so existing route tests pass.
+    # Tests that want to exercise deny behaviour override these via side_effect.
+    mock_authz = ModuleType("authorization")
+    mock_authz.require_domino_job_start = MagicMock()
+    mock_authz.require_domino_job_stop = MagicMock()
+    mock_authz.require_domino_job_list = MagicMock()
+    mock_authz.require_project_write = MagicMock()
+
     # studio package
     studio_pkg = ModuleType("studio")
     studio_pkg.__path__ = [os.path.join(_pkg_dir, "studio")]
@@ -169,6 +188,7 @@ def _mock_studio_modules():
         "studio.routes_api", "studio.routes_job", "studio.routes_spec",
         "fasthtml", "fasthtml.common",
         "autodoc", "autodoc.core", "autodoc.core.models",
+        "authorization",
     )
     for key in mod_keys:
         saved[key] = sys.modules.get(key)
@@ -182,12 +202,14 @@ def _mock_studio_modules():
     sys.modules["autodoc"] = ModuleType("autodoc")
     sys.modules["autodoc.core"] = ModuleType("autodoc.core")
     sys.modules["autodoc.core.models"] = mock_autodoc_models
+    sys.modules["authorization"] = mock_authz
 
     yield {
         "state": mock_state,
         "ui": mock_ui,
         "job_engine": mock_job_engine,
         "autodoc_models": mock_autodoc_models,
+        "authz": mock_authz,
     }
 
     for key, val in saved.items():
@@ -384,14 +406,16 @@ class TestJobRoutes:
     async def test_job_history(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        await routes["/job-history"]()
+        req = _make_request(query_params={"projectId": "proj-123"})
+        await routes["/job-history"](req)
         _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("test_user")
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        await routes["/cancel-queued-jobs"]()
+        req = _make_request(query_params={"projectId": "proj-123"})
+        await routes["/cancel-queued-jobs"](req)
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("test_user")
 
     @pytest.mark.asyncio
@@ -409,28 +433,27 @@ class TestJobRoutes:
         store.update_job.assert_called_with("j1", status="cancelled")
 
     @pytest.mark.asyncio
-    async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules):
-        from auth_context import set_viewing_user
-        set_viewing_user(None)
+    async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules, monkeypatch):
+        _drop_viewer(monkeypatch)
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        await routes["/job-history"]()
+        req = _make_request(query_params={"projectId": "proj-123"})
+        await routes["/job-history"](req)
         _mock_studio_modules["job_engine"].sync_jobs_for.assert_not_called()
         _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("")
 
     @pytest.mark.asyncio
-    async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules):
-        from auth_context import set_viewing_user
-        set_viewing_user(None)
+    async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
+        _drop_viewer(monkeypatch)
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        await routes["/cancel-queued-jobs"]()
+        req = _make_request(query_params={"projectId": "proj-123"})
+        await routes["/cancel-queued-jobs"](req)
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_run_no_forwarded_token_is_noop(self, _mock_studio_modules):
-        from auth_context import set_viewing_user
-        set_viewing_user(None)
+    async def test_run_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
+        _drop_viewer(monkeypatch)
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         req = _make_request()
@@ -439,9 +462,8 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_stop_job_no_forwarded_token_is_noop(self, _mock_studio_modules):
-        from auth_context import set_viewing_user
-        set_viewing_user(None)
+    async def test_stop_job_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
+        _drop_viewer(monkeypatch)
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         req = _make_request(form_data={"job_id": "j1"})

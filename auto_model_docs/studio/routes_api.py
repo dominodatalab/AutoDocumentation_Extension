@@ -11,6 +11,8 @@ from fasthtml.common import *
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
+from authorization import require_project_write
+
 from .state import (
     _get_default_code_root,
     _resolve_request_project_id,
@@ -94,6 +96,7 @@ def register_api_routes(rt):
     async def api_datasets(req: Request):
         """List writable datasets for the project."""
         pid = _resolve_request_project_id(req)
+        require_project_write(pid)
         try:
             datasets = domino_datasets.list_datasets(pid)
             return Response(json.dumps(datasets), media_type="application/json")
@@ -112,6 +115,7 @@ def register_api_routes(rt):
         snapshot_id = req.query_params.get("snapshotId", "")
         path = req.query_params.get("path", "")
         pid = _resolve_request_project_id(req)
+        require_project_write(pid)
 
         if not dataset_id:
             return Response(
@@ -149,6 +153,7 @@ def register_api_routes(rt):
         Specs live under the specs/ subdirectory within this dataset.
         """
         pid = _resolve_request_project_id(req)
+        require_project_write(pid)
         try:
             from dataset_store import AUTODOC_DATASET_NAME
             ds = domino_datasets.ensure_dataset(
@@ -172,6 +177,8 @@ def register_api_routes(rt):
 
     async def api_upload_spec_to_dataset(req: Request):
         """Upload a spec file via the DatasetStore."""
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
         form = await req.form()
         file_upload = form.get("file")
 
