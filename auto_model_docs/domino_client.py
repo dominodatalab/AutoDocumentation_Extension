@@ -102,6 +102,10 @@ def _domino_request(
             last_exc = exc
             if attempt < max_retries:
                 backoff = 2 ** attempt
+                logger.warning(
+                    "Domino API %s %s failed (%s), retrying in %ss (attempt %s/%s)",
+                    method, path, exc, backoff, attempt + 1, max_retries,
+                )
                 time.sleep(backoff)
                 continue
             raise
@@ -137,6 +141,7 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
                 data = _domino_request("GET", path)
                 break
             except Exception as path_exc:
+                logger.debug("Project resolve path %s failed: %s", path, path_exc)
                 continue
 
         if data is None:
@@ -156,6 +161,7 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
         return info
 
     except Exception:
+        logger.exception("Error resolving project %s", project_id)
         return None
 
 
@@ -227,6 +233,7 @@ def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]
                 branches.append({"name": name})
         return branches
     except Exception as exc:
+        logger.warning("Failed to list branches via API: %s", exc)
         return []
 
 
@@ -260,6 +267,7 @@ def list_hardware_tiers(project_id: Optional[str] = None) -> list[dict[str, Any]
             })
         return results
     except Exception as exc:
+        logger.warning("Failed to list hardware tiers: %s", exc)
         return []
 
 
@@ -310,6 +318,7 @@ def submit_job(
     except Exception:
         # Retry without commit pin if Domino can't resolve the ref
         if branch and payload.get("mainRepoGitRef"):
+            logger.warning("Retrying job start without mainRepoGitRef")
             payload.pop("mainRepoGitRef", None)
             data = _domino_request("POST", "/v4/jobs/start", json=payload)
         else:
@@ -341,6 +350,7 @@ def get_job_status(run_id: str) -> dict[str, Any]:
     try:
         data = _domino_request("GET", f"/v4/jobs/{run_id}")
     except Exception as exc:
+        logger.warning("Failed to get status for run %s: %s", run_id, exc)
         return {"domino_status": "unknown", "local_status": "running"}
 
     raw = (
@@ -379,7 +389,7 @@ def stop_job(run_id: str, project_id: Optional[str] = None) -> None:
     try:
         _domino_request("POST", "/v4/jobs/stop", json=payload)
     except Exception as exc:
-        pass
+        logger.warning("Failed to stop run %s: %s", run_id, exc)
 
 
 # ---------------------------------------------------------------------------

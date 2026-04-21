@@ -759,8 +759,6 @@ async def capture_auth_context(request, call_next):
 async def _on_startup():
     import studio.state as _state
     _state._STARTUP_WARNINGS = _validate_environment()
-    for w in _state._STARTUP_WARNINGS:
-        pass
 
     _debug_env_keys = [
         "DOMINO_API_HOST",

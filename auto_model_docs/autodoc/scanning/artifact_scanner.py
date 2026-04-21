@@ -120,14 +120,6 @@ class ArtifactScanner:
 
             report_progress(0.15)
 
-            # Log filtering info
-            if target_experiments:
-                pass
-            if self.model_names:
-                pass
-            if self.latest_only:
-                pass
-
             # Get registered models with filtering (progress 0.2 to 0.95)
             models = self._scan_registered_models(
                 client, target_experiments, on_progress=on_progress
@@ -150,6 +142,7 @@ class ArtifactScanner:
             }
 
         except Exception as e:
+            logger.error(f"Error scanning MLflow artifacts: {e}")
             # Log but don't fail - MLflow might not be configured
             project_metadata["mlflow_error"] = str(e)
             project_metadata["mlflow_available"] = False
@@ -253,29 +246,17 @@ class ArtifactScanner:
                     if not matched:
                         excluded_count += 1
                         continue
-                    else:
-                        pass
-                        
+
                 elif self.experiment_name:  # Backward compatibility
                     if exp.name != self.experiment_name:
                         excluded_count += 1
                         continue
-                    else:
-                        pass
-                else:
-                    # No filtering, include all
-                    pass
-                
+
                 target_experiments[exp.name] = exp.experiment_id
-                
-            
-            # Warn if filtering was requested but no matches found
-            if self.experiment_names and len(target_experiments) == 0:
-                pass
-            
+
         except Exception as e:
-            pass
-            
+            logger.warning(f"Error getting target experiments: {e}")
+
         return target_experiments
 
     def _get_models_from_experiments(
@@ -312,16 +293,13 @@ class ArtifactScanner:
                                         model_names.add(version.name)
                                         exp_model_count += 1
                                 except Exception as e:
+                                    logger.debug(f"    Error searching model versions for run {run.info.run_id}: {e}")
                                     continue
-                
-                
+
             except Exception as e:
+                logger.warning(f"  ⚠ Error scanning experiment '{exp_name}': {e}")
                 continue
-        
-        unique_models = len(model_names)
-        if unique_models > 0:
-            pass
-        
+
         return model_names
 
     def _scan_registered_models(
@@ -377,6 +355,7 @@ class ArtifactScanner:
                         rm = client.get_registered_model(model_name)
                         matching_models.append(rm)
                     except Exception as e:
+                        logger.warning(f"⚠ Could not fetch registered model '{model_name}': {e}")
                         continue
                         
             else:
@@ -428,15 +407,8 @@ class ArtifactScanner:
 
                         # Apply experiment filtering if specified
                         # Check if experiment filtering was requested (not just if matches exist)
-                        if self.experiment_names is not None:
-                            # Experiment filtering is active
-                            if experiment.name in target_experiments:
-                                pass
-                            else:
-                                continue
-                        else:
-                            # No experiment filtering requested - include all
-                            pass
+                        if self.experiment_names is not None and experiment.name not in target_experiments:
+                            continue
 
                         artifact_paths = self._list_artifacts(client, version.run_id)
                         
@@ -470,7 +442,7 @@ class ArtifactScanner:
                             models.append(model_info)
 
                     except Exception as e:
-                        pass
+                        logger.info(f"    ✗ Version {version.version}: Error - {str(e)}")
                         # Skip versions that can't be loaded - already filtered by model name patterns above
 
             # Apply latest_only filtering
@@ -483,14 +455,8 @@ class ArtifactScanner:
             report_progress(1.0)
 
         except Exception as e:
-            pass
+            logger.warning(f"Error scanning registered models: {e}")
 
-        # Log filtering summary
-        if self.experiment_names and len(models) == 0 and total_models > 0:
-            pass
-        else:
-            pass
-        
         return models
 
     def _list_artifacts(self, client, run_id: str, path: str = "") -> list[str]:
@@ -515,7 +481,7 @@ class ArtifactScanner:
                 else:
                     artifact_paths.append(artifact.path)
         except Exception as e:
-            pass
+            logger.warning(f"        Error listing artifacts for run {run_id}: {e}")
         return artifact_paths
 
     def _download_and_parse_artifacts(
@@ -564,9 +530,8 @@ class ArtifactScanner:
                         "data": base64.b64encode(image_bytes).decode('utf-8'),
                     }
                     os.remove(local_path)
-                else:
-                    pass
             except Exception as e:
+                logger.warning(f"        ✗ Failed to download/parse {path}: {str(e)}")
                 continue  # Skip artifacts that can't be parsed
 
         return artifact_data

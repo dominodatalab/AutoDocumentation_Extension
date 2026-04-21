@@ -100,11 +100,6 @@ class Orchestrator:
         self.language_profile: LanguageProfile = detected_profile or PYTHON_PROFILE
         self.detected_file_count: int = detected_count
 
-        if detected_profile:
-            pass
-        else:
-            pass
-
         # Create sanitizer with language-specific secret patterns
         # Separate regex patterns from file-name patterns
         extra_regex = [
@@ -594,6 +589,7 @@ class Orchestrator:
                     try:
                         return ("ok", await self.generator.generate(block, context))
                     except Exception as e:
+                        logger.error(f"Content generation failed for {block.type.value}: {e}")
                         return ("err", f"{block.type.value}: {str(e)}")
 
             results_raw = await asyncio.gather(

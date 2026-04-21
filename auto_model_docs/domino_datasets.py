@@ -74,8 +74,6 @@ def _api_request(
                     backoff = 2 ** attempt
                     time.sleep(backoff)
                     continue
-                if resp.status_code >= 400:
-                    pass
                 resp.raise_for_status()
                 return resp
         except httpx.HTTPStatusError:
@@ -193,7 +191,7 @@ def ensure_dataset(
         created = _create_dataset(pid, name, description)
         return created
     except Exception:
-        pass
+        logger.debug("Create failed for '%s', looking up existing", name, exc_info=True)
 
     # Find existing
     datasets = list_datasets(pid)
@@ -229,7 +227,7 @@ def get_rw_snapshot_id(
         if snapshots:
             return snapshots[0].get("id")
     except Exception:
-        pass
+        logger.warning("Failed to get snapshots for dataset %s", dataset_id, exc_info=True)
     return None
 
 
@@ -312,8 +310,6 @@ async def upload_file(
             json={"filePaths": [file_path], "fileCollisionSetting": "Overwrite"},
             headers=headers,
         )
-        if resp.status_code >= 400:
-            pass
         resp.raise_for_status()
 
     upload_key = resp.json()
@@ -346,8 +342,6 @@ async def upload_file(
                 files={file_path: (file_path, io.BytesIO(content), "application/octet-stream")},
                 headers=chunk_headers,
             )
-            if resp.status_code >= 400:
-                pass
             resp.raise_for_status()
 
         # Step 3: finalize
