@@ -413,6 +413,45 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_client.stop_job.assert_called_once()
         store.update_job.assert_called_with("j1", status="cancelled")
 
+    def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules):
+        from auth_context import set_viewing_user
+        set_viewing_user(None)
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        routes["/job-history"]()
+        _mock_studio_modules["job_engine"].sync_jobs_for.assert_not_called()
+        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("")
+
+    def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules):
+        from auth_context import set_viewing_user
+        set_viewing_user(None)
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        routes["/cancel-queued-jobs"]()
+        _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_no_forwarded_token_is_noop(self, _mock_studio_modules):
+        from auth_context import set_viewing_user
+        set_viewing_user(None)
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        req = _make_request()
+        await routes["/run"](req)
+        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
+        _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_job_no_forwarded_token_is_noop(self, _mock_studio_modules):
+        from auth_context import set_viewing_user
+        set_viewing_user(None)
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        req = _make_request(form_data={"job_id": "j1"})
+        await routes["/stop-job-history"](req)
+        _mock_studio_modules["state"].domino_client.stop_job.assert_not_called()
+        _mock_studio_modules["state"].domino_job_store.get_job.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_stop_job_rejects_other_owner(self, _mock_studio_modules):
         mod = _import_routes_job()
