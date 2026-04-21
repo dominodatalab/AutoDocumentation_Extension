@@ -107,8 +107,13 @@ def cli_auth() -> AuthCredentials:
 
 
 def resolve_api_host() -> str:
-    """Return the Domino API host (DOMINO_API_HOST)."""
-    host = os.environ.get("DOMINO_API_HOST") or ""
+    """Return the Domino API host.
+
+    Priority: ``DOMINO_API_PROXY`` > ``DOMINO_API_HOST``. Inside a Domino App
+    container, ``DOMINO_API_PROXY`` points at the local sidecar that handles
+    identity propagation; ``DOMINO_API_HOST`` is the nucleus URL.
+    """
+    host = os.environ.get("DOMINO_API_PROXY") or os.environ.get("DOMINO_API_HOST") or ""
     return host.rstrip("/")
 
 

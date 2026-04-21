@@ -11,7 +11,6 @@ from .state import (
     _DOMINO_AVAILABLE,
     domino_client,
     domino_job_store,
-    logger,
 )
 from .ui_components import (
     _render_job_history_table,
@@ -32,8 +31,7 @@ def _current_owner_id() -> str:
     """
     try:
         return get_viewing_user().id
-    except Exception as exc:
-        logger.info("no forwarded user token; returning empty owner_id (%s)", exc)
+    except Exception:
         return ""
 
 
