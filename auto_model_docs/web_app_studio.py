@@ -25,6 +25,7 @@ from studio.state import (
     _get_default_spec_path,
     domino_client,
     domino_job_store,
+    log_buffer,
     logger,
 )
 from studio.styles import STUDIO_CSS
@@ -643,6 +644,9 @@ def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
+                A("Logs", href="logs", target="_blank", rel="noopener",
+                  style="margin-left:auto;align-self:center;color:#fff;"
+                        "font-size:12px;text-decoration:underline;opacity:0.85;"),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
@@ -682,6 +686,15 @@ def index(req: Request):
 register_api_routes(rt)
 register_spec_routes(rt)
 register_job_routes(rt)
+
+
+@rt("/logs")
+def logs():
+    """Plain-text dump of the in-process log ring buffer for troubleshooting."""
+    from starlette.responses import PlainTextResponse
+    lines = log_buffer.snapshot()
+    body = "\n".join(lines) if lines else "(no log records buffered yet)"
+    return PlainTextResponse(body)
 
 
 # ---------------------------------------------------------------------------

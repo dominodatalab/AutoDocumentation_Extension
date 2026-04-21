@@ -11,6 +11,7 @@ from .state import (
     _DOMINO_AVAILABLE,
     domino_client,
     domino_job_store,
+    logger,
 )
 from .ui_components import (
     _render_job_history_table,
@@ -22,12 +23,28 @@ from .job_engine import (
 )
 
 
+def _current_owner_id() -> str:
+    """Resolve the viewing user's id, or "" if no forwarded token is available.
+
+    This keeps job routes usable when a request arrives without a forwarded
+    JWT (e.g. background client-side polls from an idle tab). Matches the
+    index route's behavior.
+    """
+    try:
+        return get_viewing_user().id
+    except Exception as exc:
+        logger.info("no forwarded user token; returning empty owner_id (%s)", exc)
+        return ""
+
+
 def register_job_routes(rt):
     """Register all job-related routes on the given rt decorator."""
 
     async def run(req: Request):
+        owner_id = _current_owner_id()
+        if not owner_id:
+            return _render_job_history_table(owner_id)
         job_request = await _parse_request(req)
-        owner_id = get_viewing_user().id
         if not job_request.project_id:
             job_id = domino_job_store.create_job(
                 owner_id=owner_id, branch=None, tier=None, spec_path=None,
@@ -51,7 +68,9 @@ def register_job_routes(rt):
     rt("/run")(run)
 
     def job_history():
-        owner_id = get_viewing_user().id
+        owner_id = _current_owner_id()
+        if not owner_id:
+            return _render_job_history_table(owner_id)
         sync_jobs_for(owner_id)
         return _render_job_history_table(owner_id)
 
@@ -59,8 +78,8 @@ def register_job_routes(rt):
 
     def cancel_queued_jobs():
         """Cancel all queued (not yet submitted) jobs for the current user."""
-        owner_id = get_viewing_user().id
-        if _DOMINO_AVAILABLE:
+        owner_id = _current_owner_id()
+        if owner_id and _DOMINO_AVAILABLE:
             domino_job_store.cancel_queued_jobs(owner_id)
         return _render_job_history_table(owner_id)
 
@@ -68,9 +87,11 @@ def register_job_routes(rt):
 
     async def stop_job_history(req: Request):
         """Stop a job and return the updated history table."""
+        owner_id = _current_owner_id()
+        if not owner_id:
+            return _render_job_history_table(owner_id)
         form = await req.form()
         job_id = form.get("job_id")
-        owner_id = get_viewing_user().id
         if job_id and _DOMINO_AVAILABLE:
             row = domino_job_store.get_job(job_id)
             if row and row.get("owner_id") != owner_id:
