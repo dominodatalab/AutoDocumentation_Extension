@@ -81,12 +81,6 @@ def current_auth() -> AuthCredentials:
 def get_user_token() -> str:
     """Return the forwarded user JWT. Raises if absent."""
     forwarded = get_request_auth_header()
-    logger.info(
-        "DEBUG_GET_USER_TOKEN thread=%s present=%s value_prefix=%s",
-        threading.current_thread().name,
-        bool(forwarded),
-        (forwarded[:30] + "...") if forwarded else None,
-    )
     if not forwarded:
         raise MissingAuthError(
             "No forwarded user token available. "

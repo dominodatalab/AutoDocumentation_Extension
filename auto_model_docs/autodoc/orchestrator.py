@@ -100,6 +100,11 @@ class Orchestrator:
         self.language_profile: LanguageProfile = detected_profile or PYTHON_PROFILE
         self.detected_file_count: int = detected_count
 
+        if detected_profile:
+            pass
+        else:
+            pass
+
         # Create sanitizer with language-specific secret patterns
         # Separate regex patterns from file-name patterns
         extra_regex = [
@@ -327,9 +332,8 @@ class Orchestrator:
     def _save_results_cache(
         self, spec: DocumentSpec, results: List[SectionResult]
     ) -> None:
-        """Save generation results to cache via DatasetManager."""
-        from dataset_ctx import get_dataset_ctx
-        from dataset_manager import DatasetManager
+        """Save generation results to cache via DatasetStore."""
+        from dataset_store import get_store
         cache_data = {
             "spec": {
                 "title": spec.title,
@@ -347,10 +351,10 @@ class Orchestrator:
 
         cache_path = self._get_cache_path()
         content = json.dumps(cache_data, indent=2).encode("utf-8")
-        DatasetManager.write_file(get_dataset_ctx().dataset_id, cache_path, content)
+        get_store().write_file(cache_path, content)
 
     def _load_results_cache(self) -> tuple[DocumentSpec, List[SectionResult]]:
-        """Load generation results from cache via DatasetManager.
+        """Load generation results from cache via DatasetStore.
 
         Returns:
             Tuple of (DocumentSpec, List[SectionResult]).
@@ -358,17 +362,16 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If cache file doesn't exist.
         """
-        from dataset_ctx import get_dataset_ctx
-        from dataset_manager import DatasetManager
+        from dataset_store import get_store
         cache_path = self._get_cache_path()
-        snap_id = get_dataset_ctx().snapshot_id
-        if not DatasetManager.file_exists(snap_id, cache_path):
+        store = get_store()
+        if not store.file_exists(cache_path):
             raise FileNotFoundError(
                 f"No cached results found at {cache_path}. "
                 "Run full generation first with --notebook flag."
             )
 
-        content = DatasetManager.read_file(snap_id, cache_path)
+        content = store.read_file(cache_path)
         cache_data = json.loads(content)
 
         # Reconstruct DocumentSpec
@@ -591,7 +594,6 @@ class Orchestrator:
                     try:
                         return ("ok", await self.generator.generate(block, context))
                     except Exception as e:
-                        logger.error(f"Content generation failed for {block.type.value}: {e}")
                         return ("err", f"{block.type.value}: {str(e)}")
 
             results_raw = await asyncio.gather(

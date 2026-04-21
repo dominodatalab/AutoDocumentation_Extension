@@ -43,7 +43,6 @@ def _read_index() -> list[dict[str, Any]]:
         content = store.read_file(_INDEX_PATH)
         return json.loads(content)
     except Exception as exc:
-        logger.warning("Failed to read job index: %s", exc)
         return []
 
 

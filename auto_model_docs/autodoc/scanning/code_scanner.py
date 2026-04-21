@@ -144,6 +144,9 @@ class CodeScanner:
             context.skipped_files = skipped_files
             context.scan_incomplete = len(skipped_files) > 0
 
+            if skipped_files:
+                pass
+
             report(1.0)
             return context
 
@@ -261,7 +264,6 @@ class CodeScanner:
             return ranked_paths, file_roles
 
         except Exception as e:
-            logger.warning("Stage 2 LLM ranking failed (%s), using heuristic fallback", e)
             # Heuristic fallback: files are already sorted by priority_keywords
             return [c.path for c in file_cards], file_roles
 
@@ -297,10 +299,6 @@ class CodeScanner:
                     result = await self._analyze_single_batch(batch_paths, file_roles)
                     results[batch_idx] = result
                 except Exception as e:
-                    logger.warning(
-                        "Batch %d failed (%d files): %s",
-                        batch_idx, len(batch_paths), e,
-                    )
                     skipped_files.extend(batch_paths)
 
                 # Update progress (Stage 3 spans 0.25 to 0.90)
@@ -344,7 +342,6 @@ class CodeScanner:
                     "content": sanitized.sanitized_content,
                 })
             except Exception:
-                logger.warning("Could not read file for batch analysis: %s", rel_path)
                 continue
 
         if not code_contents:
@@ -369,10 +366,6 @@ class CodeScanner:
                 break
             except asyncio.TimeoutError:
                 if attempt < self.scan_retries:
-                    logger.warning(
-                        "Batch timeout (attempt %d/%d), retrying...",
-                        attempt + 1, self.scan_retries + 1,
-                    )
                     continue
                 raise
             except Exception:

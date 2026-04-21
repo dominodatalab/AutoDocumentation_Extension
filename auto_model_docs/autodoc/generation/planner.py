@@ -108,7 +108,7 @@ class SectionPlanner:
                 system=SYSTEM_SECTION_PLANNER,
             )
         except Exception as e:
-            logger.warning(f"Failed to plan section {section.name}{model_suffix}: {e}. Using fallback plan for section {section.name}{model_suffix}")
+            # Return a minimal fallback plan instead of crashing
             return SectionPlan(
                 number="",
                 name=section.name,
@@ -152,4 +152,13 @@ class SectionPlanner:
             model_run_id=context.model_run_id,
             content_blocks=content_blocks,
         )
+        
+        # Log details of planned content blocks
+        for i, block in enumerate(content_blocks, 1):
+            if block.specifics:
+                for key, value in block.specifics.items():
+                    if isinstance(value, list) and value:
+                        pass
+                    elif value:
+                        pass
         return plan

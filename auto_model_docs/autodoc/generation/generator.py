@@ -91,6 +91,10 @@ class ContentGenerator:
             else:
                 raise GenerationError(f"Unknown content type: {block.type}")
             
+            if result:
+                pass
+            else:
+                pass
             return result
             
         except GenerationError:
