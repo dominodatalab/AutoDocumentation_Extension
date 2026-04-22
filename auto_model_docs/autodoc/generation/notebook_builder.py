@@ -949,22 +949,24 @@ print(f"Exported to: {{output_path}}")'''
         return new_code_cell(source=code)
 
     def _save_notebook(self, nb: nbformat.NotebookNode) -> str:
-        """Save the notebook to the dataset via DatasetStore."""
+        """Save the notebook to the dataset via DatasetManager."""
         import io
         from artifact_layout import get_layout
-        from dataset_store import get_store
+        from dataset_ctx import get_dataset_ctx
+        from dataset_manager import DatasetManager
 
         if self.notebook_path:
-            # Custom path: use the filename but place it in docs dir
             filename = str(self.notebook_path).rsplit("/", 1)[-1]
         else:
             filename = "model_docs_notebook.ipynb"
 
         dataset_path = f"{get_layout().docs_dir}/{filename}"
 
-        # Write notebook to in-memory buffer, then upload
         buffer = io.StringIO()
         nbformat.write(nb, buffer)
-        get_store().write_file(dataset_path, buffer.getvalue().encode("utf-8"))
-
+        DatasetManager.write_file(
+            get_dataset_ctx().dataset_id,
+            dataset_path,
+            buffer.getvalue().encode("utf-8"),
+        )
         return dataset_path

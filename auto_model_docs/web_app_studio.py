@@ -7,25 +7,24 @@ assembles the application.
 
 from __future__ import annotations
 
-import asyncio
 import os
 from typing import Optional
 
 from fasthtml.common import *
 from starlette.requests import Request
 
-from autodoc.core.config import Settings
+from domino_auth import configure_auth, user_auth
+
+configure_auth(user_auth)
 
 from studio.state import (
-    _DOMINO_AVAILABLE,
-    _POLL_TASK,
     _STARTUP_WARNINGS,
-    _set_target_project,
+    bootstrap_dataset_ctx,
     _get_default_code_root,
     _get_default_spec_path,
-    _get_username,
     domino_client,
     domino_job_store,
+    log_buffer,
     logger,
 )
 from studio.styles import STUDIO_CSS
@@ -36,12 +35,17 @@ from studio.ui_components import (
     _validate_environment,
 )
 from studio.job_engine import (
-    _poll_domino_jobs,
     _reconcile_stale_jobs,
 )
 from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
+
+
+# Projects for which we've run the once-per-startup stale-job reconciliation
+# this process lifetime. Not a cross-user leak: the value is only used to
+# skip redundant work, never to answer a request.
+_reconciled_projects: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -66,12 +70,10 @@ app, rt = fast_app(
 # ---------------------------------------------------------------------------
 
 @rt("/")
-def index(req: Request):
-    # Cache the external host on first request so Domino job URLs resolve correctly.
-    if _DOMINO_AVAILABLE:
-        host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
-        scheme = req.headers.get("x-forwarded-proto", "https")
-        domino_client.set_ui_host(host, scheme)
+async def index(req: Request):
+    host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
+    scheme = req.headers.get("x-forwarded-proto", "https")
+    domino_client.set_ui_host(host, scheme)
 
     # Guard: projectId query param is required.  Domino's reverse proxy
     # strips query params from the iframe URL, so if it's missing we serve
@@ -180,50 +182,47 @@ def index(req: Request):
             ),
         )
 
-    if _set_target_project(project_id) and _DOMINO_AVAILABLE:
+    bootstrap_dataset_ctx(project_id)
+    if project_id not in _reconciled_projects:
+        _reconciled_projects.add(project_id)
         _reconcile_stale_jobs()
 
-    # Resolve display name from the (now-cached) target project.
     project_display_name: Optional[str] = None
-    if _DOMINO_AVAILABLE and project_id:
-        info = domino_client.resolve_project(project_id)  # hits _project_cache
+    if project_id:
+        info = domino_client.resolve_project(project_id)
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
 
     default_spec = _get_default_spec_path()
-    username = _get_username()
+    import auth_context
     try:
-        _settings = Settings()
-        _current_model = "kimi-k2-0905-preview"
-        _current_base_url = _settings.openai_base_url or "https://api.moonshot.ai/v1"
+        owner_id = auth_context.get_viewing_user().id
     except Exception:
-        _current_model = "kimi-k2-0905-preview"
-        _current_base_url = "https://api.moonshot.ai/v1"
+        owner_id = ""
+    _current_model = "kimi-k2-0905-preview"
 
-    # Pre-fetch branches and hardware tiers for server-side rendering
     branch_options = []
     tier_data = []
     default_tier = ""
-    if _DOMINO_AVAILABLE:
-        if project_id:
-            try:
-                _branches_raw = domino_client.list_branches_api(project_id)
-                branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
-            except Exception:
-                pass
+    tier_options = []
+    if project_id:
         try:
-            tier_data = domino_client.list_hardware_tiers(project_id=project_id)
-            default_tier = domino_client.get_project_default_tier()
-            tier_options = []
-            for t in tier_data:
-                tid = t.get("id", "")
-                tname = t.get("name") or tid
-                is_default = t.get("isDefault", False) or tid == default_tier
-                tier_options.append(Option(tname, value=tid, selected=is_default))
+            _branches_raw = domino_client.list_branches_api(project_id)
+            branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
         except Exception:
-            tier_options = []
-        if not tier_options:
-            tier_options = [Option("(default)", value="")]
+            pass
+    try:
+        tier_data = domino_client.list_hardware_tiers(project_id=project_id)
+        default_tier = domino_client.get_project_default_tier()
+        for t in tier_data:
+            tid = t.get("id", "")
+            tname = t.get("name") or tid
+            is_default = t.get("isDefault", False) or tid == default_tier
+            tier_options.append(Option(tname, value=tid, selected=is_default))
+    except Exception:
+        tier_options = []
+    if not tier_options:
+        tier_options = [Option("(default)", value="")]
 
     # ── Build the 3-column layout ────────────────────────────────────────
 
@@ -500,43 +499,6 @@ def index(req: Request):
 
     # More run settings (expandable)
     more_settings_children = []
-    more_settings_children.append(
-        Div(
-            Label("API key"),
-            Div(
-                Label(
-                    Input(type="radio", name="api_key_source", value="domino_env", checked=True),
-                    "Domino environment variable (recommended)",
-                    cls="api-key-source-option",
-                ),
-                Label(
-                    Input(type="radio", name="api_key_source", value="pass_now"),
-                    "Set key",
-                    cls="api-key-source-option",
-                ),
-                cls="api-key-source",
-            ),
-            Div(id="api-key-callout", cls="api-key-callout"),
-            cls="field",
-            id="api-key-source-field",
-        )
-    )
-    more_settings_children.append(
-        Div(
-            Label("API key", Span(" *", cls="required-star"), for_="field-api_key"),
-            Input(
-                name="api_key",
-                id="field-api_key",
-                type="password",
-                placeholder="Paste your API key",
-                autocomplete="new-password",
-                spellcheck="false",
-            ),
-            cls="field",
-            id="api-key-pass-field",
-            style="display: none;",
-        )
-    )
     # Gear button to open advanced settings modal
     more_settings_children.append(
         Button(
@@ -609,23 +571,6 @@ def index(req: Request):
             id="model-name-field",
             style="display: none;",
         ),
-        Div(
-            Div(
-                Label("Base URL", for_="field-base_url"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="For OpenAI-compatible APIs (e.g., Moonshot, Azure)"),
-                cls="label-row",
-            ),
-            Input(
-                name="base_url",
-                id="field-base_url",
-                type="text",
-                value=_current_base_url,
-                placeholder="https://api.moonshot.ai/v1",
-            ),
-            cls="field",
-            id="base-url-field",
-            style="display: none;",
-        ),
         Label(
             Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
             Span("Generate notebook"),
@@ -687,7 +632,7 @@ def index(req: Request):
     right_col_children.append(
         Div(
             Div(
-                _render_job_history_table(username),
+                _render_job_history_table(owner_id),
                 id="job-history-content",
             ),
             cls="output-panel",
@@ -701,6 +646,9 @@ def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
+                A("Logs", href="logs", target="_blank", rel="noopener",
+                  style="margin-left:auto;align-self:flex-start;color:var(--primary);"
+                        "font-size:12px;font-weight:600;text-decoration:underline;"),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
@@ -742,39 +690,72 @@ register_spec_routes(rt)
 register_job_routes(rt)
 
 
+@rt("/logs")
+def logs():
+    """Plain-text dump of the in-process log ring buffer for troubleshooting."""
+    from starlette.responses import PlainTextResponse
+    lines = log_buffer.snapshot()
+    body = "\n".join(lines) if lines else "(no log records buffered yet)"
+    return PlainTextResponse(body)
+
+
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
 
+from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from autodoc.core.config import Settings as _AppSettings
 
 HOST = os.environ.get("APP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("APP_PORT", "8888"))
 
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+try:
+    _app_settings = _AppSettings()
+    _cors_origins = _app_settings.cors_origins
+    _allowed_hosts = _app_settings.allowed_hosts
+except Exception:
+    _cors_origins = ["*"]
+    _allowed_hosts = ["*"]
 
-
-@app.middleware("http")
-async def add_security_headers(request, call_next):
-    response = await call_next(request)
-    response.headers["X-Frame-Options"] = "ALLOWALL"
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "HX-Request, HX-Target, HX-Current-URL, Content-Type"
-    return response
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["HX-Request", "HX-Target", "HX-Current-URL", "Content-Type"],
+)
 
 
 @app.middleware("http")
 async def capture_auth_context(request, call_next):
-    from studio.state import auth_context as _auth_context, _DOMINO_AVAILABLE as _da
-    if _da:
-        forwarded = request.headers.get("authorization")
-        _auth_context.set_request_auth_header(forwarded)
+    from studio.state import auth_context as _auth_context
+
+    try:
+        hdr_dump = {k: v for k, v in request.headers.items()}
+    except Exception as _e:
+        hdr_dump = {"_error": str(_e)}
+    _auth_variants = {
+        "authorization": request.headers.get("authorization"),
+        "Authorization": request.headers.get("Authorization"),
+        "x-authorization": request.headers.get("x-authorization"),
+        "x-forwarded-authorization": request.headers.get("x-forwarded-authorization"),
+        "x-domino-api-key": request.headers.get("x-domino-api-key"),
+        "x-domino-token": request.headers.get("x-domino-token"),
+        "x-forwarded-user": request.headers.get("x-forwarded-user"),
+        "x-remote-user": request.headers.get("x-remote-user"),
+        "cookie": request.headers.get("cookie"),
+    }
+
+    import threading as _threading
+    forwarded = request.headers.get("authorization")
+    _auth_context.set_request_auth_header(forwarded)
+    _after_set = _auth_context.get_request_auth_header()
     try:
         response = await call_next(request)
     finally:
-        if _da:
-            _auth_context.set_request_auth_header(None)
+        _auth_context.set_request_auth_header(None)
     return response
 
 
@@ -786,20 +767,6 @@ async def capture_auth_context(request, call_next):
 async def _on_startup():
     import studio.state as _state
     _state._STARTUP_WARNINGS = _validate_environment()
-    for w in _state._STARTUP_WARNINGS:
-        logger.warning(f"Startup: [{w.level}] {w.message} {w.action}")
-    if _DOMINO_AVAILABLE:
-        # NOTE: init_db() and _reconcile_stale_jobs() are deferred to
-        # _set_target_project() — the DB path depends on the target project
-        # which is only known after the first page load provides ?projectId.
-        _state._POLL_TASK = asyncio.create_task(_poll_domino_jobs())
-
-
-@app.on_event("shutdown")
-async def _on_shutdown():
-    import studio.state as _state
-    if _state._POLL_TASK:
-        _state._POLL_TASK.cancel()
 
 
 # ---------------------------------------------------------------------------

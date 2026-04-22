@@ -17,7 +17,8 @@ import pytest
 from docx import Document as DocxDocument
 
 import artifact_layout
-import dataset_store
+import dataset_ctx
+import dataset_manager
 
 from autodoc.core.models import (
     ArtifactContext,
@@ -30,14 +31,8 @@ from autodoc.orchestrator import Orchestrator
 from autodoc.scanning.sanitizer import ContentSanitizer
 
 
-# ---------------------------------------------------------------------------
-# In-memory DatasetStore (mirrors the pattern used in test_orchestrator.py)
-# ---------------------------------------------------------------------------
-
-
 class _MemStore:
-    dataset_id = "ds-test"
-    snapshot_id = "snap-test"
+    """Thin in-memory facade used by tests that need to assert on file state."""
 
     def __init__(self) -> None:
         self._files: Dict[str, bytes] = {}
@@ -53,18 +48,33 @@ class _MemStore:
     def file_exists(self, path: str) -> bool:
         return path in self._files
 
-    def list_files(self, path: str = "") -> list:
-        return []
-
 
 @pytest.fixture
-def mem_store() -> _MemStore:
+def mem_store(monkeypatch) -> _MemStore:
     artifact_layout.init_layout()
     store = _MemStore()
-    dataset_store._store = store
+
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "write_file",
+        staticmethod(lambda dsid, path, content: store.write_file(path, content)),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "read_file",
+        staticmethod(lambda snap, path: store.read_file(path)),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "file_exists",
+        staticmethod(lambda snap, path: store.file_exists(path)),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "list_files",
+        staticmethod(lambda snap, path="": []),
+    )
+
+    dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
     yield store
     artifact_layout.reset_layout()
-    dataset_store.reset_store()
+    dataset_ctx.clear_dataset_ctx()
 
 
 # ---------------------------------------------------------------------------

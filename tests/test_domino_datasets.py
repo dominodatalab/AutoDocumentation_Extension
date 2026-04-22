@@ -334,8 +334,7 @@ class TestMountPaths:
 
 class TestApiRequest:
     @patch("httpx.Client")
-    def test_prefers_forwarded_jwt(self, mock_client_cls):
-        """Forwarded JWT is preferred over API key for all calls."""
+    def test_uses_user_jwt_in_studio_mode(self, mock_client_cls):
         mock_resp = _mock_response(json_data={"ok": True})
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -343,17 +342,14 @@ class TestApiRequest:
         mock_client.request.return_value = mock_resp
         mock_client_cls.return_value = mock_client
 
-        # Mock _get_auth_headers directly to avoid ContextVar cross-module issues
         with patch.object(ds, "_get_auth_headers", return_value={"Authorization": "Bearer test-jwt"}):
             ds._api_request("GET", "/api/test")
         headers = mock_client.request.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer test-jwt"
 
     @patch("httpx.Client")
-    def test_falls_back_to_api_key(self, mock_client_cls, monkeypatch):
-        """When no forwarded JWT, falls back to API key."""
+    def test_uses_api_key_in_cli_mode(self, mock_client_cls, monkeypatch):
         monkeypatch.setenv("DOMINO_USER_API_KEY", "test-api-key")
-        set_request_auth_header(None)
         mock_resp = _mock_response(json_data={})
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -364,12 +360,20 @@ class TestApiRequest:
         ds._api_request("GET", "/api/test")
         headers = mock_client.request.call_args.kwargs["headers"]
         assert headers.get("X-Domino-Api-Key") == "test-api-key"
-        set_request_auth_header("Bearer test-jwt")  # restore
 
-    def test_raises_without_any_auth(self, monkeypatch):
+    def test_studio_mode_raises_without_user_token(self):
+        from domino_auth import MissingAuthError, configure_auth, user_auth
+        configure_auth(user_auth)
+        set_request_auth_header(None)
+        try:
+            with pytest.raises(MissingAuthError):
+                ds._api_request("GET", "/api/test")
+        finally:
+            set_request_auth_header("Bearer test-jwt")
+
+    def test_cli_mode_raises_without_api_key(self, monkeypatch):
+        from domino_auth import MissingAuthError
         monkeypatch.delenv("DOMINO_USER_API_KEY", raising=False)
         monkeypatch.delenv("DOMINO_API_KEY", raising=False)
-        set_request_auth_header(None)
-        with pytest.raises(RuntimeError, match="No Domino auth credentials"):
+        with pytest.raises(MissingAuthError):
             ds._api_request("GET", "/api/test")
-        set_request_auth_header("Bearer test-jwt")  # restore

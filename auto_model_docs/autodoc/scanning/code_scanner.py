@@ -121,10 +121,6 @@ class CodeScanner:
 
             # Select top files for deep analysis
             selected_paths = ranked_files[:self.max_selected_files]
-            logger.info(
-                "Stage 2: Selected %d/%d files for deep analysis",
-                len(selected_paths), len(file_cards),
-            )
 
             # ── README ────────────────────────────────────────────────
             readme_content = self._read_readme()
@@ -147,12 +143,6 @@ class CodeScanner:
             context.language = self.profile.name
             context.skipped_files = skipped_files
             context.scan_incomplete = len(skipped_files) > 0
-
-            if skipped_files:
-                logger.warning(
-                    "Scan incomplete: %d files skipped due to batch failures: %s",
-                    len(skipped_files), skipped_files,
-                )
 
             report(1.0)
             return context
@@ -224,7 +214,6 @@ class CodeScanner:
                     pass
             cards.append(card)
 
-        logger.info("Stage 1: Built %d file cards", len(cards))
         return cards
 
     # ──────────────────────────────────────────────────────────────────
@@ -269,11 +258,6 @@ class CodeScanner:
             if not ranked_paths:
                 raise ValueError("LLM ranking returned no valid paths")
 
-            logger.info(
-                "Stage 2: LLM ranked %d files (top roles: %s)",
-                len(ranked_paths),
-                ", ".join(f"{p}: {file_roles[p]}" for p in ranked_paths[:3]),
-            )
             return ranked_paths, file_roles
 
         except Exception as e:
@@ -301,10 +285,6 @@ class CodeScanner:
         for i in range(0, len(selected_paths), self.batch_size):
             batches.append(selected_paths[i : i + self.batch_size])
 
-        logger.info(
-            "Stage 3: Analyzing %d files in %d batches (workers=%d)",
-            len(selected_paths), len(batches), self.scan_workers,
-        )
 
         # Run batches with semaphore for concurrency control
         semaphore = asyncio.Semaphore(self.scan_workers)

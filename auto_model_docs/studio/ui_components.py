@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fasthtml.common import *
 
 from .state import (
     DominoJobRecord,
     EnvironmentWarning,
-    _DOMINO_AVAILABLE,
     _get_default_code_root,
     _max_jobs,
     domino_job_store,
@@ -44,7 +43,7 @@ def _sanitize_optional_float(value: Optional[str]) -> Optional[float]:
 def _db_record_to_dataclass(row: dict) -> DominoJobRecord:
     return DominoJobRecord(
         id=row["id"],
-        username=row["username"],
+        owner_id=row["owner_id"],
         domino_run_id=row.get("domino_run_id"),
         branch=row.get("branch"),
         hardware_tier=row.get("hardware_tier"),
@@ -264,12 +263,10 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
 # Job history table
 # ---------------------------------------------------------------------------
 
-def _render_job_history_table(username: str) -> FT:
+def _render_job_history_table(owner_id: str) -> FT:
     """Render the job history table for a user."""
-    if not _DOMINO_AVAILABLE:
-        return Div()
     try:
-        jobs = domino_job_store.get_user_jobs(username, limit=50)
+        jobs = domino_job_store.get_user_jobs(owner_id, limit=50)
     except RuntimeError:
         # Project not yet resolved (pre-bootstrap page load)
         return Div()
@@ -360,9 +357,19 @@ def _render_job_history_table(username: str) -> FT:
             )
         )
 
-    # Actions row — only cancel-queued when relevant
+    # Actions row: manual Refresh (always), Cancel queued when relevant
+    action_children = [
+        A(
+            "Refresh",
+            hx_get="job-history",
+            hx_target="#job-history-content",
+            hx_swap="innerHTML",
+            cls="terminal-action",
+            title="Refresh job status from Domino",
+        ),
+    ]
     if has_queued:
-        sections.append(Div(
+        action_children.append(
             A(
                 "Cancel queued",
                 hx_post="cancel-queued-jobs",
@@ -370,8 +377,19 @@ def _render_job_history_table(username: str) -> FT:
                 hx_swap="innerHTML",
                 cls="terminal-action",
                 title="Cancel all queued jobs that haven't been submitted yet",
-            ),
-            cls="history-actions",
-        ))
+            )
+        )
+    sections.append(Div(*action_children, cls="history-actions"))
 
-    return Div(*sections)
+    # Auto-refresh every 30s only while there are active jobs. When idle,
+    # the refreshed fragment no longer has hx_trigger="every 30s" and
+    # polling stops on its own.
+    wrapper_kwargs: dict[str, Any] = {}
+    if active_jobs:
+        wrapper_kwargs.update(
+            hx_get="job-history",
+            hx_trigger="every 30s",
+            hx_target="#job-history-content",
+            hx_swap="innerHTML",
+        )
+    return Div(*sections, **wrapper_kwargs)

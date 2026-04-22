@@ -93,30 +93,20 @@ class TestModeInference:
     def test_mode_domino_when_project_id_present(self):
         """Inferred mode should be domino when project_id is present."""
         project_id = "abc123"
-        _DOMINO_AVAILABLE = True
-        inferred = "domino" if project_id and _DOMINO_AVAILABLE else "app"
+        inferred = "domino" if project_id else "app"
         assert inferred == "domino"
 
-    def test_mode_app_when_domino_unavailable(self):
-        """Even with projectId, if Domino is unavailable → app mode."""
-        project_id = "abc123"
-        _DOMINO_AVAILABLE = False
-        inferred = "domino" if project_id and _DOMINO_AVAILABLE else "app"
-        assert inferred == "app"
-
     def test_mode_app_when_no_project_id(self):
-        """No projectId → app mode."""
+        """No projectId -> app mode."""
         project_id = None
-        _DOMINO_AVAILABLE = True
-        inferred = "domino" if project_id and _DOMINO_AVAILABLE else "app"
+        inferred = "domino" if project_id else "app"
         assert inferred == "app"
 
     def test_domino_env_var_as_fallback(self):
-        """DOMINO_PROJECT_ID env var + _DOMINO_AVAILABLE → domino mode."""
+        """DOMINO_PROJECT_ID env var -> domino mode."""
         with patch.dict(os.environ, {"DOMINO_PROJECT_ID": "env-proj"}):
             project_id = None or os.environ.get("DOMINO_PROJECT_ID") or None
-            _DOMINO_AVAILABLE = True
-            inferred = "domino" if project_id and _DOMINO_AVAILABLE else "app"
+            inferred = "domino" if project_id else "app"
             assert inferred == "domino"
 
 

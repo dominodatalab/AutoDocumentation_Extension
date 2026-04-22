@@ -11,10 +11,12 @@ from fasthtml.common import *
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
+from authorization import require_project_write
+
 from .state import (
-    _DOMINO_AVAILABLE,
     _get_default_code_root,
     _resolve_request_project_id,
+    bootstrap_dataset_ctx,
     domino_client,
     domino_datasets,
 )
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
-    def api_branches(req: Request):
+    async def api_branches(req: Request):
         """Return an HTML fragment for branch selection.
 
         Fetches branches from the target project's git repo via the
@@ -33,7 +35,7 @@ def register_api_routes(rt):
         """
         project_id = req.query_params.get("projectId") or None
         search = req.query_params.get("search", "")
-        if project_id and _DOMINO_AVAILABLE:
+        if project_id:
             branches = domino_client.list_branches_api(project_id, search=search)
             if branches:
                 options = [Option(b["name"], value=b["name"]) for b in branches]
@@ -43,10 +45,8 @@ def register_api_routes(rt):
 
     rt("/api/branches")(api_branches)
 
-    def api_hardware_tiers(req: Request):
+    async def api_hardware_tiers(req: Request):
         """Return an HTML <select> fragment with available hardware tiers."""
-        if not _DOMINO_AVAILABLE:
-            return Select(Option("(Domino not available)", value=""), name="hardware_tier", id="field-hardware_tier")
         project_id = req.query_params.get("projectId") or None
         tiers = domino_client.list_hardware_tiers(project_id=project_id)
         default_tier = domino_client.get_project_default_tier()
@@ -94,18 +94,14 @@ def register_api_routes(rt):
 
     rt("/api/detect-language")(api_detect_language)
 
-    def api_datasets(req: Request):
+    async def api_datasets(req: Request):
         """List writable datasets for the project."""
-        if not _DOMINO_AVAILABLE:
-            return Response(json.dumps([]), media_type="application/json")
         pid = _resolve_request_project_id(req)
-        logger.info("GET /api/datasets — project=%s", pid)
+        require_project_write(pid)
         try:
             datasets = domino_datasets.list_datasets(pid)
-            logger.info("GET /api/datasets — returned %d datasets", len(datasets))
             return Response(json.dumps(datasets), media_type="application/json")
         except Exception as exc:
-            logger.warning("Failed to list datasets: %s", exc, exc_info=True)
             return Response(
                 json.dumps({"error": str(exc)}),
                 status_code=500,
@@ -114,15 +110,13 @@ def register_api_routes(rt):
 
     rt("/api/datasets")(api_datasets)
 
-    def api_dataset_files(req: Request):
+    async def api_dataset_files(req: Request):
         """Browse files in a dataset (directories + yaml only)."""
-        if not _DOMINO_AVAILABLE:
-            return Response(json.dumps([]), media_type="application/json")
-
         dataset_id = req.query_params.get("datasetId", "")
         snapshot_id = req.query_params.get("snapshotId", "")
         path = req.query_params.get("path", "")
         pid = _resolve_request_project_id(req)
+        require_project_write(pid)
 
         if not dataset_id:
             return Response(
@@ -141,13 +135,10 @@ def register_api_routes(rt):
                 media_type="application/json",
             )
 
-        logger.info("GET /api/dataset-files — dataset=%s snapshot=%s path='%s'", dataset_id, snapshot_id, path)
         try:
             files = domino_datasets.list_files(snapshot_id, path, pid)
-            logger.info("GET /api/dataset-files — returned %d items", len(files))
             return Response(json.dumps(files), media_type="application/json")
         except Exception as exc:
-            logger.warning("Failed to list files: %s", exc, exc_info=True)
             return Response(
                 json.dumps({"error": str(exc)}),
                 status_code=500,
@@ -162,30 +153,21 @@ def register_api_routes(rt):
         Uses the unified 'autodoc' dataset (not the legacy 'autodoc-specs').
         Specs live under the specs/ subdirectory within this dataset.
         """
-        if not _DOMINO_AVAILABLE:
-            return Response(
-                json.dumps({"error": "Domino not available"}),
-                status_code=400,
-                media_type="application/json",
-            )
         pid = _resolve_request_project_id(req)
-        logger.info("POST /api/ensure-autodoc-specs — project=%s", pid)
+        require_project_write(pid)
         try:
-            from dataset_store import AUTODOC_DATASET_NAME
+            from dataset_manager import AUTODOC_DATASET_NAME
             ds = domino_datasets.ensure_dataset(
                 pid,
                 name=AUTODOC_DATASET_NAME,
                 description="Auto Model Docs artifacts",
             )
             if not ds.get("id"):
-                logger.warning("ensure-autodoc-specs returned dataset with empty id: %s", ds)
                 raise RuntimeError("Dataset was created/found but has no ID — check Domino Datasets API response")
             if not ds.get("rwSnapshotId"):
                 ds["rwSnapshotId"] = domino_datasets.get_rw_snapshot_id(ds["id"], pid)
-            logger.info("POST /api/ensure-autodoc-specs — dataset id=%s name=%s", ds.get("id"), ds.get("name"))
             return Response(json.dumps(ds), media_type="application/json")
         except Exception as exc:
-            logger.warning("Failed to ensure autodoc dataset: %s", exc, exc_info=True)
             return Response(
                 json.dumps({"error": str(exc)}),
                 status_code=500,
@@ -196,13 +178,8 @@ def register_api_routes(rt):
 
     async def api_upload_spec_to_dataset(req: Request):
         """Upload a spec file via the DatasetStore."""
-        if not _DOMINO_AVAILABLE:
-            return Response(
-                json.dumps({"error": "Domino not available"}),
-                status_code=400,
-                media_type="application/json",
-            )
-
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
         form = await req.form()
         file_upload = form.get("file")
 
@@ -217,21 +194,21 @@ def register_api_routes(rt):
         # Sanitize: strip path components to prevent directory traversal
         filename = raw_filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] or "spec.yaml"
         content = await file_upload.read()
-        logger.info("POST /api/upload-spec-to-dataset — file='%s' (%d bytes)", filename, len(content))
 
         try:
-            from dataset_store import get_store
             from artifact_layout import get_layout
-            store = get_store()
+            from dataset_ctx import get_dataset_ctx
+            from dataset_manager import DatasetManager
+            bootstrap_dataset_ctx(pid)
             upload_path = f"{get_layout().specs_dir}/{filename}"
-            store.write_file(upload_path, content)
-            logger.info("POST /api/upload-spec-to-dataset — success, path=%s", upload_path)
+            DatasetManager.write_file(
+                get_dataset_ctx().dataset_id, upload_path, content
+            )
             return Response(
                 json.dumps({"path": upload_path, "fileName": filename}),
                 media_type="application/json",
             )
         except Exception as exc:
-            logger.warning("Failed to upload spec: %s", exc, exc_info=True)
             return Response(
                 json.dumps({"error": str(exc)}),
                 status_code=500,
@@ -254,10 +231,10 @@ def register_api_routes(rt):
 
     rt("/api/download-template")(api_download_template)
 
-    def api_resolve_project(req: Request):
+    async def api_resolve_project(req: Request):
         """Return resolved project name for a given project ID."""
         pid = req.query_params.get("projectId", "").strip()
-        if not pid or not _DOMINO_AVAILABLE:
+        if not pid:
             return Div(id="project-id-resolved")
         info = domino_client.resolve_project(pid)
         if info:

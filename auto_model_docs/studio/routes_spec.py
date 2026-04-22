@@ -7,11 +7,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from autodoc.core.models import DocumentSpec
+from authorization import require_project_write
 
-from .state import (
-    _DOMINO_AVAILABLE,
-    spec_store,
-)
+from .state import _resolve_request_project_id, bootstrap_dataset_ctx, spec_store
 
 
 def register_spec_routes(rt):
@@ -55,8 +53,9 @@ def register_spec_routes(rt):
 
     async def save_spec_route(req: Request):
         """Auto-save an uploaded spec file and return the saved path."""
-        if not _DOMINO_AVAILABLE:
-            return Response("Domino not available", status_code=400)
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
+        bootstrap_dataset_ctx(pid)
         form = await req.form()
         filename = form.get("spec_filename", "spec.yaml")
         content = form.get("spec_content", "")
@@ -65,10 +64,11 @@ def register_spec_routes(rt):
 
     rt("/save-spec")(save_spec_route)
 
-    def spec_list(req: Request):
+    async def spec_list(req: Request):
         """Return HTML list of saved spec files."""
-        if not _DOMINO_AVAILABLE:
-            return Div(P("Domino not available.", cls="history-empty"))
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
+        bootstrap_dataset_ctx(pid)
         specs = spec_store.list_specs()
         if not specs:
             return Div(P("No saved spec files.", cls="history-empty"), id="spec-list-content")

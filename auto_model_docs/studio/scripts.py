@@ -110,32 +110,8 @@ MAIN_DOM_JS = r"""
 
         detectLanguageFromCodeRoot();
 
-        // ── DOM references ──────────────────────────────────────────────
-        const apiKeyPassField   = document.getElementById('api-key-pass-field');
-        const apiKeyCallout     = document.getElementById('api-key-callout');
-        const apiKeySourceRadios = document.querySelectorAll('input[name="api_key_source"]');
         const providerSelect    = document.getElementById('field-provider');
-        const baseUrlField      = document.getElementById('base-url-field');
         const modelNameField    = document.getElementById('model-name-field');
-
-        // ── API key source radio ───────────────────────────────────────────
-        function applyApiKeySource(src) {
-            const show = src === 'pass_now';
-            if (apiKeyPassField) apiKeyPassField.style.display = show ? '' : 'none';
-            if (apiKeyCallout) {
-                apiKeyCallout.style.display = show ? 'block' : 'none';
-                if (!apiKeyCallout.textContent.trim()) {
-                    apiKeyCallout.textContent = '\u26a0 This key will be visible in the Domino job\u2019s environment metadata to project admins.';
-                }
-            }
-        }
-
-        apiKeySourceRadios.forEach(function(r) {
-            r.addEventListener('change', function() { applyApiKeySource(this.value); });
-        });
-
-        const checkedSrc = document.querySelector('input[name="api_key_source"]:checked');
-        applyApiKeySource(checkedSrc ? checkedSrc.value : 'domino_env');
 
         // ── Resolve project, refresh tiers & output dir on change ─────
         var projectIdInput = document.getElementById('field-project-id');
@@ -421,9 +397,6 @@ MAIN_DOM_JS = r"""
         var ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-20250514';
         function toggleOpenAIFields() {
             const isOpenAI = providerSelect && providerSelect.value === 'openai';
-            if (baseUrlField) {
-                baseUrlField.style.display = isOpenAI ? 'flex' : 'none';
-            }
             if (modelNameField) {
                 modelNameField.style.display = 'flex';
             }
@@ -519,6 +492,18 @@ MAIN_DOM_JS = r"""
             }
         });
 
+        // Ensure every HTMX request carries projectId from the page URL so
+        // server handlers never fall back to process-global state that may
+        // belong to a different user.
+        document.body.addEventListener('htmx:configRequest', function(e) {
+            var pid = new URLSearchParams(window.location.search).get('projectId');
+            if (!pid) return;
+            var path = e.detail.path || '';
+            if (/[?&]projectId=/.test(path)) return;
+            e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
+                'projectId=' + encodeURIComponent(pid);
+        });
+
         // Poll job history — pause while an HTMX request targets the history panel
         var _htmxBusy = false;
         document.body.addEventListener('htmx:beforeRequest', function(e) {
@@ -541,7 +526,7 @@ MAIN_DOM_JS = r"""
                 wasOpen = details.open;
                 prevCount = details.querySelectorAll('tbody tr').length;
             }
-            fetch('job-history')
+            fetch('job-history?' + getProjectIdParam().replace(/^&/, ''))
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (!_htmxBusy) {

@@ -60,10 +60,12 @@ class NotebookExporter:
             BuilderError: If export fails.
         """
         try:
-            # Load the notebook from the dataset
             import io
-            from dataset_store import get_store
-            content = get_store().read_file(str(notebook_path))
+            from dataset_ctx import get_dataset_ctx
+            from dataset_manager import DatasetManager
+            content = DatasetManager.read_file(
+                get_dataset_ctx().snapshot_id, str(notebook_path)
+            )
             nb = nbformat.read(io.StringIO(content.decode("utf-8")), as_version=4)
 
             # Extract document metadata and content

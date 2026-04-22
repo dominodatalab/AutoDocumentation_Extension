@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util as _imputil
 import logging
 import os
 import ctypes as _ctypes
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Deque, Optional
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -23,6 +23,37 @@ logging.basicConfig(
 )
 for _mod_name in ("domino_datasets", "domino_client", "auth_context"):
     logging.getLogger(_mod_name).setLevel(logging.INFO)
+
+
+class _RingBufferLogHandler(logging.Handler):
+    """In-process ring buffer that keeps the last N formatted log records.
+
+    Attached to the root logger so /logs can expose recent app output for
+    troubleshooting without reading container stdout.
+    """
+
+    def __init__(self, capacity: int = 2000):
+        super().__init__()
+        self.buffer: Deque[str] = deque(maxlen=capacity)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.buffer.append(self.format(record))
+        except Exception:
+            self.handleError(record)
+
+    def snapshot(self) -> list[str]:
+        return list(self.buffer)
+
+
+log_buffer = _RingBufferLogHandler(capacity=2000)
+log_buffer.setLevel(logging.DEBUG)
+log_buffer.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+))
+_root = logging.getLogger()
+if not any(isinstance(h, _RingBufferLogHandler) for h in _root.handlers):
+    _root.addHandler(log_buffer)
 
 # ---------------------------------------------------------------------------
 # Sibling module imports  (domino_client, domino_job_store, etc.)
@@ -60,24 +91,12 @@ try:
 except Exception:
     pass
 
-# Domino module references — may be None if import fails
-domino_client: Any = None
-domino_job_store: Any = None
-spec_store: Any = None
-auth_context: Any = None
-domino_datasets: Any = None
-_DOMINO_AVAILABLE: bool = False
+import auth_context  # type: ignore  # normal import; must not be re-loaded via _import_sibling or ContextVars duplicate
 
-try:
-    domino_client = _import_sibling("domino_client")
-    domino_job_store = _import_sibling("domino_job_store")
-    spec_store = _import_sibling("spec_store")
-    auth_context = _import_sibling("auth_context")
-    domino_datasets = _import_sibling("domino_datasets")
-    _DOMINO_AVAILABLE = True
-except Exception as _import_exc:
-    logging.getLogger(__name__).warning("Domino modules unavailable: %s", _import_exc, exc_info=True)
-    _DOMINO_AVAILABLE = False
+domino_client = _import_sibling("domino_client")
+domino_job_store = _import_sibling("domino_job_store")
+spec_store = _import_sibling("spec_store")
+domino_datasets = _import_sibling("domino_datasets")
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +109,6 @@ class JobRequest:
     spec_content: Optional[str]
     provider: str
     model: Optional[str]
-    api_key: Optional[str]
-    base_url: Optional[str]
     code_root: Optional[str]
     max_files: Optional[int]
     workers: Optional[int]
@@ -105,7 +122,6 @@ class JobRequest:
     verbose: bool  # Enable verbose logging
     branch: Optional[str] = None
     hardware_tier: Optional[str] = None
-    api_key_source: str = "domino_env"  # "domino_env" | "pass_now"
     spec_filename: Optional[str] = None  # original uploaded filename
     project_id: Optional[str] = None     # target Domino project (from ?projectId=)
 
@@ -113,7 +129,7 @@ class JobRequest:
 @dataclass
 class DominoJobRecord:
     id: str                              # local UUID
-    username: str
+    owner_id: str                        # Domino user id (from /v4/users/self)
     domino_run_id: Optional[str] = None
     branch: Optional[str] = None
     hardware_tier: Optional[str] = None
@@ -139,95 +155,39 @@ class EnvironmentWarning:
 # Mutable global state
 # ---------------------------------------------------------------------------
 
-_POLL_TASK: Optional[asyncio.Task] = None
 _STARTUP_WARNINGS: list = []
 
-# Target project context — captured from the ?projectId query param on
-# first request and used by all components so that specs, jobs, output,
-# and history are scoped to the target project, not the app's own project.
-_TARGET_PROJECT_ID: Optional[str] = None
-_TARGET_PROJECT_NAME: Optional[str] = None
-
 
 # ---------------------------------------------------------------------------
-# Target project helpers
+# Per-request dataset bootstrap
 # ---------------------------------------------------------------------------
 
-def _set_target_project(project_id: str) -> bool:
-    """Capture the target project from the ?projectId query param.
+def bootstrap_dataset_ctx(project_id: str) -> None:
+    """Resolve the autodoc dataset for ``project_id`` and set the per-request
+    dataset context so downstream helpers (spec_store, domino_job_store,
+    autodoc/*) can read/write without extra plumbing.
 
-    Called on every page load but only acts on the first call.
-    Initializes ArtifactLayout and DatasetStore for the target project.
-    Returns ``True`` when the project was newly captured (first load),
-    ``False`` when it was already set.
+    Must be called at the top of every request that performs dataset I/O.
+    Also idempotently initializes the artifact layout singleton.
     """
-    import studio.state as _self  # avoid stale module-level refs
     from artifact_layout import init_layout
-    from dataset_store import init_store, AUTODOC_DATASET_NAME
+    from dataset_ctx import set_dataset_ctx
+    from dataset_manager import resolve_autodoc_dataset
 
-    if _self._TARGET_PROJECT_ID is not None:
-        return False  # already captured
-
-    _self._TARGET_PROJECT_ID = project_id
-
-    if _DOMINO_AVAILABLE and domino_client:
-        info = domino_client.resolve_project(project_id)
-        if info:
-            _self._TARGET_PROJECT_NAME = info.name
-
-            # Initialize artifact layout (logical paths)
-            init_layout()
-
-            # Ensure the autodoc dataset exists and initialize the store
-            if domino_datasets:
-                try:
-                    ds = domino_datasets.ensure_dataset(
-                        project_id=project_id,
-                        name=AUTODOC_DATASET_NAME,
-                        description="Auto Model Docs artifacts",
-                    )
-                    ds_id = ds.get("id") or ""
-                    if not ds_id:
-                        raise RuntimeError(
-                            f"Dataset '{AUTODOC_DATASET_NAME}' created/found but has no ID. "
-                            f"Raw response: {ds}"
-                        )
-                    snap_id = ds.get("rwSnapshotId") or ""
-                    if not snap_id:
-                        snap_id = domino_datasets.get_rw_snapshot_id(ds_id, project_id) or ""
-                    if not snap_id:
-                        raise RuntimeError(
-                            f"Could not resolve snapshot ID for dataset '{ds_id}'. "
-                            f"The dataset may still be initializing."
-                        )
-                    init_store(ds_id, snap_id, project_id)
-                except Exception as exc:
-                    logger.error(
-                        "Failed to initialize DatasetStore for project %s: %s",
-                        project_id, exc, exc_info=True,
-                    )
-                    raise RuntimeError(
-                        f"Cannot initialize artifact storage for project {project_id}. "
-                        f"Check dataset permissions and Domino API availability. "
-                        f"Error: {exc}"
-                    ) from exc
-
-            if domino_job_store:
-                domino_job_store.init_db()
-            return True
-
-    logger.warning("Could not resolve project name for %s", project_id)
-    return True
-
-
-def _get_target_project_id() -> Optional[str]:
-    """Return the captured target project ID."""
-    return _TARGET_PROJECT_ID
-
-
-def _get_target_project_name() -> Optional[str]:
-    """Return the resolved target project name."""
-    return _TARGET_PROJECT_NAME
+    init_layout()
+    try:
+        ds_id, snap_id = resolve_autodoc_dataset(project_id)
+        set_dataset_ctx(ds_id, snap_id)
+    except Exception as exc:
+        logger.error(
+            "Failed to bootstrap dataset context for project %s: %s",
+            project_id, exc, exc_info=True,
+        )
+        raise RuntimeError(
+            f"Cannot initialize artifact storage for project {project_id}. "
+            f"Check dataset permissions and Domino API availability. "
+            f"Error: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -248,20 +208,19 @@ def _get_default_spec_path() -> Path:
     return Path(__file__).resolve().parent.parent / "doc_spec.yaml"
 
 
-def _get_username() -> str:
-    return os.environ.get("DOMINO_STARTING_USERNAME", "local_user")
-
-
 def _max_jobs() -> int:
     return int(os.environ.get("AUTODOC_MAX_JOBS", "1"))
 
 
 def _resolve_request_project_id(req) -> Optional[str]:
-    """Extract project ID from request query params or captured state."""
+    """Extract project ID from request query params.
+
+    Intentionally does NOT fall back to any process-global target project;
+    that would leak the first-arriving user's project to later requests from
+    other users. Callers must supply ``projectId`` on every request.
+    """
     for key in ("projectId", "project_id"):
         pid = req.query_params.get(key)
         if pid:
             return pid
-    if _TARGET_PROJECT_ID:
-        return _TARGET_PROJECT_ID
     return None

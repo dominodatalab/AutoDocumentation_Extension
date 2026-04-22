@@ -52,7 +52,6 @@ class SectionPlanner:
             SectionPlan with content blocks to generate.
         """
         model_suffix = f" (model: {context.model_name})" if context.model_name else ""
-        logger.info(f"Planning section: {section.name}{model_suffix}")
         
         try:
             # Build context summary for the LLM
@@ -103,17 +102,13 @@ class SectionPlanner:
                 artifacts_info=artifacts_info,
             )
 
-            logger.info(f"Calling LLM for section planning: {section.name}{model_suffix}")
             result = await self.llm.complete_json(
                 prompt=prompt,
                 schema=SECTION_PLANNING_SCHEMA,
                 system=SYSTEM_SECTION_PLANNER,
             )
-            logger.info(f"LLM planning completed for: {section.name}{model_suffix}")
         except Exception as e:
-            logger.error(f"Failed to plan section {section.name}{model_suffix}: {e}")
-            # Return a minimal fallback plan instead of crashing
-            logger.warning(f"Using fallback plan for section {section.name}{model_suffix}")
+            logger.warning(f"Failed to plan section {section.name}{model_suffix}: {e}. Using fallback plan for section {section.name}{model_suffix}")
             return SectionPlan(
                 number="",
                 name=section.name,
@@ -157,15 +152,4 @@ class SectionPlanner:
             model_run_id=context.model_run_id,
             content_blocks=content_blocks,
         )
-        
-        # Log details of planned content blocks
-        logger.info(f"Successfully planned section: {section.name}{model_suffix} with {len(content_blocks)} content blocks:")
-        for i, block in enumerate(content_blocks, 1):
-            logger.info(f"  Block {i}: {block.type.value} - {block.purpose}")
-            if block.specifics:
-                for key, value in block.specifics.items():
-                    if isinstance(value, list) and value:
-                        logger.info(f"    {key}: {', '.join(str(v) for v in value[:3])}{'...' if len(value) > 3 else ''}")
-                    elif value:
-                        logger.info(f"    {key}: {value}")
         return plan

@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import artifact_layout
-import dataset_store
+import dataset_ctx
+import dataset_manager
 
 from autodoc.core.models import (
     ArtifactContext,
@@ -35,38 +36,36 @@ from autodoc.orchestrator import Orchestrator
 # In-memory DatasetStore for cache tests
 # ---------------------------------------------------------------------------
 
-class _MemStore:
-    """Minimal in-memory DatasetStore for testing cache round-trips."""
-    dataset_id = "ds-test"
-    snapshot_id = "snap-test"
-
-    def __init__(self):
-        self._files: dict[str, bytes] = {}
-
-    def write_file(self, path, content):
-        self._files[path] = content
-
-    def read_file(self, path):
-        if path not in self._files:
-            raise FileNotFoundError(path)
-        return self._files[path]
-
-    def file_exists(self, path):
-        return path in self._files
-
-    def list_files(self, path=""):
-        return []
-
-
 @pytest.fixture(autouse=True)
-def _init_layout_and_store():
-    """Ensure ArtifactLayout and DatasetStore are available for all tests."""
+def _init_layout_and_store(monkeypatch):
+    """Set up ArtifactLayout, dataset ctx, and in-memory DatasetManager patches."""
     artifact_layout.init_layout()
-    mem = _MemStore()
-    dataset_store._store = mem
+
+    files: dict[str, bytes] = {}
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "write_file",
+        staticmethod(lambda dsid, path, content: files.__setitem__(path, content)),
+    )
+
+    def _read(snap, path):
+        if path not in files:
+            raise FileNotFoundError(path)
+        return files[path]
+
+    monkeypatch.setattr(dataset_manager.DatasetManager, "read_file", staticmethod(_read))
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "file_exists",
+        staticmethod(lambda snap, path: path in files),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "list_files",
+        staticmethod(lambda snap, path="": []),
+    )
+
+    dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
     yield
     artifact_layout.reset_layout()
-    dataset_store.reset_store()
+    dataset_ctx.clear_dataset_ctx()
 
 
 # ---------------------------------------------------------------------------

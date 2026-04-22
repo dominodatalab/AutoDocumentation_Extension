@@ -54,7 +54,7 @@ class JobRequest:
 @dataclass
 class DominoJobRecord:
     id: str
-    username: str
+    owner_id: str
     domino_run_id: Optional[str] = None
     branch: Optional[str] = None
     hardware_tier: Optional[str] = None
@@ -83,12 +83,9 @@ def _load_module(name: str, path: str) -> ModuleType:
 def _build_mock_state():
     """Create a module-like object for studio.state."""
     mock_state = ModuleType("studio.state")
-    mock_state._DOMINO_AVAILABLE = True
     mock_state._get_username = MagicMock(return_value="test_user")
     mock_state._max_jobs = MagicMock(return_value=1)
-    mock_state._get_target_project_id = MagicMock(return_value="proj-123")
-    mock_state._get_target_project_name = MagicMock(return_value="my-project")
-    mock_state._resolve_target_project_name = MagicMock(return_value="my-project")
+    mock_state.bootstrap_dataset_ctx = MagicMock()
     mock_state.logger = MagicMock()
     mock_state.JobRequest = JobRequest
     mock_state.DominoJobRecord = DominoJobRecord
@@ -121,7 +118,7 @@ def _build_mock_ui():
     mock_ui._sanitize_optional_int = _safe_int
     mock_ui._sanitize_optional_float = _safe_float
     mock_ui._db_record_to_dataclass = lambda row: DominoJobRecord(
-        id=row["id"], username=row["username"],
+        id=row["id"], owner_id=row["owner_id"],
         status=row.get("status", "queued"),
         domino_run_id=row.get("domino_run_id"),
     )
@@ -230,7 +227,7 @@ class TestSubmitDominoJob:
         client.submit_job.return_value = "run-abc"
         client.build_job_url.return_value = "https://domino/jobs/run-abc"
         store.get_job.return_value = {
-            "id": "job-1", "username": "test_user", "status": "submitted",
+            "id": "job-1", "owner_id": "test_user", "status": "submitted",
             "domino_run_id": "run-abc",
         }
 
@@ -247,7 +244,7 @@ class TestSubmitDominoJob:
         store.create_job.return_value = "job-2"
         store.count_active_jobs.return_value = 2
         store.get_job.return_value = {
-            "id": "job-2", "username": "test_user", "status": "queued",
+            "id": "job-2", "owner_id": "test_user", "status": "queued",
             "domino_run_id": None,
         }
 
@@ -264,15 +261,6 @@ class TestSubmitDominoJob:
             await je._submit_domino_job(req, "test_user")
 
     @pytest.mark.asyncio
-    async def test_raises_when_domino_unavailable(self, _mock_studio):
-        je = _import_job_engine()
-        # Patch the module-level reference
-        with patch.object(je, "_DOMINO_AVAILABLE", False):
-            req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
-            with pytest.raises(RuntimeError, match="not available"):
-                await je._submit_domino_job(req, "test_user")
-
-    @pytest.mark.asyncio
     async def test_submission_failure_marks_job_failed(self, _mock_studio):
         je = _import_job_engine()
         store = _mock_studio.domino_job_store
@@ -282,7 +270,7 @@ class TestSubmitDominoJob:
         store.count_active_jobs.return_value = 1
         client.submit_job.side_effect = RuntimeError("API down")
         store.get_job.return_value = {
-            "id": "job-3", "username": "test_user", "status": "failed",
+            "id": "job-3", "owner_id": "test_user", "status": "failed",
             "domino_run_id": None,
         }
 
@@ -303,20 +291,24 @@ class TestSubmitDominoJob:
         client.submit_job.return_value = "run-xyz"
         client.build_job_url.return_value = "https://domino/jobs/run-xyz"
         store.get_job.return_value = {
-            "id": "job-4", "username": "test_user", "status": "submitted",
+            "id": "job-4", "owner_id": "test_user", "status": "submitted",
             "domino_run_id": "run-xyz",
         }
 
-        # Mock the dataset_store.get_store().file_exists_api() check
-        mock_ds_store = MagicMock()
-        mock_ds_store.file_exists_api.return_value = True
-        with patch.dict(sys.modules, {"dataset_store": MagicMock(get_store=lambda: mock_ds_store)}):
-            req = JobRequest(
-                spec_path="dataset://my-dataset/spec.yaml",
-                provider="anthropic", project_id="proj-123",
-            )
-            await je._submit_domino_job(req, "test_user")
-        # Verify the spec path was resolved to an absolute mount path
+        import dataset_ctx, dataset_manager
+        with patch.object(
+            dataset_manager.DatasetManager, "file_exists",
+            staticmethod(lambda snap, path: True),
+        ):
+            dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+            try:
+                req = JobRequest(
+                    spec_path="dataset://my-dataset/spec.yaml",
+                    provider="anthropic", project_id="proj-123",
+                )
+                await je._submit_domino_job(req, "test_user")
+            finally:
+                dataset_ctx.clear_dataset_ctx()
         call_args = store.create_job.call_args
         spec_in_db = call_args[1].get("spec_path") or call_args[0][3]
         assert spec_in_db == "/mnt/data/my-dataset/spec.yaml"
@@ -327,16 +319,21 @@ class TestSubmitDominoJob:
         je = _import_job_engine()
         _mock_studio.domino_datasets.get_dataset_mount_prefix.return_value = "/mnt/data"
 
-        mock_ds_store = MagicMock()
-        mock_ds_store.file_exists_api.return_value = False
-        with patch.dict(sys.modules, {"dataset_store": MagicMock(get_store=lambda: mock_ds_store)}):
-            req = JobRequest(
-                spec_path="dataset://autodoc/specs/doc_spec.yaml",
-                provider="anthropic", project_id="proj-123",
-            )
-            with pytest.raises(ValueError, match="no longer exists"):
-                await je._submit_domino_job(req, "test_user")
-        # Job should NOT have been created
+        import dataset_ctx, dataset_manager
+        with patch.object(
+            dataset_manager.DatasetManager, "file_exists",
+            staticmethod(lambda snap, path: False),
+        ):
+            dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+            try:
+                req = JobRequest(
+                    spec_path="dataset://autodoc/specs/doc_spec.yaml",
+                    provider="anthropic", project_id="proj-123",
+                )
+                with pytest.raises(ValueError, match="no longer exists"):
+                    await je._submit_domino_job(req, "test_user")
+            finally:
+                dataset_ctx.clear_dataset_ctx()
         _mock_studio.domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio
@@ -351,7 +348,7 @@ class TestSubmitDominoJob:
         client.submit_job.return_value = "run-abc"
         client.build_job_url.return_value = "https://domino/jobs/run-abc"
         store.get_job.return_value = {
-            "id": "job-5", "username": "test_user", "status": "submitted",
+            "id": "job-5", "owner_id": "test_user", "status": "submitted",
         }
 
         req = JobRequest(
@@ -383,71 +380,39 @@ class TestReconcileStaleJobs:
 
 
 # ---------------------------------------------------------------------------
-# _poll_domino_jobs (single iteration)
+# sync_jobs_for (request-driven replacement for the background poller)
 # ---------------------------------------------------------------------------
 
-class TestPollDominoJobs:
-    @pytest.mark.asyncio
-    async def test_poll_updates_active_jobs(self, _mock_studio):
+class TestSyncJobsFor:
+    def test_refreshes_active_jobs_for_owner(self, _mock_studio):
         je = _import_job_engine()
         store = _mock_studio.domino_job_store
         client = _mock_studio.domino_client
 
         store.get_active_jobs.return_value = [
-            {"id": "job-1", "domino_run_id": "run-1",
+            {"id": "job-1", "owner_id": "alice", "domino_run_id": "run-1",
+             "status": "submitted", "domino_status": "Queued"},
+            {"id": "job-2", "owner_id": "bob", "domino_run_id": "run-2",
              "status": "submitted", "domino_status": "Queued"},
         ]
-        store.get_queued_usernames.return_value = []
-
+        store.count_active_jobs.return_value = 0
+        store.get_oldest_queued_job.return_value = None
         client.get_job_status.return_value = {
             "domino_status": "Succeeded",
             "local_status": "succeeded",
         }
 
-        call_count = 0
-        async def _break_after_one(t):
-            nonlocal call_count
-            call_count += 1
-            if call_count > 1:
-                raise asyncio.CancelledError()
+        je.sync_jobs_for("alice")
 
-        with patch("asyncio.sleep", side_effect=_break_after_one):
-            with pytest.raises(asyncio.CancelledError):
-                await je._poll_domino_jobs()
-
-        client.get_job_status.assert_called_with("run-1")
+        client.get_job_status.assert_called_once_with("run-1")
         store.update_job.assert_called()
 
-    @pytest.mark.asyncio
-    async def test_poll_skips_when_domino_unavailable(self, _mock_studio):
-        je = _import_job_engine()
-
-        # Patch the module-level _DOMINO_AVAILABLE
-        original = je._DOMINO_AVAILABLE
-        je._DOMINO_AVAILABLE = False
-
-        call_count = 0
-        async def _break_after_one(t):
-            nonlocal call_count
-            call_count += 1
-            if call_count > 1:
-                raise asyncio.CancelledError()
-
-        with patch("asyncio.sleep", side_effect=_break_after_one):
-            with pytest.raises(asyncio.CancelledError):
-                await je._poll_domino_jobs()
-
-        _mock_studio.domino_job_store.get_active_jobs.assert_not_called()
-        je._DOMINO_AVAILABLE = original
-
-    @pytest.mark.asyncio
-    async def test_poll_promotes_queued_jobs(self, _mock_studio):
+    def test_promotes_queued_jobs_for_owner(self, _mock_studio):
         je = _import_job_engine()
         store = _mock_studio.domino_job_store
         client = _mock_studio.domino_client
 
         store.get_active_jobs.return_value = []
-        store.get_queued_usernames.return_value = ["alice"]
         store.count_active_jobs.return_value = 0
         store.get_oldest_queued_job.return_value = {
             "id": "queued-1", "command": "python main.py",
@@ -457,16 +422,13 @@ class TestPollDominoJobs:
         client.submit_job.return_value = "run-promoted"
         client.build_job_url.return_value = "https://domino/jobs/run-promoted"
 
-        call_count = 0
-        async def _break_after_one(t):
-            nonlocal call_count
-            call_count += 1
-            if call_count > 1:
-                raise asyncio.CancelledError()
-
-        with patch("asyncio.sleep", side_effect=_break_after_one):
-            with pytest.raises(asyncio.CancelledError):
-                await je._poll_domino_jobs()
+        je.sync_jobs_for("alice")
 
         client.submit_job.assert_called_once()
         store.update_job.assert_called()
+        store.get_oldest_queued_job.assert_called_with("alice")
+
+    def test_swallows_errors(self, _mock_studio):
+        je = _import_job_engine()
+        _mock_studio.domino_job_store.get_active_jobs.side_effect = RuntimeError("boom")
+        je.sync_jobs_for("alice")

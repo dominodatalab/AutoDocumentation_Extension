@@ -59,10 +59,6 @@ def _get_state_module():
 def state_module():
     """Provide a fresh studio.state module."""
     mod = _get_state_module()
-    # Reset mutable globals
-    mod._TARGET_PROJECT_ID = None
-    mod._TARGET_PROJECT_NAME = None
-    mod._POLL_TASK = None
     mod._STARTUP_WARNINGS = []
     yield mod
 
@@ -76,11 +72,11 @@ class TestJobRequest:
         jr = state_module.JobRequest
         field_names = {f.name for f in fields(jr)}
         expected = {
-            "spec_path", "spec_content", "provider", "model", "api_key",
-            "base_url", "code_root", "max_files", "workers",
+            "spec_path", "spec_content", "provider", "model",
+            "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
             "experiment_names", "model_names", "latest_only", "verbose",
-            "branch", "hardware_tier", "api_key_source", "spec_filename",
+            "branch", "hardware_tier", "spec_filename",
             "project_id",
         }
         assert expected.issubset(field_names)
@@ -88,10 +84,30 @@ class TestJobRequest:
 
 class TestDominoJobRecord:
     def test_defaults(self, state_module):
-        rec = state_module.DominoJobRecord(id="x", username="u")
+        rec = state_module.DominoJobRecord(id="x", owner_id="u")
         assert rec.status == "queued"
         assert rec.domino_run_id is None
         assert rec.project_id is None
+
+
+class TestLogBuffer:
+    def test_captures_log_records(self, state_module):
+        import logging
+        state_module.log_buffer.buffer.clear()
+        logging.getLogger("test.buffer").warning("hello-buffer-123")
+        snap = state_module.log_buffer.snapshot()
+        assert any("hello-buffer-123" in line for line in snap)
+
+    def test_respects_capacity(self, state_module):
+        import logging
+        state_module.log_buffer.buffer.clear()
+        cap = state_module.log_buffer.buffer.maxlen
+        logger = logging.getLogger("test.buffer")
+        logger.setLevel(logging.DEBUG)
+        for i in range(cap + 50):
+            logger.warning("line-%d", i)
+        snap = state_module.log_buffer.snapshot()
+        assert len(snap) == cap
 
 
 class TestEnvironmentWarning:
@@ -102,20 +118,6 @@ class TestEnvironmentWarning:
         assert w.level == "warning"
         assert w.message == "Test"
         assert w.action == "Fix it"
-
-
-# ---------------------------------------------------------------------------
-# _get_username
-# ---------------------------------------------------------------------------
-
-class TestGetUsername:
-    def test_returns_env_var(self, state_module, monkeypatch):
-        monkeypatch.setenv("DOMINO_STARTING_USERNAME", "alice")
-        assert state_module._get_username() == "alice"
-
-    def test_defaults_to_local_user(self, state_module, monkeypatch):
-        monkeypatch.delenv("DOMINO_STARTING_USERNAME", raising=False)
-        assert state_module._get_username() == "local_user"
 
 
 # ---------------------------------------------------------------------------
@@ -176,15 +178,7 @@ class TestResolveRequestProjectId:
         result = state_module._resolve_request_project_id(req)
         assert result == "from-snake"
 
-    def test_falls_back_to_captured_target(self, state_module):
-        state_module._TARGET_PROJECT_ID = "captured-id"
-        req = MagicMock()
-        req.query_params = {}
-        result = state_module._resolve_request_project_id(req)
-        assert result == "captured-id"
-
     def test_returns_none_when_nothing_available(self, state_module):
-        state_module._TARGET_PROJECT_ID = None
         req = MagicMock()
         req.query_params = {}
         result = state_module._resolve_request_project_id(req)
@@ -192,25 +186,35 @@ class TestResolveRequestProjectId:
 
 
 # ---------------------------------------------------------------------------
-# _set_target_project
+# bootstrap_dataset_ctx
 # ---------------------------------------------------------------------------
 
-class TestSetTargetProject:
-    def test_first_call_captures_project(self, state_module):
-        mock_info = MagicMock()
-        mock_info.name = "resolved-name"
-        state_module.domino_client.resolve_project.return_value = mock_info
-        state_module._DOMINO_AVAILABLE = True
+class TestBootstrapDatasetCtx:
+    def test_sets_ctx_from_resolved_ids(self, state_module, monkeypatch):
+        import dataset_ctx
+        import dataset_manager
 
-        # _set_target_project references itself via import, mock that
-        with patch.dict(sys.modules, {"studio.state": state_module}):
-            result = state_module._set_target_project("proj-abc")
+        dataset_ctx.clear_dataset_ctx()
+        monkeypatch.setattr(
+            dataset_manager, "resolve_autodoc_dataset",
+            lambda pid: (f"ds-{pid}", f"snap-{pid}"),
+        )
+        state_module.bootstrap_dataset_ctx("proj-abc")
+        ctx = dataset_ctx.get_dataset_ctx()
+        assert ctx.dataset_id == "ds-proj-abc"
+        assert ctx.snapshot_id == "snap-proj-abc"
+        dataset_ctx.clear_dataset_ctx()
 
-        assert result is True
+    def test_raises_on_resolver_failure(self, state_module, monkeypatch):
+        import dataset_ctx
+        import dataset_manager
 
-    def test_second_call_is_noop(self, state_module):
-        state_module._TARGET_PROJECT_ID = "already-set"
-        with patch.dict(sys.modules, {"studio.state": state_module}):
-            result = state_module._set_target_project("proj-abc")
-        assert result is False
+        dataset_ctx.clear_dataset_ctx()
+
+        def _boom(pid):
+            raise RuntimeError("resolver down")
+
+        monkeypatch.setattr(dataset_manager, "resolve_autodoc_dataset", _boom)
+        with pytest.raises(RuntimeError, match="Cannot initialize artifact storage"):
+            state_module.bootstrap_dataset_ctx("proj-xyz")
 

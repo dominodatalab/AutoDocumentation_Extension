@@ -1,10 +1,10 @@
-"""Tests for spec_store.py — spec file persistence via DatasetStore."""
+"""Tests for spec_store.py -- spec file persistence via DatasetManager."""
 
 from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,32 +15,47 @@ for p in (_repo_root, _pkg_dir):
         sys.path.insert(0, p)
 
 import artifact_layout
-import dataset_store
+import dataset_ctx
+import dataset_manager
 import spec_store
 
 
 @pytest.fixture(autouse=True)
-def _mock_store():
-    """Set up ArtifactLayout and a mock DatasetStore for every test."""
+def _mock_store(monkeypatch):
+    """Set up ArtifactLayout, dataset ctx, and in-memory DatasetManager patches."""
     artifact_layout.reset_layout()
     artifact_layout.init_layout()
 
-    mock = MagicMock(spec=dataset_store.DatasetStore)
-    mock.list_files.return_value = []
-    dataset_store.reset_store()
-    dataset_store._store = mock
-    yield mock
+    write_mock = MagicMock()
+    list_mock = MagicMock(return_value=[])
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "write_file",
+        staticmethod(write_mock),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "list_files",
+        staticmethod(list_mock),
+    )
+
+    dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+
+    bundle = MagicMock()
+    bundle.write_file = write_mock
+    bundle.list_files = list_mock
+    yield bundle
+
     artifact_layout.reset_layout()
-    dataset_store.reset_store()
+    dataset_ctx.clear_dataset_ctx()
 
 
 class TestSaveSpec:
     def test_calls_write_file(self, _mock_store):
-        result = spec_store.save_spec("my_spec.yaml", "title: Test")
+        spec_store.save_spec("my_spec.yaml", "title: Test")
         _mock_store.write_file.assert_called_once()
         call_args = _mock_store.write_file.call_args
-        path = call_args[0][0]
-        content = call_args[0][1]
+        assert call_args[0][0] == "ds-test"
+        path = call_args[0][1]
+        content = call_args[0][2]
         assert path.startswith("specs/")
         assert path.endswith("_my_spec.yaml")
         assert content == b"title: Test"
@@ -89,7 +104,3 @@ class TestListSpecs:
         specs = spec_store.list_specs()
         assert len(specs) == 1
         assert specs[0]["name"] == "spec.yaml"
-
-
-# Delete operations removed — Domino Datasets API does not support
-# file-level deletion. Only entire datasets can be marked for deletion.

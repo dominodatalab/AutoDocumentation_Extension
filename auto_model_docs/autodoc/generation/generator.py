@@ -75,7 +75,6 @@ class ContentGenerator:
             GenerationError: If generation fails.
         """
         model_suffix = f" for model '{context.model_name}'" if context.model_name else ""
-        logger.info(f"Generating {block.type.value}: {block.purpose}{model_suffix}")
         
         try:
             result = None
@@ -92,10 +91,6 @@ class ContentGenerator:
             else:
                 raise GenerationError(f"Unknown content type: {block.type}")
             
-            if result:
-                logger.info(f"  ✓ Successfully generated {block.type.value}")
-            else:
-                logger.warning(f"  ⚠ No content generated for {block.type.value}")
             return result
             
         except GenerationError:
@@ -221,7 +216,6 @@ class ContentGenerator:
 
         # Early return for metrics-based tables when no metrics are available
         if not has_real_data and self._is_metrics_table(block):
-            logger.warning(f"  ⚠ Skipping metrics table for '{block.purpose}': no metrics available")
             return None
 
         transformations = context.code_context.transformations[:5] if context.code_context.transformations else "Unknown"
@@ -255,7 +249,6 @@ class ContentGenerator:
 
         # Skip tables that have no real content (all "Not Available" or similar)
         if not self._table_has_real_content(result):
-            logger.warning(f"  ⚠ Skipping table generation for '{block.purpose}': no real data in table")
             return None
 
         return GeneratedContent(
@@ -348,7 +341,6 @@ class ContentGenerator:
 
         if not has_metrics:
             # Log that we're skipping chart generation
-            logger.warning(f"  ⚠ Skipping chart generation for '{block.purpose}': no metrics available")
             return None
 
         code_evidence = self._format_code_evidence(context.code_context)
@@ -405,7 +397,6 @@ class ContentGenerator:
         values = data.get("values", [])
 
         if not labels or not values:
-            logger.warning(f"  ⚠ Chart has no data: labels={labels}, values={values}")
             plt.close(fig)  # Clean up the figure
             return None
         elif chart_type == "bar":
@@ -628,7 +619,6 @@ class ContentGenerator:
                             },
                         )
 
-        logger.warning(f"  ⚠ No matching image artifact found for '{block.purpose}'")
         return None
 
     def _image_matches_purpose(self, path: str, purpose: str, specifics: dict) -> bool:

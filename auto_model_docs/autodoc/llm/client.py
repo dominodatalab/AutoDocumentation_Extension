@@ -240,7 +240,6 @@ class LLMClient:
         while True:
             try:
                 # Add timeout wrapper around the request
-                logger.debug(f"Making LLM API call (attempt {attempt + 1}, timeout={self.timeout_seconds}s)")
                 start_time = asyncio.get_event_loop().time()
                 
                 result = await asyncio.wait_for(
@@ -249,7 +248,6 @@ class LLMClient:
                 )
                 
                 elapsed = asyncio.get_event_loop().time() - start_time
-                logger.debug(f"LLM API call completed in {elapsed:.2f}s")
                 return result
                 
             except asyncio.TimeoutError as e:
@@ -275,7 +273,6 @@ class LLMClient:
             if self.backoff_jitter > 0:
                 delay += random.uniform(0, delay * self.backoff_jitter)
 
-            logger.debug(f"Retrying LLM API call in {delay:.2f}s")
             await asyncio.sleep(delay)
             backoff *= 2
             attempt += 1
