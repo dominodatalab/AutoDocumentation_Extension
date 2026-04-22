@@ -4,13 +4,6 @@ All methods on DatasetManager are @staticmethod; the class deliberately has
 no instance or class members. Callers pass the ids (dataset_id, snapshot_id)
 that each individual endpoint needs. There is no cache, no singleton, and no
 shared state across requests.
-
-A small helper `resolve_autodoc_dataset(project_id)` is provided to fetch the
-(dataset_id, snapshot_id) pair for the canonical autodoc dataset in a given
-project. Callers can then feed those ids into DatasetManager directly, or
-park them in `dataset_ctx` for the duration of a request so downstream
-helpers (spec_store, domino_job_store, autodoc/*) don't have to thread the
-ids through every function call.
 """
 
 from __future__ import annotations
@@ -198,31 +191,3 @@ class DatasetManager:
             return False
 
 
-def resolve_autodoc_dataset(project_id: str) -> tuple[str, str]:
-    """Resolve (dataset_id, snapshot_id) for the autodoc dataset in a project.
-
-    Ensures the dataset exists and returns the writable snapshot id.
-    Imported lazily to avoid a circular import at module load.
-    """
-    import domino_datasets
-
-    ds = domino_datasets.ensure_dataset(
-        project_id=project_id,
-        name=AUTODOC_DATASET_NAME,
-        description=AUTODOC_DATASET_DESCRIPTION,
-    )
-    ds_id = ds.get("id") or ""
-    if not ds_id:
-        raise RuntimeError(
-            f"Dataset '{AUTODOC_DATASET_NAME}' created/found but has no ID. "
-            f"Raw response: {ds}"
-        )
-    snap_id = ds.get("rwSnapshotId") or ""
-    if not snap_id:
-        snap_id = domino_datasets.get_rw_snapshot_id(ds_id, project_id) or ""
-    if not snap_id:
-        raise RuntimeError(
-            f"Could not resolve rw snapshot id for dataset '{ds_id}'. "
-            "The dataset may still be initializing."
-        )
-    return ds_id, snap_id

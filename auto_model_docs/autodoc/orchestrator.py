@@ -68,6 +68,7 @@ class Orchestrator:
         model_names: Optional[List[str]] = None,
         latest_only: bool = False,
         disable_project_filtering: bool = False,
+        dataset_mount_path: str = "",
     ):
         """Initialize the orchestrator.
 
@@ -94,6 +95,7 @@ class Orchestrator:
         self.output_dir = output_dir
         self.generate_notebook = generate_notebook
         self.notebook_path = notebook_path
+        self.dataset_mount_path = dataset_mount_path
 
         # Detect language before creating sanitizer and scanner
         detected_profile, detected_count = detect_language(code_root)
@@ -139,13 +141,14 @@ class Orchestrator:
         )
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
-        self.builder = DocumentBuilder(output_dir=output_dir)
+        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path)
 
         # Optional notebook builder
         if generate_notebook:
             self.notebook_builder = NotebookBuilder(
                 output_dir=output_dir,
                 notebook_path=notebook_path,
+                dataset_mount_path=dataset_mount_path,
             )
 
         # Semaphore for limiting concurrent LLM calls during content generation
@@ -327,9 +330,8 @@ class Orchestrator:
     def _save_results_cache(
         self, spec: DocumentSpec, results: List[SectionResult]
     ) -> None:
-        """Save generation results to cache via DatasetManager."""
-        from dataset_ctx import get_dataset_ctx
-        from dataset_manager import DatasetManager
+        """Save generation results to cache via filesystem."""
+        import local_data_manager
         cache_data = {
             "spec": {
                 "title": spec.title,
@@ -347,10 +349,10 @@ class Orchestrator:
 
         cache_path = self._get_cache_path()
         content = json.dumps(cache_data, indent=2).encode("utf-8")
-        DatasetManager.write_file(get_dataset_ctx().dataset_id, cache_path, content)
+        local_data_manager.write_file(self.dataset_mount_path, cache_path, content)
 
     def _load_results_cache(self) -> tuple[DocumentSpec, List[SectionResult]]:
-        """Load generation results from cache via DatasetManager.
+        """Load generation results from cache via filesystem.
 
         Returns:
             Tuple of (DocumentSpec, List[SectionResult]).
@@ -358,17 +360,15 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If cache file doesn't exist.
         """
-        from dataset_ctx import get_dataset_ctx
-        from dataset_manager import DatasetManager
+        import local_data_manager
         cache_path = self._get_cache_path()
-        snap_id = get_dataset_ctx().snapshot_id
-        if not DatasetManager.file_exists(snap_id, cache_path):
+        if not local_data_manager.file_exists(self.dataset_mount_path, cache_path):
             raise FileNotFoundError(
                 f"No cached results found at {cache_path}. "
                 "Run full generation first with --notebook flag."
             )
 
-        content = DatasetManager.read_file(snap_id, cache_path)
+        content = local_data_manager.read_file(self.dataset_mount_path, cache_path)
         cache_data = json.loads(content)
 
         # Reconstruct DocumentSpec

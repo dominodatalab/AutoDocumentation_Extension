@@ -160,21 +160,21 @@ MAIN_DOM_JS = r"""
         var _specCurrentDatasetId = '';
         var _specCurrentDatasetName = '';
         var _specCurrentSnapshotId = '';
+        var _specCurrentDatasetPath = '';
         var _specCurrentPath = '';
         var _specAutoDocSpecsId = '';
 
         function getProjectIdParam() {
-            var formEl = document.getElementById('main-form');
-            var pid = '';
-            // Check projectId from query string
             var params = new URLSearchParams(window.location.search);
-            pid = params.get('projectId') || params.get('project_id') || '';
-            // Also check the project-id field
+            var pid = params.get('projectId') || params.get('project_id') || '';
             if (!pid) {
                 var pidInput = document.getElementById('field-project-id');
                 if (pidInput) pid = pidInput.value.trim();
             }
-            return pid ? '&projectId=' + encodeURIComponent(pid) : '';
+            var qs = pid ? '&projectId=' + encodeURIComponent(pid) : '';
+            if (_specCurrentDatasetId) qs += '&datasetId=' + encodeURIComponent(_specCurrentDatasetId);
+            if (_specCurrentSnapshotId) qs += '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId);
+            return qs;
         }
 
         function loadDatasets() {
@@ -198,7 +198,7 @@ MAIN_DOM_JS = r"""
                     }
                     var html = '<option value="">Choose a dataset...</option>';
                     for (var i = 0; i < datasets.length; i++) {
-                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '">'
+                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
                             + datasets[i].name + '</option>';
                     }
                     specDatasetSelect.innerHTML = html;
@@ -226,6 +226,7 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetId = specDatasetSelect.value;
             _specCurrentDatasetName = opt ? opt.getAttribute('data-name') || '' : '';
             _specCurrentSnapshotId = opt ? opt.getAttribute('data-snapshot') || '' : '';
+            _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
             if (_specCurrentDatasetId) {
                 browseFiles('');
@@ -355,20 +356,16 @@ MAIN_DOM_JS = r"""
                 // Validate spec content before uploading
                 if (typeof validateSpecContent === 'function') validateSpecContent(file);
 
-                // Ensure autodoc dataset exists, then upload
+                var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
+                if (!uploadDsId) {
+                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.style.color = '#ba1a1a'; }
+                    return;
+                }
                 var qs = '?' + getProjectIdParam().replace(/^&/, '');
-                fetch('api/ensure-autodoc-specs' + qs, { method: 'POST' })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(ds) {
-                        if (ds.error) throw new Error(ds.error);
-                        console.log('[spec-browser] autodoc dataset ensured: id=' + ds.id);
-                        _specAutoDocSpecsId = ds.id;
-                        var fd = new FormData();
-                        fd.append('datasetId', ds.id);
-                        fd.append('datasetName', ds.name || 'autodoc');
-                        fd.append('file', file);
-                        return fetch('api/upload-spec-to-dataset' + qs, { method: 'POST', body: fd });
-                    })
+                var fd = new FormData();
+                fd.append('datasetId', uploadDsId);
+                fd.append('file', file);
+                fetch('api/upload-spec-to-dataset' + qs, { method: 'POST', body: fd })
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
@@ -497,11 +494,22 @@ MAIN_DOM_JS = r"""
         // belong to a different user.
         document.body.addEventListener('htmx:configRequest', function(e) {
             var pid = new URLSearchParams(window.location.search).get('projectId');
-            if (!pid) return;
-            var path = e.detail.path || '';
-            if (/[?&]projectId=/.test(path)) return;
-            e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
-                'projectId=' + encodeURIComponent(pid);
+            if (pid) {
+                var path = e.detail.path || '';
+                if (!/[?&]projectId=/.test(path)) {
+                    e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
+                        'projectId=' + encodeURIComponent(pid);
+                }
+            }
+            if (_specCurrentDatasetId) {
+                e.detail.parameters['datasetId'] = _specCurrentDatasetId;
+            }
+            if (_specCurrentSnapshotId) {
+                e.detail.parameters['snapshotId'] = _specCurrentSnapshotId;
+            }
+            if (_specCurrentDatasetPath) {
+                e.detail.parameters['datasetPath'] = _specCurrentDatasetPath;
+            }
         });
 
         // Poll job history — pause while an HTMX request targets the history panel

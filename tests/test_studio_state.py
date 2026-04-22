@@ -185,36 +185,4 @@ class TestResolveRequestProjectId:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# bootstrap_dataset_ctx
-# ---------------------------------------------------------------------------
-
-class TestBootstrapDatasetCtx:
-    def test_sets_ctx_from_resolved_ids(self, state_module, monkeypatch):
-        import dataset_ctx
-        import dataset_manager
-
-        dataset_ctx.clear_dataset_ctx()
-        monkeypatch.setattr(
-            dataset_manager, "resolve_autodoc_dataset",
-            lambda pid: (f"ds-{pid}", f"snap-{pid}"),
-        )
-        state_module.bootstrap_dataset_ctx("proj-abc")
-        ctx = dataset_ctx.get_dataset_ctx()
-        assert ctx.dataset_id == "ds-proj-abc"
-        assert ctx.snapshot_id == "snap-proj-abc"
-        dataset_ctx.clear_dataset_ctx()
-
-    def test_raises_on_resolver_failure(self, state_module, monkeypatch):
-        import dataset_ctx
-        import dataset_manager
-
-        dataset_ctx.clear_dataset_ctx()
-
-        def _boom(pid):
-            raise RuntimeError("resolver down")
-
-        monkeypatch.setattr(dataset_manager, "resolve_autodoc_dataset", _boom)
-        with pytest.raises(RuntimeError, match="Cannot initialize artifact storage"):
-            state_module.bootstrap_dataset_ctx("proj-xyz")
 

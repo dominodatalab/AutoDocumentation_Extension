@@ -203,6 +203,16 @@ def ensure_dataset(
 
 
 # ---------------------------------------------------------------------------
+# Dataset detail (includes datasetPath)
+# ---------------------------------------------------------------------------
+
+def get_dataset_detail(dataset_id: str) -> dict[str, Any]:
+    """Fetch full dataset metadata including datasetPath (mount location)."""
+    resp = _api_request("GET", f"/v4/datasetrw/datasets/{dataset_id}")
+    return resp.json()
+
+
+# ---------------------------------------------------------------------------
 # Snapshots
 # ---------------------------------------------------------------------------
 

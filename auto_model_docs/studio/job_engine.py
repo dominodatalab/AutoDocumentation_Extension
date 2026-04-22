@@ -37,9 +37,6 @@ async def _parse_request(req: Request) -> JobRequest:
         spec_content = content.decode("utf-8", errors="replace")
         spec_filename = getattr(spec_upload, "filename", None)
 
-    # projectId must come from the request itself (form field or URL query).
-    # No fallback to process-global state: that would let user A's project id
-    # leak into user B's request when user B's form/URL omit it.
     project_id = (
         form.get("target_project")
         or form.get("project_id")
@@ -75,19 +72,18 @@ async def _parse_request(req: Request) -> JobRequest:
 # Domino job command building
 # ---------------------------------------------------------------------------
 
-def _build_job_command(req: JobRequest, spec_path: Optional[str]) -> list[str]:
-    """Build the CLI command list for a Domino job from a JobRequest."""
+def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: str = "") -> list[str]:
     command = ["python", "/mnt/code/auto_model_docs/main.py"]
     if spec_path:
         command += ["--spec", spec_path]
+    if dataset_path:
+        command += ["--dataset-path", dataset_path]
     if req.provider:
         command += ["--provider", req.provider]
     if req.model:
         command += ["--model", req.model]
     if req.code_root:
         command += ["--code-root", req.code_root]
-    # --output is not passed: the CLI ignores it after the DatasetStore
-    # refactor. Output goes to docs/ in the autodoc dataset via DatasetStore.
     if req.max_files:
         command += ["--max-files", str(req.max_files)]
     if req.workers:
@@ -102,20 +98,15 @@ def _build_job_command(req: JobRequest, spec_path: Optional[str]) -> list[str]:
         command += ["--models", req.model_names]
     if req.latest_only:
         command += ["--latest-only"]
-    # Always generate notebook for Domino jobs
     command += ["--notebook"]
     if req.verbose:
         command += ["--verbose"]
     return command
 
 
-def _build_job_command_str(req: JobRequest, spec_path: Optional[str]) -> str:
-    """Build the full shell command for a Domino job.
-
-    Quotes arguments that contain spaces to prevent shell splitting.
-    """
+def _build_job_command_str(req: JobRequest, spec_path: Optional[str], dataset_path: str = "") -> str:
     import shlex
-    parts = _build_job_command(req, spec_path)
+    parts = _build_job_command(req, spec_path, dataset_path)
     return " ".join(shlex.quote(p) for p in parts)
 
 
@@ -123,50 +114,55 @@ def _build_job_command_str(req: JobRequest, spec_path: Optional[str]) -> str:
 # Domino job submission
 # ---------------------------------------------------------------------------
 
-async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
-    """Submit or queue a Domino job and persist it to the job index."""
-
-    # Resolve spec path; must be an absolute mount path so the Domino
-    # job container can read it from the mounted "autodoc" dataset.
+async def _submit_domino_job(
+    req: JobRequest, owner_id: str, dataset_id: str, snapshot_id: str,
+) -> DominoJobRecord:
     spec_path: Optional[str] = None
+    dataset_path = ""
+
+    if dataset_id:
+        try:
+            detail = domino_datasets.get_dataset_detail(dataset_id)
+            dataset_path = detail.get("datasetPath", "")
+        except Exception:
+            pass
+
     if req.spec_content and req.spec_filename:
-        saved = spec_store.save_spec(req.spec_filename, req.spec_content)
-        from dataset_manager import AUTODOC_DATASET_NAME
-        mount_prefix = domino_datasets.get_dataset_mount_prefix()
-        spec_path = f"{mount_prefix}/{AUTODOC_DATASET_NAME}/{saved}"
+        if not dataset_id:
+            raise ValueError("datasetId is required to save the uploaded spec.")
+        saved = spec_store.save_spec(dataset_id, req.spec_filename, req.spec_content)
+        if dataset_path:
+            spec_path = f"{dataset_path}/{saved}"
     elif req.spec_path:
-        # Resolve dataset:// references to actual mount paths
         if req.spec_path.startswith("dataset://"):
             parts = req.spec_path[len("dataset://"):].split("/", 1)
             dataset_name = parts[0]
             file_path = parts[1] if len(parts) > 1 else ""
-            mount_prefix = domino_datasets.get_dataset_mount_prefix()
-            spec_path = f"{mount_prefix}/{dataset_name}/{file_path}"
+            if dataset_path:
+                spec_path = f"{dataset_path}/{file_path}"
+            else:
+                mount_prefix = domino_datasets.get_dataset_mount_prefix()
+                spec_path = f"{mount_prefix}/{dataset_name}/{file_path}"
         else:
             spec_path = req.spec_path
 
     if not spec_path:
         raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
 
-    # Verify the spec file still exists in the dataset (it may have been
-    # deleted externally via the Domino UI between selection and submission).
-    if req.spec_path and req.spec_path.startswith("dataset://"):
+    if req.spec_path and req.spec_path.startswith("dataset://") and snapshot_id:
         ds_relative = req.spec_path[len("dataset://"):].split("/", 1)
         if len(ds_relative) > 1:
-            from dataset_ctx import get_dataset_ctx
             from dataset_manager import DatasetManager
-            if not DatasetManager.file_exists(
-                get_dataset_ctx().snapshot_id, ds_relative[1]
-            ):
+            if not DatasetManager.file_exists(snapshot_id, ds_relative[1]):
                 raise ValueError(
-                    f"The selected spec file no longer exists in the dataset. "
-                    f"It may have been deleted. Please select or upload a spec file and try again."
+                    "The selected spec file no longer exists in the dataset. "
+                    "It may have been deleted. Please select or upload a spec file and try again."
                 )
 
-    # Build command and create the DB row (status=queued)
-    command_str = _build_job_command_str(req, spec_path)
+    command_str = _build_job_command_str(req, spec_path, dataset_path)
 
     job_id = domino_job_store.create_job(
+        dataset_id, snapshot_id,
         owner_id=owner_id,
         branch=req.branch,
         tier=req.hardware_tier,
@@ -175,15 +171,11 @@ async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
         project_id=req.project_id,
     )
 
-    # count_active_jobs includes the row we just created (status=queued)
-    # so if active > max_jobs, at least one other job is already running/queued
-    active = domino_job_store.count_active_jobs(owner_id)
+    active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
     if active > _max_jobs():
-        # Leave as queued; background loop will submit it when a slot opens
-        row = domino_job_store.get_job(job_id)
+        row = domino_job_store.get_job(dataset_id, snapshot_id, job_id)
         return _db_record_to_dataclass(row)
 
-    # Under the limit — submit immediately
     try:
         run_id = domino_client.submit_job(
             command_str,
@@ -193,38 +185,32 @@ async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
         )
         job_url = domino_client.build_job_url(run_id, project_id=req.project_id)
         domino_job_store.update_job(
-            job_id,
+            dataset_id, snapshot_id, job_id,
             status="submitted",
             domino_run_id=run_id,
             job_url=job_url,
         )
     except Exception as exc:
         domino_job_store.update_job(
-            job_id,
+            dataset_id, snapshot_id, job_id,
             status="failed",
             domino_status=str(exc),
         )
         logger.error("Domino job submission failed: %s", exc, exc_info=True)
 
-    row = domino_job_store.get_job(job_id)
+    row = domino_job_store.get_job(dataset_id, snapshot_id, job_id)
     return _db_record_to_dataclass(row)
 
 
 # ---------------------------------------------------------------------------
 # Request-driven job sync
-#
-# No background poller: each /job-history request refreshes statuses for the
-# visiting user's active jobs and promotes any of their queued jobs when a
-# slot opens. This runs inside the request context so Domino API calls
-# carry the viewing user's JWT.
 # ---------------------------------------------------------------------------
 
-def _refresh_active_jobs_for(owner_id: str) -> None:
-    """Sync status for this owner's active Domino jobs from the Domino API."""
+def _refresh_active_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
     from datetime import datetime, timezone
 
     active_jobs = [
-        j for j in domino_job_store.get_active_jobs()
+        j for j in domino_job_store.get_active_jobs(dataset_id, snapshot_id)
         if j.get("owner_id") == owner_id
     ]
     for row in active_jobs:
@@ -243,17 +229,16 @@ def _refresh_active_jobs_for(owner_id: str) -> None:
             if mapped in ("succeeded", "failed", "cancelled"):
                 updates["completed_at"] = datetime.now(tz=timezone.utc).isoformat()
             if updates:
-                domino_job_store.update_job(row["id"], **updates)
+                domino_job_store.update_job(dataset_id, snapshot_id, row["id"], **updates)
         except Exception as exc:
             logger.warning("Status sync failed for run %s: %s", run_id, exc)
 
 
-def _promote_queued_jobs_for(owner_id: str) -> None:
-    """Submit the owner's oldest queued job if a slot is available."""
-    active = domino_job_store.count_active_jobs(owner_id)
+def _promote_queued_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
+    active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
     if active > _max_jobs():
         return
-    oldest = domino_job_store.get_oldest_queued_job(owner_id)
+    oldest = domino_job_store.get_oldest_queued_job(dataset_id, snapshot_id, owner_id)
     if not oldest or oldest.get("domino_run_id"):
         return
     try:
@@ -266,7 +251,7 @@ def _promote_queued_jobs_for(owner_id: str) -> None:
         )
         job_url = domino_client.build_job_url(run_id, project_id=oldest.get("project_id"))
         domino_job_store.update_job(
-            oldest["id"],
+            dataset_id, snapshot_id, oldest["id"],
             status="submitted",
             domino_run_id=run_id,
             job_url=job_url,
@@ -275,18 +260,16 @@ def _promote_queued_jobs_for(owner_id: str) -> None:
         logger.warning("Failed to promote queued job %s: %s", oldest["id"], exc)
 
 
-def sync_jobs_for(owner_id: str) -> None:
-    """Refresh statuses then promote queued jobs for this owner. Best-effort."""
+def sync_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
     try:
-        _refresh_active_jobs_for(owner_id)
-        _promote_queued_jobs_for(owner_id)
+        _refresh_active_jobs_for(owner_id, dataset_id, snapshot_id)
+        _promote_queued_jobs_for(owner_id, dataset_id, snapshot_id)
     except Exception as exc:
         logger.warning("sync_jobs_for(%s) failed: %s", owner_id, exc)
 
 
-def _reconcile_stale_jobs() -> None:
-    """On startup, mark any submitted/running jobs as failed (app restarted)."""
+def _reconcile_stale_jobs(dataset_id: str, snapshot_id: str) -> None:
     try:
-        domino_job_store.reconcile_stale_jobs()
+        domino_job_store.reconcile_stale_jobs(dataset_id, snapshot_id)
     except Exception as exc:
         logger.warning("Reconcile stale jobs failed: %s", exc)

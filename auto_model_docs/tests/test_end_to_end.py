@@ -17,7 +17,7 @@ import pytest
 from docx import Document as DocxDocument
 
 import artifact_layout
-import dataset_ctx
+import local_data_manager
 import dataset_manager
 
 from autodoc.core.models import (
@@ -36,6 +36,7 @@ class _MemStore:
 
     def __init__(self) -> None:
         self._files: Dict[str, bytes] = {}
+        self.dataset_mount_path: str = ""
 
     def write_file(self, path: str, content: bytes) -> None:
         self._files[path] = content
@@ -71,10 +72,11 @@ def mem_store(monkeypatch) -> _MemStore:
         staticmethod(lambda snap, path="": []),
     )
 
-    dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+    import tempfile
+    _tmp = tempfile.mkdtemp()
+    store.dataset_mount_path = _tmp
     yield store
     artifact_layout.reset_layout()
-    dataset_ctx.clear_dataset_ctx()
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +264,7 @@ def test_pipeline_smoke_end_to_end(
     planning, content generation (narrative), and Word document assembly.
     """
     llm = FakeLLM()
+    mount_path = mem_store.dataset_mount_path
     orch = Orchestrator(
         llm=llm,
         sanitizer=ContentSanitizer(),
@@ -271,6 +274,7 @@ def test_pipeline_smoke_end_to_end(
         planning_workers=1,
         scan_workers=1,
         batch_size=4,
+        dataset_mount_path=mount_path,
     )
 
     output_path = asyncio.new_event_loop().run_until_complete(
@@ -278,11 +282,11 @@ def test_pipeline_smoke_end_to_end(
     )
 
     assert output_path.endswith(".docx")
-    assert mem_store.file_exists(output_path), (
-        f"Expected docx at {output_path}, mem store has {list(mem_store._files)}"
+    assert local_data_manager.file_exists(mount_path, output_path), (
+        f"Expected docx at {output_path}"
     )
 
-    doc_bytes = mem_store.read_file(output_path)
+    doc_bytes = local_data_manager.read_file(mount_path, output_path)
     doc = DocxDocument(io.BytesIO(doc_bytes))
     all_text = "\n".join(p.text for p in doc.paragraphs)
 
@@ -326,16 +330,22 @@ def test_notebook_roundtrip(
             planning_workers=1,
             scan_workers=1,
             batch_size=4,
+            dataset_mount_path=mem_store.dataset_mount_path,
         )
         asyncio.new_event_loop().run_until_complete(orch.generate(simple_spec))
 
-    notebook_paths = [p for p in mem_store._files if p.endswith(".ipynb")]
+    mount = mem_store.dataset_mount_path
+    mount_p = Path(mount)
+    notebook_paths = [
+        str(p.relative_to(mount_p))
+        for p in mount_p.rglob("*.ipynb")
+    ]
     assert len(notebook_paths) == 1, (
         f"Expected exactly one notebook, found: {notebook_paths}"
     )
     notebook_path = notebook_paths[0]
 
-    nb_bytes = mem_store.read_file(notebook_path)
+    nb_bytes = local_data_manager.read_file(mount, notebook_path)
     nb = nbformat.read(io.StringIO(nb_bytes.decode("utf-8")), as_version=4)
 
     marker = "EDITED_BY_TEST_MARKER_4242"
@@ -361,19 +371,19 @@ def test_notebook_roundtrip(
 
     buf = io.StringIO()
     nbformat.write(nb, buf)
-    mem_store.write_file(notebook_path, buf.getvalue().encode("utf-8"))
+    local_data_manager.write_file(mount, notebook_path, buf.getvalue().encode("utf-8"))
 
-    exporter = NotebookExporter(output_dir=Path("docs"))
+    exporter = NotebookExporter(output_dir=Path("docs"), dataset_mount_path=mount)
     exporter.export_to_word(Path(notebook_path), title="Test Model Documentation")
 
     docx_paths = [
-        p for p in mem_store._files
-        if p.endswith(".docx") and p != notebook_path
+        str(p.relative_to(mount_p))
+        for p in mount_p.rglob("*.docx")
     ]
     assert docx_paths, "No docx produced by notebook export"
     exported_docx = sorted(docx_paths)[-1]
 
-    doc = DocxDocument(io.BytesIO(mem_store.read_file(exported_docx)))
+    doc = DocxDocument(io.BytesIO(local_data_manager.read_file(mount, exported_docx)))
     all_text = "\n".join(p.text for p in doc.paragraphs)
     assert marker in all_text, (
         f"Edit did not survive round-trip. Docx text: {all_text[:500]}"
@@ -449,6 +459,7 @@ def test_sanitizer_invariant_no_secrets_in_llm_prompts(
         planning_workers=1,
         scan_workers=1,
         batch_size=4,
+        dataset_mount_path=mem_store.dataset_mount_path,
     )
 
     asyncio.new_event_loop().run_until_complete(orch.generate(simple_spec))

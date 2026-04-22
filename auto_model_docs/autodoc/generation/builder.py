@@ -37,14 +37,9 @@ class DocumentBuilder:
     title page, table of contents, and content sections.
     """
 
-    def __init__(self, output_dir: str = "docs"):
-        """Initialize the document builder.
-
-        Args:
-            output_dir: Logical output directory (dataset-relative path).
-                Actual I/O goes through DatasetStore.
-        """
+    def __init__(self, output_dir: str = "docs", dataset_mount_path: str = ""):
         self.output_dir = output_dir
+        self.dataset_mount_path = dataset_mount_path
 
     async def build(
         self,
@@ -882,11 +877,9 @@ class DocumentBuilder:
                     doc.add_paragraph(cid, style="List Bullet")
 
     def _save_document(self, doc: Document) -> str:
-        """Save the document to the dataset via DatasetManager."""
         import io
+        import local_data_manager
         from artifact_layout import get_layout
-        from dataset_ctx import get_dataset_ctx
-        from dataset_manager import DatasetManager
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"model_docs_{timestamp}.docx"
@@ -894,7 +887,5 @@ class DocumentBuilder:
 
         buffer = io.BytesIO()
         doc.save(buffer)
-        DatasetManager.write_file(
-            get_dataset_ctx().dataset_id, dataset_path, buffer.getvalue()
-        )
+        local_data_manager.write_file(self.dataset_mount_path, dataset_path, buffer.getvalue())
         return dataset_path
