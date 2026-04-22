@@ -82,14 +82,12 @@ def _validate_environment() -> list:
             action="Document generation will use code analysis only.",
         ))
 
-    # Check Domino API (only if Domino env detected)
-    if os.environ.get("DOMINO_PROJECT_ID"):
-        if not os.environ.get("DOMINO_API_HOST"):
-            warnings.append(EnvironmentWarning(
-                level="warning",
-                message="Domino API host not configured.",
-                action="Job submission may fail. Set DOMINO_API_HOST.",
-            ))
+    if not os.environ.get("DOMINO_API_HOST"):
+        warnings.append(EnvironmentWarning(
+            level="warning",
+            message="Domino API host not configured.",
+            action="Job submission may fail. Set DOMINO_API_HOST.",
+        ))
 
     # Output and cache are managed via DatasetStore — no local directories needed.
 
@@ -263,12 +261,12 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
 # Job history table
 # ---------------------------------------------------------------------------
 
-def _render_job_history_table(owner_id: str) -> FT:
-    """Render the job history table for a user."""
+def _render_job_history_table(owner_id: str, dataset_id: str = "", snapshot_id: str = "") -> FT:
+    if not dataset_id or not snapshot_id:
+        return Div()
     try:
-        jobs = domino_job_store.get_user_jobs(owner_id, limit=50)
+        jobs = domino_job_store.get_user_jobs(dataset_id, snapshot_id, owner_id, limit=50)
     except RuntimeError:
-        # Project not yet resolved (pre-bootstrap page load)
         return Div()
     if not jobs:
         return Div(

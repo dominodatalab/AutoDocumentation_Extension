@@ -158,36 +158,6 @@ class EnvironmentWarning:
 _STARTUP_WARNINGS: list = []
 
 
-# ---------------------------------------------------------------------------
-# Per-request dataset bootstrap
-# ---------------------------------------------------------------------------
-
-def bootstrap_dataset_ctx(project_id: str) -> None:
-    """Resolve the autodoc dataset for ``project_id`` and set the per-request
-    dataset context so downstream helpers (spec_store, domino_job_store,
-    autodoc/*) can read/write without extra plumbing.
-
-    Must be called at the top of every request that performs dataset I/O.
-    Also idempotently initializes the artifact layout singleton.
-    """
-    from artifact_layout import init_layout
-    from dataset_ctx import set_dataset_ctx
-    from dataset_manager import resolve_autodoc_dataset
-
-    init_layout()
-    try:
-        ds_id, snap_id = resolve_autodoc_dataset(project_id)
-        set_dataset_ctx(ds_id, snap_id)
-    except Exception as exc:
-        logger.error(
-            "Failed to bootstrap dataset context for project %s: %s",
-            project_id, exc, exc_info=True,
-        )
-        raise RuntimeError(
-            f"Cannot initialize artifact storage for project {project_id}. "
-            f"Check dataset permissions and Domino API availability. "
-            f"Error: {exc}"
-        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -213,14 +183,18 @@ def _max_jobs() -> int:
 
 
 def _resolve_request_project_id(req) -> Optional[str]:
-    """Extract project ID from request query params.
-
-    Intentionally does NOT fall back to any process-global target project;
-    that would leak the first-arriving user's project to later requests from
-    other users. Callers must supply ``projectId`` on every request.
-    """
     for key in ("projectId", "project_id"):
         pid = req.query_params.get(key)
         if pid:
             return pid
     return None
+
+
+def _resolve_request_dataset_ids(req) -> tuple[str, str]:
+    """Extract (dataset_id, snapshot_id) from request params (query or form).
+
+    Returns ("", "") if not provided.
+    """
+    dataset_id = req.query_params.get("datasetId", "")
+    snapshot_id = req.query_params.get("snapshotId", "")
+    return dataset_id, snapshot_id

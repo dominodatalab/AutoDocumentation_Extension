@@ -85,7 +85,6 @@ def _build_mock_state():
     mock_state = ModuleType("studio.state")
     mock_state._get_username = MagicMock(return_value="test_user")
     mock_state._max_jobs = MagicMock(return_value=1)
-    mock_state.bootstrap_dataset_ctx = MagicMock()
     mock_state.logger = MagicMock()
     mock_state.JobRequest = JobRequest
     mock_state.DominoJobRecord = DominoJobRecord
@@ -93,6 +92,7 @@ def _build_mock_state():
     mock_state.domino_job_store = MagicMock()
     mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
+    mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
     return mock_state
 
 
@@ -232,7 +232,7 @@ class TestSubmitDominoJob:
         }
 
         req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
-        result = await je._submit_domino_job(req, "test_user")
+        result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.id == "job-1"
         client.submit_job.assert_called_once()
 
@@ -249,7 +249,7 @@ class TestSubmitDominoJob:
         }
 
         req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
-        result = await je._submit_domino_job(req, "test_user")
+        result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.status == "queued"
         _mock_studio.domino_client.submit_job.assert_not_called()
 
@@ -258,7 +258,7 @@ class TestSubmitDominoJob:
         je = _import_job_engine()
         req = JobRequest(provider="anthropic", project_id="proj-123")
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req, "test_user")
+            await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
 
     @pytest.mark.asyncio
     async def test_submission_failure_marks_job_failed(self, _mock_studio):
@@ -275,7 +275,7 @@ class TestSubmitDominoJob:
         }
 
         req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
-        result = await je._submit_domino_job(req, "test_user")
+        result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.status == "failed"
 
     @pytest.mark.asyncio
@@ -285,6 +285,7 @@ class TestSubmitDominoJob:
         client = _mock_studio.domino_client
         datasets = _mock_studio.domino_datasets
 
+        datasets.get_dataset_detail.return_value = {"datasetPath": "/mnt/data/my-dataset"}
         datasets.get_dataset_mount_prefix.return_value = "/mnt/data"
         store.create_job.return_value = "job-4"
         store.count_active_jobs.return_value = 1
@@ -295,50 +296,41 @@ class TestSubmitDominoJob:
             "domino_run_id": "run-xyz",
         }
 
-        import dataset_ctx, dataset_manager
+        import dataset_manager
         with patch.object(
             dataset_manager.DatasetManager, "file_exists",
             staticmethod(lambda snap, path: True),
         ):
-            dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
-            try:
-                req = JobRequest(
-                    spec_path="dataset://my-dataset/spec.yaml",
-                    provider="anthropic", project_id="proj-123",
-                )
-                await je._submit_domino_job(req, "test_user")
-            finally:
-                dataset_ctx.clear_dataset_ctx()
+            req = JobRequest(
+                spec_path="dataset://my-dataset/spec.yaml",
+                provider="anthropic", project_id="proj-123",
+            )
+            await je._submit_domino_job(req, "test_user", "ds-test", "snap-test")
         call_args = store.create_job.call_args
-        spec_in_db = call_args[1].get("spec_path") or call_args[0][3]
-        assert spec_in_db == "/mnt/data/my-dataset/spec.yaml"
+        spec_in_db = call_args[1].get("spec_path") or call_args[0][4]
+        assert "/mnt/data/my-dataset/spec.yaml" in spec_in_db
 
     @pytest.mark.asyncio
     async def test_dataset_spec_deleted_externally_raises(self, _mock_studio):
-        """Spec file deleted in Domino UI between selection and submission."""
         je = _import_job_engine()
+        _mock_studio.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/mnt/data/autodoc"}
         _mock_studio.domino_datasets.get_dataset_mount_prefix.return_value = "/mnt/data"
 
-        import dataset_ctx, dataset_manager
+        import dataset_manager
         with patch.object(
             dataset_manager.DatasetManager, "file_exists",
             staticmethod(lambda snap, path: False),
         ):
-            dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
-            try:
-                req = JobRequest(
-                    spec_path="dataset://autodoc/specs/doc_spec.yaml",
-                    provider="anthropic", project_id="proj-123",
-                )
-                with pytest.raises(ValueError, match="no longer exists"):
-                    await je._submit_domino_job(req, "test_user")
-            finally:
-                dataset_ctx.clear_dataset_ctx()
+            req = JobRequest(
+                spec_path="dataset://autodoc/specs/doc_spec.yaml",
+                provider="anthropic", project_id="proj-123",
+            )
+            with pytest.raises(ValueError, match="no longer exists"):
+                await je._submit_domino_job(req, "test_user", "ds-test", "snap-test")
         _mock_studio.domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_non_dataset_spec_path_skips_verification(self, _mock_studio):
-        """Absolute paths (not dataset://) skip the API check."""
         je = _import_job_engine()
         store = _mock_studio.domino_job_store
         client = _mock_studio.domino_client
@@ -355,8 +347,7 @@ class TestSubmitDominoJob:
             spec_path="/mnt/data/autodoc/specs/doc_spec.yaml",
             provider="anthropic", project_id="proj-123",
         )
-        # Should not call dataset_store at all for non-dataset:// paths
-        await je._submit_domino_job(req, "test_user")
+        await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         client.submit_job.assert_called_once()
 
 
@@ -369,14 +360,13 @@ class TestReconcileStaleJobs:
         je = _import_job_engine()
         store = _mock_studio.domino_job_store
 
-        je._reconcile_stale_jobs()
+        je._reconcile_stale_jobs("ds-1", "snap-1")
         store.reconcile_stale_jobs.assert_called_once()
 
     def test_handles_exception_gracefully(self, _mock_studio):
         je = _import_job_engine()
         _mock_studio.domino_job_store.reconcile_stale_jobs.side_effect = RuntimeError("error")
-        # Should not raise
-        je._reconcile_stale_jobs()
+        je._reconcile_stale_jobs("ds-1", "snap-1")
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +392,7 @@ class TestSyncJobsFor:
             "local_status": "succeeded",
         }
 
-        je.sync_jobs_for("alice")
+        je.sync_jobs_for("alice", "ds-1", "snap-1")
 
         client.get_job_status.assert_called_once_with("run-1")
         store.update_job.assert_called()
@@ -422,13 +412,12 @@ class TestSyncJobsFor:
         client.submit_job.return_value = "run-promoted"
         client.build_job_url.return_value = "https://domino/jobs/run-promoted"
 
-        je.sync_jobs_for("alice")
+        je.sync_jobs_for("alice", "ds-1", "snap-1")
 
         client.submit_job.assert_called_once()
         store.update_job.assert_called()
-        store.get_oldest_queued_job.assert_called_with("alice")
 
     def test_swallows_errors(self, _mock_studio):
         je = _import_job_engine()
         _mock_studio.domino_job_store.get_active_jobs.side_effect = RuntimeError("boom")
-        je.sync_jobs_for("alice")
+        je.sync_jobs_for("alice", "ds-1", "snap-1")

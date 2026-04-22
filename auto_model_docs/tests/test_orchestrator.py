@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import artifact_layout
-import dataset_ctx
+import local_data_manager
 import dataset_manager
 
 from autodoc.core.models import (
@@ -62,10 +62,15 @@ def _init_layout_and_store(monkeypatch):
         staticmethod(lambda snap, path="": []),
     )
 
-    dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+    import tempfile
+    _tmp = tempfile.mkdtemp()
+    _test_mount_path.value = _tmp
     yield
     artifact_layout.reset_layout()
-    dataset_ctx.clear_dataset_ctx()
+
+
+class _test_mount_path:
+    value = ""
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +354,7 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
 
         spec = _make_spec(title="Round Trip")
@@ -377,6 +383,7 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
 
         png_bytes = b"\x89PNG\r\n\x1a\nfake_chart_data"
@@ -413,6 +420,7 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
         with pytest.raises(FileNotFoundError, match="No cached results"):
             orch._load_results_cache()
@@ -431,6 +439,7 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
         results = [_make_section_result(errors=["narrative: timeout"])]
         spec = _make_spec()
@@ -461,6 +470,7 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
         result = _make_section_result(number="2", name="Details")
         serialized = orch._serialize_section_result(result)
@@ -485,6 +495,7 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
         raw_bytes = b"\x00\x01binary_chart_data"
         result = _make_section_result(
@@ -518,6 +529,7 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
         plan = SectionPlan(
             number="3",
@@ -736,6 +748,7 @@ class TestCacheSpecFields:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
+            dataset_mount_path=_test_mount_path.value,
         )
 
         spec = DocumentSpec(

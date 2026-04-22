@@ -19,7 +19,6 @@ configure_auth(user_auth)
 
 from studio.state import (
     _STARTUP_WARNINGS,
-    bootstrap_dataset_ctx,
     _get_default_code_root,
     _get_default_spec_path,
     domino_client,
@@ -34,18 +33,9 @@ from studio.ui_components import (
     _render_job_history_table,
     _validate_environment,
 )
-from studio.job_engine import (
-    _reconcile_stale_jobs,
-)
 from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
-
-
-# Projects for which we've run the once-per-startup stale-job reconciliation
-# this process lifetime. Not a cross-user leak: the value is only used to
-# skip redundant work, never to answer a request.
-_reconciled_projects: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -181,11 +171,6 @@ async def index(req: Request):
                 cls="page",
             ),
         )
-
-    bootstrap_dataset_ctx(project_id)
-    if project_id not in _reconciled_projects:
-        _reconciled_projects.add(project_id)
-        _reconcile_stale_jobs()
 
     project_display_name: Optional[str] = None
     if project_id:
@@ -632,7 +617,7 @@ async def index(req: Request):
     right_col_children.append(
         Div(
             Div(
-                _render_job_history_table(owner_id),
+                _render_job_history_table(owner_id, "", ""),
                 id="job-history-content",
             ),
             cls="output-panel",
