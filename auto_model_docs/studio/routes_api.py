@@ -16,6 +16,7 @@ from authorization import require_project_write
 from .state import (
     _get_default_code_root,
     _resolve_request_project_id,
+    bootstrap_dataset_ctx,
     domino_client,
     domino_datasets,
 )
@@ -155,7 +156,7 @@ def register_api_routes(rt):
         pid = _resolve_request_project_id(req)
         require_project_write(pid)
         try:
-            from dataset_store import AUTODOC_DATASET_NAME
+            from dataset_manager import AUTODOC_DATASET_NAME
             ds = domino_datasets.ensure_dataset(
                 pid,
                 name=AUTODOC_DATASET_NAME,
@@ -195,11 +196,14 @@ def register_api_routes(rt):
         content = await file_upload.read()
 
         try:
-            from dataset_store import get_store
             from artifact_layout import get_layout
-            store = get_store()
+            from dataset_ctx import get_dataset_ctx
+            from dataset_manager import DatasetManager
+            bootstrap_dataset_ctx(pid)
             upload_path = f"{get_layout().specs_dir}/{filename}"
-            store.write_file(upload_path, content)
+            DatasetManager.write_file(
+                get_dataset_ctx().dataset_id, upload_path, content
+            )
             return Response(
                 json.dumps({"path": upload_path, "fileName": filename}),
                 media_type="application/json",

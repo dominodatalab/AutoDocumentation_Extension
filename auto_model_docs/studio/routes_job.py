@@ -14,6 +14,7 @@ from authorization import (
 
 from .state import (
     _resolve_request_project_id,
+    bootstrap_dataset_ctx,
     domino_client,
     domino_job_store,
 )
@@ -49,15 +50,9 @@ def register_job_routes(rt):
             return _render_job_history_table(owner_id)
         job_request = await _parse_request(req)
         if not job_request.project_id:
-            job_id = domino_job_store.create_job(
-                owner_id=owner_id, branch=None, tier=None, spec_path=None,
-            )
-            domino_job_store.update_job(
-                job_id, status="failed",
-                domino_status="No target project ID. Reload the app with ?projectId= in the URL.",
-            )
             return _render_job_history_table(owner_id)
         require_domino_job_start(job_request.project_id)
+        bootstrap_dataset_ctx(job_request.project_id)
         try:
             await _submit_domino_job(job_request, owner_id)
         except Exception as exc:
@@ -79,6 +74,7 @@ def register_job_routes(rt):
         if not project_id:
             return _render_job_history_table(owner_id)
         require_domino_job_list(project_id)
+        bootstrap_dataset_ctx(project_id)
         sync_jobs_for(owner_id)
         return _render_job_history_table(owner_id)
 
@@ -93,6 +89,7 @@ def register_job_routes(rt):
         if not project_id:
             return _render_job_history_table(owner_id)
         require_domino_job_list(project_id)
+        bootstrap_dataset_ctx(project_id)
         domino_job_store.cancel_queued_jobs(owner_id)
         return _render_job_history_table(owner_id)
 
@@ -106,6 +103,10 @@ def register_job_routes(rt):
         form = await req.form()
         job_id = form.get("job_id")
         if job_id:
+            project_id = _resolve_request_project_id(req)
+            if not project_id:
+                return _render_job_history_table(owner_id)
+            bootstrap_dataset_ctx(project_id)
             row = domino_job_store.get_job(job_id)
             if row and row.get("owner_id") != owner_id:
                 return _render_job_history_table(owner_id)

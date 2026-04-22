@@ -1,8 +1,8 @@
-"""Integration tests — real HTTP requests through Starlette routes.
+"""Integration tests -- real HTTP requests through Starlette routes.
 
 Tests the full request -> route handler -> response path with:
 - Real HTTP via httpx AsyncClient + Starlette app
-- Mocked DatasetStore for job_store and spec_store I/O
+- Monkeypatched DatasetManager (in-memory) for job_store and spec_store I/O
 - Real auth_context ContextVar propagation through middleware
 - Mocked Domino API client (no live API calls)
 
@@ -63,52 +63,52 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     import domino_job_store as store
     import spec_store
     import auth_context
-    import dataset_store
+    import dataset_ctx
+    import dataset_manager
     import artifact_layout
 
-    # Set up in-memory file store for DatasetStore
     _mem_files: dict[str, bytes] = {}
-
-    class _MemStore:
-        dataset_id = "ds-integration"
-        snapshot_id = "snap-integration"
-
-        def write_file(self, path, content):
-            _mem_files[path] = content
-
-        def read_file(self, path):
-            if path not in _mem_files:
-                raise FileNotFoundError(path)
-            return _mem_files[path]
-
-        def list_files(self, path=""):
-            prefix = (path.rstrip("/") + "/") if path else ""
-            results = []
-            for k in _mem_files:
-                if prefix and not k.startswith(prefix):
-                    continue
-                name = k[len(prefix):] if prefix else k
-                if "/" in name:
-                    continue  # skip nested
-                results.append({"fileName": name, "isDirectory": False, "sizeInBytes": len(_mem_files[k])})
-            return results
-
-        def file_exists(self, path):
-            return path in _mem_files
-
-        def file_exists_api(self, path):
-            """API-only check (same as file_exists for in-memory store)."""
-            return path in _mem_files
-
-        def read_file_meta(self, path):
-            if path not in _mem_files:
-                raise FileNotFoundError(path)
-            return {"sizeInBytes": len(_mem_files[path])}
-
-    mem_store = _MemStore()
-    # Pre-seed a spec file so dataset:// path verification passes
     _mem_files["spec.yaml"] = b"title: Test\n"
-    dataset_store._store = mem_store
+
+    def _mem_write(dataset_id, path, content):
+        _mem_files[path] = content
+
+    def _mem_read(snapshot_id, path):
+        if path not in _mem_files:
+            raise FileNotFoundError(path)
+        return _mem_files[path]
+
+    def _mem_list(snapshot_id, path=""):
+        prefix = (path.rstrip("/") + "/") if path else ""
+        results = []
+        for k in _mem_files:
+            if prefix and not k.startswith(prefix):
+                continue
+            name = k[len(prefix):] if prefix else k
+            if "/" in name:
+                continue
+            results.append({
+                "fileName": name,
+                "isDirectory": False,
+                "sizeInBytes": len(_mem_files[k]),
+            })
+        return results
+
+    def _mem_exists(snapshot_id, path):
+        return path in _mem_files
+
+    def _mem_meta(snapshot_id, path):
+        if path not in _mem_files:
+            raise FileNotFoundError(path)
+        return {"sizeInBytes": len(_mem_files[path])}
+
+    monkeypatch.setattr(dataset_manager.DatasetManager, "write_file", staticmethod(_mem_write))
+    monkeypatch.setattr(dataset_manager.DatasetManager, "read_file", staticmethod(_mem_read))
+    monkeypatch.setattr(dataset_manager.DatasetManager, "list_files", staticmethod(_mem_list))
+    monkeypatch.setattr(dataset_manager.DatasetManager, "file_exists", staticmethod(_mem_exists))
+    monkeypatch.setattr(dataset_manager.DatasetManager, "read_file_meta", staticmethod(_mem_meta))
+
+    dataset_ctx.set_dataset_ctx("ds-integration", "snap-integration")
     artifact_layout.init_layout()
 
     # Mock domino_client
@@ -153,11 +153,10 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_state.spec_store = spec_store
     mock_state.domino_datasets = mock_datasets
     mock_state.auth_context = auth_context
-    mock_state._TARGET_PROJECT_ID = "proj-integration"
     mock_state._max_jobs = lambda: 2
-    mock_state._get_target_project_id = lambda: "proj-integration"
     mock_state._resolve_request_project_id = lambda req: "proj-integration"
     mock_state._get_default_code_root = lambda: Path("/mnt/code")
+    mock_state.bootstrap_dataset_ctx = lambda pid: None
     mock_state.logger = MagicMock()
 
     from dataclasses import dataclass
@@ -393,9 +392,9 @@ def integration_env(tmp_path, monkeypatch):
     yield env
 
     # Restore
-    import dataset_store
+    import dataset_ctx
     import artifact_layout
-    dataset_store.reset_store()
+    dataset_ctx.clear_dataset_ctx()
     artifact_layout.reset_layout()
 
     for key, val in saved_modules.items():

@@ -882,19 +882,19 @@ class DocumentBuilder:
                     doc.add_paragraph(cid, style="List Bullet")
 
     def _save_document(self, doc: Document) -> str:
-        """Save the document to the dataset via DatasetStore."""
+        """Save the document to the dataset via DatasetManager."""
         import io
         from artifact_layout import get_layout
-        from dataset_store import get_store
+        from dataset_ctx import get_dataset_ctx
+        from dataset_manager import DatasetManager
 
-        # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"model_docs_{timestamp}.docx"
         dataset_path = f"{get_layout().docs_dir}/{filename}"
 
-        # Save to in-memory buffer, then upload
         buffer = io.BytesIO()
         doc.save(buffer)
-        get_store().write_file(dataset_path, buffer.getvalue())
-
+        DatasetManager.write_file(
+            get_dataset_ctx().dataset_id, dataset_path, buffer.getvalue()
+        )
         return dataset_path

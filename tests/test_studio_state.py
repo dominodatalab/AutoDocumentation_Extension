@@ -59,9 +59,6 @@ def _get_state_module():
 def state_module():
     """Provide a fresh studio.state module."""
     mod = _get_state_module()
-    # Reset mutable globals
-    mod._TARGET_PROJECT_ID = None
-    mod._POLL_TASK = None
     mod._STARTUP_WARNINGS = []
     yield mod
 
@@ -181,16 +178,7 @@ class TestResolveRequestProjectId:
         result = state_module._resolve_request_project_id(req)
         assert result == "from-snake"
 
-    def test_does_not_fall_back_to_captured_target(self, state_module):
-        """Must NOT leak the process-global target to a request that omits projectId."""
-        state_module._TARGET_PROJECT_ID = "captured-id"
-        req = MagicMock()
-        req.query_params = {}
-        result = state_module._resolve_request_project_id(req)
-        assert result is None
-
     def test_returns_none_when_nothing_available(self, state_module):
-        state_module._TARGET_PROJECT_ID = None
         req = MagicMock()
         req.query_params = {}
         result = state_module._resolve_request_project_id(req)
@@ -198,24 +186,35 @@ class TestResolveRequestProjectId:
 
 
 # ---------------------------------------------------------------------------
-# _set_target_project
+# bootstrap_dataset_ctx
 # ---------------------------------------------------------------------------
 
-class TestSetTargetProject:
-    def test_first_call_captures_project(self, state_module):
-        mock_info = MagicMock()
-        mock_info.name = "resolved-name"
-        state_module.domino_client.resolve_project.return_value = mock_info
+class TestBootstrapDatasetCtx:
+    def test_sets_ctx_from_resolved_ids(self, state_module, monkeypatch):
+        import dataset_ctx
+        import dataset_manager
 
-        # _set_target_project references itself via import, mock that
-        with patch.dict(sys.modules, {"studio.state": state_module}):
-            result = state_module._set_target_project("proj-abc")
+        dataset_ctx.clear_dataset_ctx()
+        monkeypatch.setattr(
+            dataset_manager, "resolve_autodoc_dataset",
+            lambda pid: (f"ds-{pid}", f"snap-{pid}"),
+        )
+        state_module.bootstrap_dataset_ctx("proj-abc")
+        ctx = dataset_ctx.get_dataset_ctx()
+        assert ctx.dataset_id == "ds-proj-abc"
+        assert ctx.snapshot_id == "snap-proj-abc"
+        dataset_ctx.clear_dataset_ctx()
 
-        assert result is True
+    def test_raises_on_resolver_failure(self, state_module, monkeypatch):
+        import dataset_ctx
+        import dataset_manager
 
-    def test_second_call_is_noop(self, state_module):
-        state_module._TARGET_PROJECT_ID = "already-set"
-        with patch.dict(sys.modules, {"studio.state": state_module}):
-            result = state_module._set_target_project("proj-abc")
-        assert result is False
+        dataset_ctx.clear_dataset_ctx()
+
+        def _boom(pid):
+            raise RuntimeError("resolver down")
+
+        monkeypatch.setattr(dataset_manager, "resolve_autodoc_dataset", _boom)
+        with pytest.raises(RuntimeError, match="Cannot initialize artifact storage"):
+            state_module.bootstrap_dataset_ctx("proj-xyz")
 

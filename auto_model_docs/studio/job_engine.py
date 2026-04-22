@@ -126,15 +126,12 @@ def _build_job_command_str(req: JobRequest, spec_path: Optional[str]) -> str:
 async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
     """Submit or queue a Domino job and persist it to the job index."""
 
-    domino_job_store.init_db()
-
-    # Resolve spec path — must be an absolute mount path so the Domino
+    # Resolve spec path; must be an absolute mount path so the Domino
     # job container can read it from the mounted "autodoc" dataset.
     spec_path: Optional[str] = None
     if req.spec_content and req.spec_filename:
         saved = spec_store.save_spec(req.spec_filename, req.spec_content)
-        # Convert dataset-relative path to absolute mount path
-        from dataset_store import AUTODOC_DATASET_NAME
+        from dataset_manager import AUTODOC_DATASET_NAME
         mount_prefix = domino_datasets.get_dataset_mount_prefix()
         spec_path = f"{mount_prefix}/{AUTODOC_DATASET_NAME}/{saved}"
     elif req.spec_path:
@@ -154,11 +151,13 @@ async def _submit_domino_job(req: JobRequest, owner_id: str) -> DominoJobRecord:
     # Verify the spec file still exists in the dataset (it may have been
     # deleted externally via the Domino UI between selection and submission).
     if req.spec_path and req.spec_path.startswith("dataset://"):
-        # Extract the dataset-relative path for API verification
         ds_relative = req.spec_path[len("dataset://"):].split("/", 1)
         if len(ds_relative) > 1:
-            from dataset_store import get_store
-            if not get_store().file_exists_api(ds_relative[1]):
+            from dataset_ctx import get_dataset_ctx
+            from dataset_manager import DatasetManager
+            if not DatasetManager.file_exists(
+                get_dataset_ctx().snapshot_id, ds_relative[1]
+            ):
                 raise ValueError(
                     f"The selected spec file no longer exists in the dataset. "
                     f"It may have been deleted. Please select or upload a spec file and try again."

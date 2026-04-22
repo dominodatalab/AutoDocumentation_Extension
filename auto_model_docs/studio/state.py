@@ -157,73 +157,37 @@ class EnvironmentWarning:
 
 _STARTUP_WARNINGS: list = []
 
-# Target project context — captured from the ?projectId query param on
-# first request and used by all components so that specs, jobs, output,
-# and history are scoped to the target project, not the app's own project.
-_TARGET_PROJECT_ID: Optional[str] = None
-
 
 # ---------------------------------------------------------------------------
-# Target project helpers
+# Per-request dataset bootstrap
 # ---------------------------------------------------------------------------
 
-def _set_target_project(project_id: str) -> bool:
-    """Capture the target project from the ?projectId query param.
+def bootstrap_dataset_ctx(project_id: str) -> None:
+    """Resolve the autodoc dataset for ``project_id`` and set the per-request
+    dataset context so downstream helpers (spec_store, domino_job_store,
+    autodoc/*) can read/write without extra plumbing.
 
-    Called on every page load but only acts on the first call.
-    Initializes ArtifactLayout and DatasetStore for the target project.
-    Returns ``True`` when the project was newly captured (first load),
-    ``False`` when it was already set.
+    Must be called at the top of every request that performs dataset I/O.
+    Also idempotently initializes the artifact layout singleton.
     """
-    import studio.state as _self  # avoid stale module-level refs
     from artifact_layout import init_layout
-    from dataset_store import init_store, AUTODOC_DATASET_NAME
+    from dataset_ctx import set_dataset_ctx
+    from dataset_manager import resolve_autodoc_dataset
 
-    if _self._TARGET_PROJECT_ID is not None:
-        return False  # already captured
-
-    _self._TARGET_PROJECT_ID = project_id
-
-    info = domino_client.resolve_project(project_id)
-    if info:
-        init_layout()
-
-        try:
-            ds = domino_datasets.ensure_dataset(
-                project_id=project_id,
-                name=AUTODOC_DATASET_NAME,
-                description="Auto Model Docs artifacts",
-            )
-            ds_id = ds.get("id") or ""
-            if not ds_id:
-                raise RuntimeError(
-                    f"Dataset '{AUTODOC_DATASET_NAME}' created/found but has no ID. "
-                    f"Raw response: {ds}"
-                )
-            snap_id = ds.get("rwSnapshotId") or ""
-            if not snap_id:
-                snap_id = domino_datasets.get_rw_snapshot_id(ds_id, project_id) or ""
-            if not snap_id:
-                raise RuntimeError(
-                    f"Could not resolve snapshot ID for dataset '{ds_id}'. "
-                    f"The dataset may still be initializing."
-                )
-            init_store(ds_id, snap_id, project_id)
-        except Exception as exc:
-            logger.error(
-                "Failed to initialize DatasetStore for project %s: %s",
-                project_id, exc, exc_info=True,
-            )
-            raise RuntimeError(
-                f"Cannot initialize artifact storage for project {project_id}. "
-                f"Check dataset permissions and Domino API availability. "
-                f"Error: {exc}"
-            ) from exc
-
-        domino_job_store.init_db()
-        return True
-
-    return True
+    init_layout()
+    try:
+        ds_id, snap_id = resolve_autodoc_dataset(project_id)
+        set_dataset_ctx(ds_id, snap_id)
+    except Exception as exc:
+        logger.error(
+            "Failed to bootstrap dataset context for project %s: %s",
+            project_id, exc, exc_info=True,
+        )
+        raise RuntimeError(
+            f"Cannot initialize artifact storage for project {project_id}. "
+            f"Check dataset permissions and Domino API availability. "
+            f"Error: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

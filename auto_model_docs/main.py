@@ -224,11 +224,9 @@ def main(
         if planning_workers:
             settings.planning_workers = planning_workers
 
-        # Initialize artifact layout and dataset store
         from artifact_layout import init_layout, get_layout
-        from dataset_store import init_store, AUTODOC_DATASET_NAME
         init_layout()
-        _init_cli_dataset_store()
+        _init_cli_dataset_ctx()
         output_dir = get_layout().docs_dir
         code_dir = settings.code_root if settings.code_root.exists() else _get_default_code_root()
 
@@ -381,9 +379,10 @@ def _regenerate_notebook_from_cache(
     console.print("\n[bold blue]Regenerating notebook from cache...[/]\n")
 
     from artifact_layout import get_layout
-    from dataset_store import get_store
+    from dataset_ctx import get_dataset_ctx
+    from dataset_manager import DatasetManager
     cache_path = get_layout().generation_cache
-    if not get_store().file_exists(cache_path):
+    if not DatasetManager.file_exists(get_dataset_ctx().snapshot_id, cache_path):
         console.print(
             f"[bold red]Error:[/] No cached results found at {cache_path}",
             style="red",
@@ -425,34 +424,25 @@ def _regenerate_notebook_from_cache(
     console.print()
 
 
-def _init_cli_dataset_store() -> None:
-    """Initialize the DatasetStore for CLI mode (Domino job container).
-
-    In a Domino job container, we have access to the Domino API and
-    need to find or create the autodoc dataset in the current project.
+def _init_cli_dataset_ctx() -> None:
+    """Resolve the autodoc dataset for the current Domino job and set the
+    per-process dataset context so downstream helpers can read/write it.
     """
-    from dataset_store import init_store, AUTODOC_DATASET_NAME
+    from dataset_ctx import set_dataset_ctx
+    from dataset_manager import resolve_autodoc_dataset
+
     project_id = os.environ.get("DOMINO_PROJECT_ID", "")
     if not project_id:
         raise RuntimeError(
             "DOMINO_PROJECT_ID not set. "
             "The CLI requires Domino environment variables."
         )
-    # Import here to avoid circular imports at module level
     try:
-        from domino_datasets import ensure_dataset, get_rw_snapshot_id
-        ds = ensure_dataset(
-            project_id=project_id,
-            name=AUTODOC_DATASET_NAME,
-            description="Auto Model Docs artifacts",
-        )
-        snap_id = ds.get("rwSnapshotId") or ""
-        if not snap_id:
-            snap_id = get_rw_snapshot_id(ds["id"], project_id) or ""
-        init_store(ds["id"], snap_id, project_id)
+        ds_id, snap_id = resolve_autodoc_dataset(project_id)
+        set_dataset_ctx(ds_id, snap_id)
     except Exception as exc:
         raise RuntimeError(
-            f"Failed to initialize DatasetStore for CLI: {exc}"
+            f"Failed to initialize dataset context for CLI: {exc}"
         ) from exc
 
 
