@@ -327,8 +327,9 @@ class Orchestrator:
     def _save_results_cache(
         self, spec: DocumentSpec, results: List[SectionResult]
     ) -> None:
-        """Save generation results to cache via DatasetStore."""
-        from dataset_store import get_store
+        """Save generation results to cache via DatasetManager."""
+        from dataset_ctx import get_dataset_ctx
+        from dataset_manager import DatasetManager
         cache_data = {
             "spec": {
                 "title": spec.title,
@@ -346,10 +347,10 @@ class Orchestrator:
 
         cache_path = self._get_cache_path()
         content = json.dumps(cache_data, indent=2).encode("utf-8")
-        get_store().write_file(cache_path, content)
+        DatasetManager.write_file(get_dataset_ctx().dataset_id, cache_path, content)
 
     def _load_results_cache(self) -> tuple[DocumentSpec, List[SectionResult]]:
-        """Load generation results from cache via DatasetStore.
+        """Load generation results from cache via DatasetManager.
 
         Returns:
             Tuple of (DocumentSpec, List[SectionResult]).
@@ -357,16 +358,17 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If cache file doesn't exist.
         """
-        from dataset_store import get_store
+        from dataset_ctx import get_dataset_ctx
+        from dataset_manager import DatasetManager
         cache_path = self._get_cache_path()
-        store = get_store()
-        if not store.file_exists(cache_path):
+        snap_id = get_dataset_ctx().snapshot_id
+        if not DatasetManager.file_exists(snap_id, cache_path):
             raise FileNotFoundError(
                 f"No cached results found at {cache_path}. "
                 "Run full generation first with --notebook flag."
             )
 
-        content = store.read_file(cache_path)
+        content = DatasetManager.read_file(snap_id, cache_path)
         cache_data = json.loads(content)
 
         # Reconstruct DocumentSpec

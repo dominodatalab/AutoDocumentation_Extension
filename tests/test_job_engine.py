@@ -85,7 +85,7 @@ def _build_mock_state():
     mock_state = ModuleType("studio.state")
     mock_state._get_username = MagicMock(return_value="test_user")
     mock_state._max_jobs = MagicMock(return_value=1)
-    mock_state._get_target_project_id = MagicMock(return_value="proj-123")
+    mock_state.bootstrap_dataset_ctx = MagicMock()
     mock_state.logger = MagicMock()
     mock_state.JobRequest = JobRequest
     mock_state.DominoJobRecord = DominoJobRecord
@@ -295,16 +295,20 @@ class TestSubmitDominoJob:
             "domino_run_id": "run-xyz",
         }
 
-        # Mock the dataset_store.get_store().file_exists_api() check
-        mock_ds_store = MagicMock()
-        mock_ds_store.file_exists_api.return_value = True
-        with patch.dict(sys.modules, {"dataset_store": MagicMock(get_store=lambda: mock_ds_store)}):
-            req = JobRequest(
-                spec_path="dataset://my-dataset/spec.yaml",
-                provider="anthropic", project_id="proj-123",
-            )
-            await je._submit_domino_job(req, "test_user")
-        # Verify the spec path was resolved to an absolute mount path
+        import dataset_ctx, dataset_manager
+        with patch.object(
+            dataset_manager.DatasetManager, "file_exists",
+            staticmethod(lambda snap, path: True),
+        ):
+            dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+            try:
+                req = JobRequest(
+                    spec_path="dataset://my-dataset/spec.yaml",
+                    provider="anthropic", project_id="proj-123",
+                )
+                await je._submit_domino_job(req, "test_user")
+            finally:
+                dataset_ctx.clear_dataset_ctx()
         call_args = store.create_job.call_args
         spec_in_db = call_args[1].get("spec_path") or call_args[0][3]
         assert spec_in_db == "/mnt/data/my-dataset/spec.yaml"
@@ -315,16 +319,21 @@ class TestSubmitDominoJob:
         je = _import_job_engine()
         _mock_studio.domino_datasets.get_dataset_mount_prefix.return_value = "/mnt/data"
 
-        mock_ds_store = MagicMock()
-        mock_ds_store.file_exists_api.return_value = False
-        with patch.dict(sys.modules, {"dataset_store": MagicMock(get_store=lambda: mock_ds_store)}):
-            req = JobRequest(
-                spec_path="dataset://autodoc/specs/doc_spec.yaml",
-                provider="anthropic", project_id="proj-123",
-            )
-            with pytest.raises(ValueError, match="no longer exists"):
-                await je._submit_domino_job(req, "test_user")
-        # Job should NOT have been created
+        import dataset_ctx, dataset_manager
+        with patch.object(
+            dataset_manager.DatasetManager, "file_exists",
+            staticmethod(lambda snap, path: False),
+        ):
+            dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+            try:
+                req = JobRequest(
+                    spec_path="dataset://autodoc/specs/doc_spec.yaml",
+                    provider="anthropic", project_id="proj-123",
+                )
+                with pytest.raises(ValueError, match="no longer exists"):
+                    await je._submit_domino_job(req, "test_user")
+            finally:
+                dataset_ctx.clear_dataset_ctx()
         _mock_studio.domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio

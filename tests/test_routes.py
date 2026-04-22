@@ -104,8 +104,8 @@ def _mock_studio_modules(monkeypatch):
     )
     mock_state = ModuleType("studio.state")
     mock_state._max_jobs = MagicMock(return_value=1)
-    mock_state._get_target_project_id = MagicMock(return_value="proj-123")
     mock_state._resolve_request_project_id = MagicMock(return_value="proj-123")
+    mock_state.bootstrap_dataset_ctx = MagicMock()
     mock_state._get_default_code_root = MagicMock(return_value=Path("/mnt/code"))
     mock_state.logger = MagicMock()
     mock_state.JobRequest = _MockJobRequest

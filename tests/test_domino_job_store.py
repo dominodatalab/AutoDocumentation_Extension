@@ -1,11 +1,10 @@
-"""Tests for domino_job_store.py — JSON index backed by DatasetStore."""
+"""Tests for domino_job_store.py -- JSON index backed by DatasetManager."""
 
 from __future__ import annotations
 
 import json
 import os
 import sys
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,45 +14,58 @@ for p in (_repo_root, _pkg_dir):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import dataset_store
+import dataset_ctx
+import dataset_manager
 import domino_job_store as store
 
 
-class _FakeStore:
-    """In-memory fake of DatasetStore for testing."""
+class _MemFs:
+    """Tiny byte-addressed in-memory filesystem shared by patched statics."""
 
     def __init__(self):
         self._files: dict[str, bytes] = {}
 
-    def file_exists(self, path: str) -> bool:
+    def exists(self, path: str) -> bool:
         return path in self._files
 
-    def read_file(self, path: str) -> bytes:
+    def read(self, path: str) -> bytes:
         if path not in self._files:
             raise FileNotFoundError(path)
         return self._files[path]
 
-    def write_file(self, path: str, content: bytes) -> None:
+    def write(self, path: str, content: bytes) -> None:
         self._files[path] = content
-
-    def list_files(self, path: str = "") -> list:
-        return []
-
-    def read_file_meta(self, path: str) -> dict:
-        if path not in self._files:
-            raise FileNotFoundError(path)
-        return {"sizeInBytes": len(self._files[path])}
 
 
 @pytest.fixture(autouse=True)
-def _mock_store():
-    """Replace DatasetStore singleton with an in-memory fake."""
-    fake = _FakeStore()
-    dataset_store.reset_store()
-    dataset_store._store = fake
-    store.init_db()
-    yield fake
-    dataset_store.reset_store()
+def _mock_store(monkeypatch):
+    """Patch DatasetManager static methods to read/write an in-memory fs."""
+    fs = _MemFs()
+
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "write_file",
+        staticmethod(lambda dsid, path, content: fs.write(path, content)),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "read_file",
+        staticmethod(lambda snap, path: fs.read(path)),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "file_exists",
+        staticmethod(lambda snap, path: fs.exists(path)),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "list_files",
+        staticmethod(lambda snap, path="": []),
+    )
+    monkeypatch.setattr(
+        dataset_manager.DatasetManager, "read_file_meta",
+        staticmethod(lambda snap, path: {"sizeInBytes": len(fs.read(path))}),
+    )
+
+    dataset_ctx.set_dataset_ctx("ds-test", "snap-test")
+    yield fs
+    dataset_ctx.clear_dataset_ctx()
 
 
 class TestCreateAndGetJob:
@@ -199,14 +211,13 @@ class TestCancelQueuedJobs:
 class TestIndexPersistence:
     def test_index_stored_in_dataset(self, _mock_store):
         store.create_job("alice", "main", "small", "/spec.yaml")
-        assert _mock_store.file_exists(".autodoc/jobs_index.json")
-        content = json.loads(_mock_store.read_file(".autodoc/jobs_index.json"))
+        assert _mock_store.exists(".autodoc/jobs_index.json")
+        content = json.loads(_mock_store.read(".autodoc/jobs_index.json"))
         assert len(content) == 1
         assert content[0]["owner_id"] == "alice"
 
     def test_survives_read_cycle(self, _mock_store):
         store.create_job("alice", "main", "s", "/a.yaml", job_id="j1")
         store.create_job("bob", "main", "s", "/b.yaml", job_id="j2")
-        # Read back
         assert store.get_job("j1")["owner_id"] == "alice"
         assert store.get_job("j2")["owner_id"] == "bob"
