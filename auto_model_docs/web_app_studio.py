@@ -768,20 +768,6 @@ async def _on_startup():
     import studio.state as _state
     _state._STARTUP_WARNINGS = _validate_environment()
 
-    _debug_env_keys = [
-        "DOMINO_API_HOST",
-        "DOMINO_API_PROXY",
-        "DOMINO_USER_API_KEY",
-        "DOMINO_API_KEY",
-        "DOMINO_USER_HOST",
-        "DOMINO_STARTING_USERNAME",
-        "DOMINO_PROJECT_ID",
-        "DOMINO_PROJECT_NAME",
-        "DOMINO_PROJECT_OWNER",
-        "DOMINO_RUN_ID",
-        "DOMINO_TOKEN_FILE",
-    ]
-
 
 # ---------------------------------------------------------------------------
 # Serve
