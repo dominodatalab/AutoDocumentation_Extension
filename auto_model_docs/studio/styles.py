@@ -297,6 +297,13 @@ a:hover { color: var(--primary-container); }
     font-family: ui-monospace, monospace;
     white-space: nowrap;
     user-select: none;
+    min-width: 6.5rem;
+    max-width: 55%;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.code-root-prefix option {
+    font-family: ui-monospace, monospace;
 }
 .code-root-suffix {
     flex: 1;

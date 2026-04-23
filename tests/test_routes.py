@@ -111,6 +111,10 @@ def _mock_studio_modules(monkeypatch):
     mock_state.JobRequest = _MockJobRequest
     mock_state.DominoJobRecord = _MockDominoJobRecord
     mock_state.domino_client = MagicMock()
+    import domino_client as _dc
+    mock_state.domino_client.code_root_options_from_browse_response = (
+        _dc.code_root_options_from_browse_response
+    )
     mock_state.domino_job_store = MagicMock()
     mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
@@ -375,6 +379,44 @@ class TestApiRoutes:
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={})
         await routes["/api/resolve-project"](req)  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_code_root_options_no_project_id(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={})
+        result = await routes["/api/code-root-options"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body.decode())
+        assert body["defaultRoot"] == "/mnt/code"
+        assert len(body["options"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_code_root_options_from_browse(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        mock_info = MagicMock()
+        mock_info.name = "doc-target1"
+        mock_info.owner_username = "integration-test"
+        client.resolve_project.return_value = mock_info
+        client.browse_code.return_value = {
+            "projectSettings": {
+                "isGitBasedProject": False,
+                "repositories": [
+                    {"location": "/repos/simple-demo", "repoName": "simple-demo"},
+                ],
+            },
+        }
+        req = _make_request(query_params={"projectId": "proj-xyz"})
+        result = await routes["/api/code-root-options"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body.decode())
+        assert body["isGitBasedProject"] is False
+        assert body["defaultRoot"] == "/mnt"
+        vals = [o["value"] for o in body["options"]]
+        assert "/mnt" in vals
+        assert "/repos/simple-demo" in vals
 
 
 # ===========================================================================

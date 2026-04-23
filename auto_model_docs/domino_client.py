@@ -181,6 +181,45 @@ def get_project_context(
     return project_id, None, None
 
 
+def browse_code(
+    owner_username: str,
+    project_name: str,
+    *,
+    path_string: str = "",
+) -> dict[str, Any]:
+    """GET /v4/code/browseCode for the project root (empty path)."""
+    params: dict[str, Any] = {
+        "ownerUsername": owner_username,
+        "projectName": project_name,
+        "pathString": path_string,
+    }
+    return _domino_request("GET", "/v4/code/browseCode", params=params)
+
+
+def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, Any]:
+    """Build combobox payload from browseCode JSON (projectSettings)."""
+    ps = browse.get("projectSettings") or {}
+    is_git = bool(ps.get("isGitBasedProject"))
+    default_root = "/mnt/code" if is_git else "/mnt"
+    options: list[dict[str, str]] = [{"value": default_root, "label": default_root}]
+    seen: set[str] = {default_root}
+    for repo in ps.get("repositories") or []:
+        if not isinstance(repo, dict):
+            continue
+        loc = str(repo.get("location") or "").strip()
+        if not loc or loc in seen:
+            continue
+        seen.add(loc)
+        name = str(repo.get("repoName") or "").strip()
+        label = f"{loc} ({name})" if name else loc
+        options.append({"value": loc, "label": label})
+    return {
+        "isGitBasedProject": is_git,
+        "defaultRoot": default_root,
+        "options": options,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Branches
 # ---------------------------------------------------------------------------

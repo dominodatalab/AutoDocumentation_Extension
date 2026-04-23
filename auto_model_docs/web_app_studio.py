@@ -356,12 +356,17 @@ async def index(req: Request):
     # Run settings card
     run_card_children = []
 
-    # Code root
+    _init_code_root = str(_get_default_code_root())
     run_card_children.append(
         Div(
-            Label("Code root path", for_="code-root-suffix"),
+            Label("Code root path", for_="code-root-prefix"),
             Div(
-                Span(str(_get_default_code_root()), id="code-root-prefix", cls="code-root-prefix"),
+                Select(
+                    Option(_init_code_root, value=_init_code_root, selected=True),
+                    id="code-root-prefix",
+                    cls="code-root-prefix",
+                    aria_label="Code root base path",
+                ),
                 Input(
                     id="code-root-suffix",
                     type="text",
@@ -372,7 +377,7 @@ async def index(req: Request):
                     name="code_root",
                     id="field-code_root",
                     type="hidden",
-                    value=str(_get_default_code_root()),
+                    value=_init_code_root,
                 ),
                 cls="code-root-wrap",
             ),

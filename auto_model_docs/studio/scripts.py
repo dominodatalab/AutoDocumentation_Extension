@@ -521,16 +521,54 @@ MAIN_DOM_JS = r"""
                 });
         }
 
-        // ── Code root prefix+suffix sync ──────────────────────────────────
+        // ── Code root prefix select + suffix sync / browseCode options ─────
         (function() {
             const prefix = document.getElementById('code-root-prefix');
             const suffix = document.getElementById('code-root-suffix');
             const hidden = document.getElementById('field-code_root');
+            function basePath() {
+                if (!prefix) return '';
+                if (prefix.tagName === 'SELECT') {
+                    return (prefix.value || '').trim();
+                }
+                return (prefix.textContent || '').trim();
+            }
             function sync() {
-                if (!prefix || !hidden) return;
-                const base = prefix.textContent.trim();
+                if (!hidden) return;
+                const base = basePath();
                 const sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
                 hidden.value = sub ? base + '/' + sub : base;
+            }
+            function loadCodeRootOptions() {
+                if (!prefix || prefix.tagName !== 'SELECT') return;
+                var pid = new URLSearchParams(window.location.search).get('projectId');
+                if (!pid) return;
+                var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
+                fetch(url)
+                    .then(_checkResp).then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var opts = data.options || [];
+                        var defRoot = data.defaultRoot || '';
+                        if (!opts.length) return;
+                        prefix.innerHTML = '';
+                        for (var i = 0; i < opts.length; i++) {
+                            var o = opts[i];
+                            var opt = document.createElement('option');
+                            opt.value = o.value || '';
+                            opt.textContent = o.label || o.value || '';
+                            prefix.appendChild(opt);
+                        }
+                        var pick = defRoot;
+                        for (var j = 0; j < prefix.options.length; j++) {
+                            if (prefix.options[j].value === pick) {
+                                prefix.selectedIndex = j;
+                                break;
+                            }
+                        }
+                        sync();
+                        detectLanguageFromCodeRoot();
+                    })
+                    .catch(function() {});
             }
             if (suffix) {
                 suffix.addEventListener('input', sync);
@@ -540,7 +578,14 @@ MAIN_DOM_JS = r"""
                     langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
                 });
             }
+            if (prefix && prefix.tagName === 'SELECT') {
+                prefix.addEventListener('change', function() {
+                    sync();
+                    detectLanguageFromCodeRoot();
+                });
+            }
             sync();
+            loadCodeRootOptions();
         })();
 
         // Block form submission when no spec is selected
