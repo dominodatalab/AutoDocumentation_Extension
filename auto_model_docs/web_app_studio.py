@@ -236,7 +236,8 @@ async def index(req: Request):
     # Dataset browser + upload
     spec_card_children.append(
         Div(
-            Label("Spec file", Span(" *", cls="required-star")),
+            Label("Spec file selection", Span(" *", cls="required-star")),
+            Label("Dataset to browse spec files", Span(" *", cls="required-star")),
             Div(
                 Select(
                     Option("Loading datasets...", value="", disabled=True, selected=True),
