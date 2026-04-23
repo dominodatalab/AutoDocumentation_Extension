@@ -237,8 +237,7 @@ async def index(req: Request):
     spec_card_children.append(
         Div(
             Label("Spec file selection", Span(" *", cls="required-star")),
-            Div(cls="section-divider"),
-       
+            Hr(cls="section-divider"),
             Label("Select a dataset to browse files", Span(" *", cls="required-star")),
             Div(
                 Select(
