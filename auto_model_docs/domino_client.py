@@ -85,7 +85,8 @@ def _domino_request(
 
     for attempt in range(max_retries + 1):
         headers = _get_auth_headers()
-        headers["Content-Type"] = "application/json"
+        if json is not None:
+            headers["Content-Type"] = "application/json"
         try:
             with httpx.Client(timeout=timeout) as client:
                 resp = client.request(method, url, json=json, params=params, headers=headers)
@@ -95,8 +96,19 @@ def _domino_request(
                     continue
                 resp.raise_for_status()
                 return resp.json()
-        except httpx.HTTPStatusError:
-            # Don't retry client errors (4xx) — only transient server errors
+        except httpx.HTTPStatusError as e:
+            try:
+                body_preview = (e.response.text or "")[:2000]
+            except Exception:
+                body_preview = "(could not read body)"
+            logger.warning(
+                "Domino API HTTP %s %s status=%s url=%s response_body=%r",
+                method,
+                path,
+                e.response.status_code,
+                str(e.request.url),
+                body_preview,
+            )
             raise
         except Exception as exc:
             last_exc = exc
@@ -187,11 +199,12 @@ def browse_code(
     *,
     path_string: str = "",
 ) -> dict[str, Any]:
-    """GET /v4/code/browseCode for the project root (empty path)."""
+    """GET /v4/code/browseCode. Domino requires ``pathString``; project root is ``/``."""
+    path_param = (path_string or "").strip() or "/"
     params: dict[str, Any] = {
         "ownerUsername": owner_username,
         "projectName": project_name,
-        "pathString": path_string,
+        "pathString": path_param,
     }
     return _domino_request("GET", "/v4/code/browseCode", params=params)
 

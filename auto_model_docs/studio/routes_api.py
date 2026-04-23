@@ -257,7 +257,13 @@ def register_api_routes(rt):
             payload = domino_client.code_root_options_from_browse_response(raw)
             return Response(json.dumps(payload), media_type="application/json")
         except Exception as exc:
-            logger.warning("browseCode for code-root-options failed: %s", exc)
+            detail = str(exc)
+            if hasattr(exc, "response") and exc.response is not None:
+                try:
+                    detail = f"{exc} body={exc.response.text[:1500]!r}"
+                except Exception:
+                    pass
+            logger.warning("browseCode for code-root-options failed: %s", detail)
             return Response(json.dumps(fallback), media_type="application/json")
 
     rt("/api/code-root-options")(api_code_root_options)

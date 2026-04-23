@@ -230,7 +230,12 @@ class TestBrowseCodeAndCodeRootOptions:
         params = mock_req.call_args.kwargs["params"]
         assert params["ownerUsername"] == "alice"
         assert params["projectName"] == "myproj"
-        assert params["pathString"] == ""
+        assert params["pathString"] == "/"
+
+    def test_browse_code_non_empty_path(self):
+        with patch.object(dc, "_domino_request", return_value={}) as mock_req:
+            browse_code("alice", "myproj", path_string="src/")
+        assert mock_req.call_args.kwargs["params"]["pathString"] == "src/"
 
     def test_code_root_gbp_and_dynamic(self):
         raw = {
