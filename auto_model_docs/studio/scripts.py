@@ -10,6 +10,20 @@ MAIN_DOM_JS = r"""
         return r;
     }
 
+    // ── URL prefixing for Domino app proxy ──
+    // Domino serves this app under /apps/<id>/ (or /apps-internal/<id>/).
+    // The served page URL has no trailing slash, so relative URLs like
+    // "api/datasets" resolve to "/apps/api/datasets" and break. We derive
+    // the prefix from window.location.pathname and prepend it ourselves.
+    var _AD_APP_BASE = (function() {
+        var m = (window.location.pathname || '').match(/^(\/apps(?:-internal)?\/[^/]+)/i);
+        return m ? m[1] + '/' : '';
+    })();
+    function _adUrl(rel) {
+        if (!_AD_APP_BASE) return rel;
+        return _AD_APP_BASE + (rel.charAt(0) === '/' ? rel.slice(1) : rel);
+    }
+
     // ── Hardware tier card selection ──
     function selectHwTier(card, tierId) {
         var grid = card.closest('.hw-tier-grid');
@@ -74,7 +88,7 @@ MAIN_DOM_JS = r"""
         var langSelect = document.getElementById('lang-override-select');
 
         function detectLanguage(codeRoot) {
-            var url = 'api/detect-language';
+            var url = _adUrl('api/detect-language');
             if (codeRoot) url += '?code_root=' + encodeURIComponent(codeRoot);
             fetch(url)
                 .then(_checkResp).then(function(r) { return r.json(); })
@@ -123,7 +137,7 @@ MAIN_DOM_JS = r"""
                     var pid = projectIdInput.value.trim();
                     var qs = pid ? '?projectId=' + encodeURIComponent(pid) : '';
                     // Resolve project name
-                    fetch('api/resolve-project' + qs)
+                    fetch(_adUrl('api/resolve-project') + qs)
                         .then(_checkResp).then(function(r) { return r.text(); })
                         .then(function(html) {
                             var el = document.getElementById('project-id-resolved');
@@ -134,7 +148,7 @@ MAIN_DOM_JS = r"""
                         .catch(function() {});
                     // Refresh hardware tiers
                     if (typeof htmx !== 'undefined') {
-                        htmx.ajax('GET', 'api/hardware-tiers' + qs, {
+                        htmx.ajax('GET', _adUrl('api/hardware-tiers') + qs, {
                             target: '#field-hardware_tier',
                             swap: 'outerHTML'
                         });
@@ -208,7 +222,7 @@ MAIN_DOM_JS = r"""
                 return;
             }
             console.log('[spec-browser] Loading writable datasets...');
-            fetch('api/datasets' + '?projectId=' + encodeURIComponent(pid))
+            fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
                     if (datasets.error) {
@@ -282,7 +296,7 @@ MAIN_DOM_JS = r"""
 
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
-            fetch('api/dataset-files' + queryApiDatasetFiles(path), { signal: ctrl.signal })
+            fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
                     if (!Array.isArray(files)) {
@@ -404,7 +418,7 @@ MAIN_DOM_JS = r"""
                 var fd = new FormData();
                 fd.append('datasetId', uploadDsId);
                 fd.append('file', file);
-                fetch('api/upload-spec-to-dataset' + qs, { method: 'POST', body: fd })
+                fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
@@ -464,7 +478,7 @@ MAIN_DOM_JS = r"""
             fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
             if (resultEl) resultEl.innerHTML = '<span style="color:var(--outline);font-size:0.8125rem;">Validating spec...</span>';
-            fetch('validate-spec', { method: 'POST', body: fd })
+            fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (resultEl) resultEl.outerHTML = html;
@@ -573,7 +587,7 @@ MAIN_DOM_JS = r"""
                 wasOpen = details.open;
                 prevCount = details.querySelectorAll('tbody tr').length;
             }
-            fetch('job-history' + queryJobHistory())
+            fetch(_adUrl('job-history') + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (!_htmxBusy) {

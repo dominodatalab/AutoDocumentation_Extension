@@ -60,12 +60,13 @@ app, rt = fast_app(
 )
 
 
-def _app_base_href(req: Request) -> str:
-    """Return the app's base URL path for a <base href> tag.
+def _app_url_prefix(req: Request) -> str:
+    """Return the app's URL path prefix (e.g. "/apps/<id>/") or "" if none.
 
-    Uses ASGI root_path when the proxy sets it (preferred). Falls back to
-    parsing /apps/<id>/ out of the request path for Domino deployments
-    where root_path is not forwarded. Always ends with a trailing slash.
+    Domino serves this app under /apps/<id>/ without forwarding the prefix
+    via ASGI root_path, and the page URL has no trailing slash, so relative
+    URLs break. We derive the prefix from the request path and prepend it
+    to hrefs and htmx targets. JS does the same on the client for fetch().
     """
     root = str(req.scope.get("root_path") or "").strip()
     if root:
@@ -74,9 +75,9 @@ def _app_base_href(req: Request) -> str:
         return root if root.endswith("/") else root + "/"
     raw_path = req.scope.get("path") or str(req.url.path)
     parts = [p for p in str(raw_path).split("?")[0].split("/") if p]
-    if len(parts) >= 2 and parts[0] == "apps":
+    if len(parts) >= 2 and parts[0] in ("apps", "apps-internal"):
         return "/" + "/".join(parts[:2]) + "/"
-    return "./"
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +203,7 @@ async def index(req: Request):
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
 
-    app_base_href = _app_base_href(req)
+    app_prefix = _app_url_prefix(req)
 
     default_spec = _get_default_spec_path()
     import auth_context
@@ -292,7 +293,7 @@ async def index(req: Request):
                     cls="upload-btn",
                 ),
                 Span(id="spec-upload-status", cls="spec-upload-status"),
-                A("Download reference template", href="api/download-template",
+                A("Download reference template", href=f"{app_prefix}api/download-template",
                   download="doc_spec_template.yaml",
                   style="color: var(--primary); font-size: 0.8125rem; margin-left: auto;"),
                 cls="spec-actions-row",
@@ -652,7 +653,6 @@ async def index(req: Request):
 
     return (
         Title("Auto Model Docs Studio"),
-        Base(href=app_base_href),
         # Header
         Div(
             Div(
@@ -664,7 +664,7 @@ async def index(req: Request):
                         style="margin:0;color:var(--muted, #888);font-size:11px;"
                               "font-family:monospace;letter-spacing:0.02em;",
                     ),
-                    A("Logs", href="logs", target="_blank", rel="noopener",
+                    A("Logs", href=f"{app_prefix}logs", target="_blank", rel="noopener",
                       style="color:var(--primary);font-size:12px;font-weight:600;"
                             "text-decoration:underline;"),
                     style="margin-left:auto;align-self:flex-start;display:flex;"
@@ -691,7 +691,7 @@ async def index(req: Request):
                 ),
                 id="main-form",
                 data_execution_mode="domino",
-                hx_post="run",
+                hx_post=f"{app_prefix}run",
                 hx_target="#job-history-content",
                 hx_swap="innerHTML",
                 hx_encoding="multipart/form-data",
