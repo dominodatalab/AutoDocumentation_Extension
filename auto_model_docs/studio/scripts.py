@@ -248,19 +248,19 @@ MAIN_DOM_JS = r"""
                     _specDatasets = datasets;
                     console.log('[spec-browser] Loaded ' + datasets.length + ' datasets:', datasets.map(function(d) { return d.name; }));
                     if (datasets.length === 0) {
-                        specDatasetSelect.innerHTML = '<option value="">No datasets found for this project</option>';
-                        console.warn('[spec-browser] No writable datasets returned — upload a spec file to auto-create one');
+                        specDatasetSelect.innerHTML = '<option value="">No datasets found</option>';
+                        console.warn('[spec-browser] No writable datasets returned');
                         return;
                     }
-                    var html = '<option value="">Choose a dataset...</option>';
+                    var html = '';
                     for (var i = 0; i < datasets.length; i++) {
                         html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
                             + datasets[i].name + '</option>';
                     }
                     specDatasetSelect.innerHTML = html;
 
-                    // Auto-select autodoc if it exists
-                    for (var j = 0; j < datasets.length; j++) {
+                    var j;
+                    for (j = 0; j < datasets.length; j++) {
                         if (datasets[j].name === 'autodoc') {
                             specDatasetSelect.value = datasets[j].id;
                             _specAutoDocSpecsId = datasets[j].id;
@@ -268,6 +268,9 @@ MAIN_DOM_JS = r"""
                             return;
                         }
                     }
+                    specDatasetSelect.selectedIndex = 0;
+                    _specAutoDocSpecsId = datasets[0].id;
+                    onDatasetChange();
                 })
                 .catch(function(err) {
                     console.error('[spec-browser] Failed to load datasets:', err);
@@ -300,10 +303,10 @@ MAIN_DOM_JS = r"""
 
         function browseFiles(path) {
             _specCurrentPath = path;
-            if (!specFileList) return;
+            if (!specFileList) return Promise.resolve();
             if (!_specCurrentDatasetId) {
                 specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
-                return;
+                return Promise.resolve();
             }
             console.log('[spec-browser] Browsing path:', path || '(root)', 'in dataset:', _specCurrentDatasetName);
             specFileList.innerHTML = '<span class="spec-file-empty">Loading...</span>';
@@ -311,7 +314,7 @@ MAIN_DOM_JS = r"""
 
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
-            fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
+            return fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
                     if (!Array.isArray(files)) {
@@ -329,7 +332,6 @@ MAIN_DOM_JS = r"""
                         return;
                     }
                     var html = '';
-                    // Sort: directories first, then files
                     files.sort(function(a, b) {
                         if (a.isDirectory && !b.isDirectory) return -1;
                         if (!a.isDirectory && b.isDirectory) return 1;
@@ -348,7 +350,6 @@ MAIN_DOM_JS = r"""
                     }
                     specFileList.innerHTML = html;
 
-                    // Attach click handlers
                     var items = specFileList.querySelectorAll('.spec-file-item');
                     for (var j = 0; j < items.length; j++) {
                         items[j].addEventListener('click', onFileClick);
@@ -432,6 +433,7 @@ MAIN_DOM_JS = r"""
                 var qs = queryApiDatasets();
                 var fd = new FormData();
                 fd.append('datasetId', uploadDsId);
+                fd.append('relativeDir', _specCurrentPath || '');
                 fd.append('file', file);
                 fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
                     .then(_checkResp).then(function(r) { return r.json(); })
@@ -439,14 +441,28 @@ MAIN_DOM_JS = r"""
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.style.color = '#2e7d32'; }
-                        // Select the uploaded file
-                        selectSpecFile('autodoc', result.path);
-                        // Refresh datasets if autodoc was just created
-                        loadDatasets();
+                        var dsName = _specCurrentDatasetName || 'dataset';
+                        var savedPath = result.path;
+                        selectSpecFile(dsName, savedPath);
+                        return browseFiles(_specCurrentPath).then(function() {
+                            if (!savedPath || !specFileList) return;
+                            var rows = specFileList.querySelectorAll('.spec-file-item');
+                            for (var ri = 0; ri < rows.length; ri++) {
+                                if (rows[ri].getAttribute('data-dir') === 'true') continue;
+                                if (rows[ri].getAttribute('data-path') === savedPath) {
+                                    for (var rj = 0; rj < rows.length; rj++) rows[rj].classList.remove('selected');
+                                    rows[ri].classList.add('selected');
+                                    break;
+                                }
+                            }
+                        });
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.style.color = '#ba1a1a'; }
+                    })
+                    .finally(function() {
+                        specMachineUpload.value = '';
                     });
             });
         }

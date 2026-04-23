@@ -23,6 +23,19 @@ from .state import (
 logger = logging.getLogger(__name__)
 
 
+def sanitize_dataset_subpath(raw: Optional[str]) -> str:
+    if raw is None or not str(raw).strip():
+        return ""
+    parts: list[str] = []
+    for seg in str(raw).replace("\\", "/").strip().strip("/").split("/"):
+        if not seg or seg == ".":
+            continue
+        if seg == "..":
+            raise ValueError("Invalid relativeDir")
+        parts.append(seg)
+    return "/".join(parts)
+
+
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
@@ -166,9 +179,19 @@ def register_api_routes(rt):
         content = await file_upload.read()
 
         try:
-            from artifact_layout import get_layout
+            rel_dir = sanitize_dataset_subpath(
+                str(form.get("relativeDir", "") or "").strip()
+            )
+        except ValueError as exc:
+            return Response(
+                json.dumps({"error": str(exc)}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        try:
             from dataset_manager import DatasetManager
-            upload_path = f"{get_layout().specs_dir}/{filename}"
+            upload_path = f"{rel_dir}/{filename}" if rel_dir else filename
             DatasetManager.write_file(dataset_id, upload_path, content)
             return Response(
                 json.dumps({"path": upload_path, "fileName": filename}),
