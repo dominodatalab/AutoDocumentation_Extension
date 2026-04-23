@@ -37,6 +37,11 @@ from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
+from temporary_versioning import get_deploy_version_label
+
+
+# TEMP: remove deploy hint: import above, Div with get_deploy_version_label in index(), temporary_versioning.py
+
 
 # ---------------------------------------------------------------------------
 # Create FastHTML app with styles and scripts
@@ -631,9 +636,18 @@ async def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
-                A("Logs", href="logs", target="_blank", rel="noopener",
-                  style="margin-left:auto;align-self:flex-start;color:var(--primary);"
-                        "font-size:12px;font-weight:600;text-decoration:underline;"),
+                Div(
+                    P(
+                        get_deploy_version_label(),
+                        style="margin:0;color:var(--muted, #888);font-size:11px;"
+                              "font-family:monospace;letter-spacing:0.02em;",
+                    ),
+                    A("Logs", href="logs", target="_blank", rel="noopener",
+                      style="color:var(--primary);font-size:12px;font-weight:600;"
+                            "text-decoration:underline;"),
+                    style="margin-left:auto;align-self:flex-start;display:flex;"
+                          "flex-direction:column;align-items:flex-end;gap:2px;",
+                ),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
