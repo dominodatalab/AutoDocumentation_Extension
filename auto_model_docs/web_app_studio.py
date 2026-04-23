@@ -60,6 +60,25 @@ app, rt = fast_app(
 )
 
 
+def _app_base_href(req: Request) -> str:
+    """Return the app's base URL path for a <base href> tag.
+
+    Uses ASGI root_path when the proxy sets it (preferred). Falls back to
+    parsing /apps/<id>/ out of the request path for Domino deployments
+    where root_path is not forwarded. Always ends with a trailing slash.
+    """
+    root = str(req.scope.get("root_path") or "").strip()
+    if root:
+        if not root.startswith("/"):
+            root = "/" + root
+        return root if root.endswith("/") else root + "/"
+    raw_path = req.scope.get("path") or str(req.url.path)
+    parts = [p for p in str(raw_path).split("?")[0].split("/") if p]
+    if len(parts) >= 2 and parts[0] == "apps":
+        return "/" + "/".join(parts[:2]) + "/"
+    return "./"
+
+
 # ---------------------------------------------------------------------------
 # index() — Blueprint Enterprise 3-Column Layout
 # ---------------------------------------------------------------------------
@@ -182,6 +201,8 @@ async def index(req: Request):
         info = domino_client.resolve_project(project_id)
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
+
+    app_base_href = _app_base_href(req)
 
     default_spec = _get_default_spec_path()
     import auth_context
@@ -631,6 +652,7 @@ async def index(req: Request):
 
     return (
         Title("Auto Model Docs Studio"),
+        Base(href=app_base_href),
         # Header
         Div(
             Div(

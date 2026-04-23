@@ -208,7 +208,7 @@ MAIN_DOM_JS = r"""
                 return;
             }
             console.log('[spec-browser] Loading writable datasets...');
-            fetch('api/datasets?projectId=' + encodeURIComponent(pid))
+            fetch('api/datasets' + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
                     if (datasets.error) {
