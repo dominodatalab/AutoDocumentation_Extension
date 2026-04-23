@@ -554,3 +554,24 @@ class TestSpecRoutes:
 
     # delete_spec and cleanup_specs routes removed — Domino Datasets API
     # does not support file-level deletion.
+
+
+class TestSanitizeDatasetSubpath:
+    def test_empty(self):
+        from studio.routes_api import sanitize_dataset_subpath
+
+        assert sanitize_dataset_subpath("") == ""
+        assert sanitize_dataset_subpath(None) == ""
+
+    def test_normalizes_slashes(self):
+        from studio.routes_api import sanitize_dataset_subpath
+
+        assert sanitize_dataset_subpath("a/b") == "a/b"
+        assert sanitize_dataset_subpath("/a/b/") == "a/b"
+        assert sanitize_dataset_subpath("a//b") == "a/b"
+
+    def test_rejects_dotdot(self):
+        from studio.routes_api import sanitize_dataset_subpath
+
+        with pytest.raises(ValueError, match="Invalid"):
+            sanitize_dataset_subpath("a/../b")
