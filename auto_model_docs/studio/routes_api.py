@@ -100,6 +100,9 @@ def register_api_routes(rt):
                     try:
                         detail = domino_datasets.get_dataset_detail(ds_id)
                         ds["datasetPath"] = detail.get("datasetPath", "")
+                        detail_rw = detail.get("readWriteSnapshotId")
+                        if detail_rw:
+                            ds["rwSnapshotId"] = detail_rw
                     except Exception:
                         ds["datasetPath"] = ""
             return Response(json.dumps(datasets), media_type="application/json")

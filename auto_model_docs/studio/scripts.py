@@ -163,25 +163,46 @@ MAIN_DOM_JS = r"""
         var _specCurrentDatasetPath = '';
         var _specCurrentPath = '';
         var _specAutoDocSpecsId = '';
+        var _specBrowseAbort = null;
 
-        function getProjectIdParam() {
+        function resolvedProjectId() {
             var params = new URLSearchParams(window.location.search);
             var pid = params.get('projectId') || params.get('project_id') || '';
             if (!pid) {
                 var pidInput = document.getElementById('field-project-id');
                 if (pidInput) pid = pidInput.value.trim();
             }
-            var qs = pid ? '&projectId=' + encodeURIComponent(pid) : '';
-            if (_specCurrentDatasetId) qs += '&datasetId=' + encodeURIComponent(_specCurrentDatasetId);
-            if (_specCurrentSnapshotId) qs += '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId);
-            return qs;
+            return pid;
+        }
+
+        function queryApiDatasets() {
+            var pid = resolvedProjectId();
+            return pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+        }
+
+        function queryApiDatasetFiles(relPath) {
+            var parts = [];
+            var pid = resolvedProjectId();
+            if (pid) parts.push('projectId=' + encodeURIComponent(pid));
+            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
+            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
+            if (relPath) parts.push('path=' + encodeURIComponent(relPath));
+            return parts.length ? ('?' + parts.join('&')) : '?';
+        }
+
+        function queryJobHistory() {
+            var parts = [];
+            var pid = resolvedProjectId();
+            if (pid) parts.push('projectId=' + encodeURIComponent(pid));
+            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
+            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
+            return parts.length ? ('?' + parts.join('&')) : '';
         }
 
         function loadDatasets() {
             if (!specDatasetSelect) return;
             console.log('[spec-browser] Loading writable datasets...');
-            var qs = '?' + getProjectIdParam().replace(/^&/, '');
-            fetch('api/datasets' + qs)
+            fetch('api/datasets' + queryApiDatasets())
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
                     if (datasets.error) {
@@ -228,9 +249,15 @@ MAIN_DOM_JS = r"""
             _specCurrentSnapshotId = opt ? opt.getAttribute('data-snapshot') || '' : '';
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
+            if (specPathHidden) specPathHidden.value = '';
+            if (specSelectedIndicator) specSelectedIndicator.style.display = 'none';
+            if (specSelectedName) specSelectedName.textContent = '';
+            var svm = document.getElementById('spec-validation-msg');
+            if (svm) svm.remove();
             if (_specCurrentDatasetId) {
                 browseFiles('');
             } else {
+                if (_specBrowseAbort) { _specBrowseAbort.abort(); _specBrowseAbort = null; }
                 if (specFileList) specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
                 if (specBreadcrumb) specBreadcrumb.innerHTML = '';
             }
@@ -239,21 +266,26 @@ MAIN_DOM_JS = r"""
         function browseFiles(path) {
             _specCurrentPath = path;
             if (!specFileList) return;
+            if (!_specCurrentDatasetId) {
+                specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
+                return;
+            }
             console.log('[spec-browser] Browsing path:', path || '(root)', 'in dataset:', _specCurrentDatasetName);
             specFileList.innerHTML = '<span class="spec-file-empty">Loading...</span>';
             renderBreadcrumb(path);
 
-            var qs = '?datasetId=' + encodeURIComponent(_specCurrentDatasetId);
-            if (_specCurrentSnapshotId) qs += '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId);
-            if (path) qs += '&path=' + encodeURIComponent(path);
-            qs += getProjectIdParam();
-
-            fetch('api/dataset-files' + qs)
+            if (_specBrowseAbort) _specBrowseAbort.abort();
+            var ctrl = _specBrowseAbort = new AbortController();
+            fetch('api/dataset-files' + queryApiDatasetFiles(path), { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
-                    if (files.error) {
-                        console.error('[spec-browser] File listing error:', files.error);
-                        specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
+                    if (!Array.isArray(files)) {
+                        if (files && files.error) {
+                            console.error('[spec-browser] File listing error:', files.error);
+                            specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
+                        } else {
+                            specFileList.innerHTML = '<span class="spec-file-empty">Unexpected response from server</span>';
+                        }
                         return;
                     }
                     console.log('[spec-browser] Found ' + files.length + ' items at path:', path || '(root)');
@@ -287,7 +319,8 @@ MAIN_DOM_JS = r"""
                         items[j].addEventListener('click', onFileClick);
                     }
                 })
-                .catch(function() {
+                .catch(function(err) {
+                    if (err && err.name === 'AbortError') return;
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
                 });
         }
@@ -361,7 +394,7 @@ MAIN_DOM_JS = r"""
                     if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.style.color = '#ba1a1a'; }
                     return;
                 }
-                var qs = '?' + getProjectIdParam().replace(/^&/, '');
+                var qs = queryApiDatasets();
                 var fd = new FormData();
                 fd.append('datasetId', uploadDsId);
                 fd.append('file', file);
@@ -534,7 +567,7 @@ MAIN_DOM_JS = r"""
                 wasOpen = details.open;
                 prevCount = details.querySelectorAll('tbody tr').length;
             }
-            fetch('job-history?' + getProjectIdParam().replace(/^&/, ''))
+            fetch('job-history' + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (!_htmxBusy) {
