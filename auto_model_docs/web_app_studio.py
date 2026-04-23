@@ -19,7 +19,6 @@ configure_auth(user_auth)
 
 from studio.state import (
     _STARTUP_WARNINGS,
-    bootstrap_dataset_ctx,
     _get_default_code_root,
     _get_default_spec_path,
     domino_client,
@@ -34,18 +33,14 @@ from studio.ui_components import (
     _render_job_history_table,
     _validate_environment,
 )
-from studio.job_engine import (
-    _reconcile_stale_jobs,
-)
 from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
+from temporary_versioning import get_deploy_version_label
 
-# Projects for which we've run the once-per-startup stale-job reconciliation
-# this process lifetime. Not a cross-user leak: the value is only used to
-# skip redundant work, never to answer a request.
-_reconciled_projects: set[str] = set()
+
+# TEMP: remove deploy hint: import above, Div with get_deploy_version_label in index(), temporary_versioning.py
 
 
 # ---------------------------------------------------------------------------
@@ -182,16 +177,12 @@ async def index(req: Request):
             ),
         )
 
-    bootstrap_dataset_ctx(project_id)
-    if project_id not in _reconciled_projects:
-        _reconciled_projects.add(project_id)
-        _reconcile_stale_jobs()
-
     project_display_name: Optional[str] = None
     if project_id:
         info = domino_client.resolve_project(project_id)
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
+
 
     default_spec = _get_default_spec_path()
     import auth_context
@@ -245,7 +236,9 @@ async def index(req: Request):
     # Dataset browser + upload
     spec_card_children.append(
         Div(
-            Label("Spec file", Span(" *", cls="required-star")),
+            Label("Spec file selection"),
+            Hr(cls="section-divider"),
+            Label("Select a dataset to browse files", Span(" *", cls="required-star")),
             Div(
                 Select(
                     Option("Loading datasets...", value="", disabled=True, selected=True),
@@ -253,6 +246,7 @@ async def index(req: Request):
                 ),
                 cls="field",
             ),
+            Label("Select a spec file", Span(" *", cls="required-star")),
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),
             Div(
                 Span("Select a dataset to browse spec files", style="color: var(--outline); font-size: 0.8125rem;"),
@@ -282,6 +276,7 @@ async def index(req: Request):
                 ),
                 Span(id="spec-upload-status", cls="spec-upload-status"),
                 A("Download reference template", href="api/download-template",
+                  data_app_rel="api/download-template",
                   download="doc_spec_template.yaml",
                   style="color: var(--primary); font-size: 0.8125rem; margin-left: auto;"),
                 cls="spec-actions-row",
@@ -632,7 +627,7 @@ async def index(req: Request):
     right_col_children.append(
         Div(
             Div(
-                _render_job_history_table(owner_id),
+                _render_job_history_table(owner_id, "", ""),
                 id="job-history-content",
             ),
             cls="output-panel",
@@ -646,9 +641,18 @@ async def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
-                A("Logs", href="logs", target="_blank", rel="noopener",
-                  style="margin-left:auto;align-self:flex-start;color:var(--primary);"
-                        "font-size:12px;font-weight:600;text-decoration:underline;"),
+                Div(
+                    P(
+                        get_deploy_version_label(),
+                        style="margin:0;color:var(--muted, #888);font-size:11px;"
+                              "font-family:monospace;letter-spacing:0.02em;",
+                    ),
+                    A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
+                      style="color:var(--primary);font-size:12px;font-weight:600;"
+                            "text-decoration:underline;"),
+                    style="margin-left:auto;align-self:flex-start;display:flex;"
+                          "flex-direction:column;align-items:flex-end;gap:2px;",
+                ),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
@@ -671,6 +675,7 @@ async def index(req: Request):
                 id="main-form",
                 data_execution_mode="domino",
                 hx_post="run",
+                data_app_rel="run",
                 hx_target="#job-history-content",
                 hx_swap="innerHTML",
                 hx_encoding="multipart/form-data",
@@ -766,6 +771,9 @@ async def capture_auth_context(request, call_next):
 @app.on_event("startup")
 async def _on_startup():
     import studio.state as _state
+    from artifact_layout import init_layout
+
+    init_layout()
     _state._STARTUP_WARNINGS = _validate_environment()
 
 

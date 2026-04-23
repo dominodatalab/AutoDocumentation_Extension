@@ -31,14 +31,10 @@ class NotebookExporter:
     and delegates to DocumentBuilder for Word assembly.
     """
 
-    def __init__(self, output_dir: Path = Path("./output")):
-        """Initialize the notebook exporter.
-
-        Args:
-            output_dir: Directory to save exported documents.
-        """
+    def __init__(self, output_dir: Path = Path("./output"), dataset_mount_path: str = ""):
         self.output_dir = output_dir
-        self.builder = DocumentBuilder(output_dir=output_dir)
+        self.dataset_mount_path = dataset_mount_path
+        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path)
 
     def export_to_word(
         self,
@@ -61,11 +57,8 @@ class NotebookExporter:
         """
         try:
             import io
-            from dataset_ctx import get_dataset_ctx
-            from dataset_manager import DatasetManager
-            content = DatasetManager.read_file(
-                get_dataset_ctx().snapshot_id, str(notebook_path)
-            )
+            import local_data_manager
+            content = local_data_manager.read_file(self.dataset_mount_path, str(notebook_path))
             nb = nbformat.read(io.StringIO(content.decode("utf-8")), as_version=4)
 
             # Extract document metadata and content

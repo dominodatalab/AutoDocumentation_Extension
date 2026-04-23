@@ -1,16 +1,11 @@
-"""Invariants for the stateless DatasetManager facade.
-
-These tests are structural, not behavioral: they exist to detect regressions
-if someone later adds instance state, a class attribute, or a non-static
-method to DatasetManager. The whole point of the class is that it holds no
-state; tests here guard that promise.
-"""
+"""Invariants for the stateless DatasetManager facade and local_data_manager module."""
 
 from __future__ import annotations
 
 import inspect
 import os
 import sys
+import tempfile
 
 import pytest
 
@@ -66,83 +61,29 @@ class TestDatasetManagerShape:
         assert not missing, f"missing expected static methods: {missing}"
 
 
-class TestResolveAutodocDataset:
-    def test_returns_ids_from_rw_snapshot_id(self, monkeypatch):
-        import domino_datasets
+class TestLocalDataManager:
+    def test_write_and_read(self):
+        import local_data_manager
+        with tempfile.TemporaryDirectory() as tmp:
+            local_data_manager.write_file(tmp, "test/hello.txt", b"world")
+            assert local_data_manager.read_file(tmp, "test/hello.txt") == b"world"
 
-        monkeypatch.setattr(
-            domino_datasets, "ensure_dataset",
-            lambda project_id, name, description: {
-                "id": "ds-1", "rwSnapshotId": "snap-1",
-            },
-        )
-        monkeypatch.setattr(
-            domino_datasets, "get_rw_snapshot_id",
-            lambda *a, **kw: "should-not-be-called",
-        )
+    def test_file_exists(self):
+        import local_data_manager
+        with tempfile.TemporaryDirectory() as tmp:
+            assert not local_data_manager.file_exists(tmp, "nope.txt")
+            local_data_manager.write_file(tmp, "yep.txt", b"hi")
+            assert local_data_manager.file_exists(tmp, "yep.txt")
 
-        ds_id, snap_id = dataset_manager.resolve_autodoc_dataset("proj-1")
-        assert ds_id == "ds-1"
-        assert snap_id == "snap-1"
-
-    def test_falls_back_to_get_rw_snapshot_id(self, monkeypatch):
-        import domino_datasets
-
-        monkeypatch.setattr(
-            domino_datasets, "ensure_dataset",
-            lambda project_id, name, description: {"id": "ds-2"},
-        )
-        monkeypatch.setattr(
-            domino_datasets, "get_rw_snapshot_id",
-            lambda *a, **kw: "snap-2",
-        )
-
-        ds_id, snap_id = dataset_manager.resolve_autodoc_dataset("proj-2")
-        assert (ds_id, snap_id) == ("ds-2", "snap-2")
-
-    def test_raises_when_no_dataset_id(self, monkeypatch):
-        import domino_datasets
-
-        monkeypatch.setattr(
-            domino_datasets, "ensure_dataset",
-            lambda project_id, name, description: {"rwSnapshotId": "snap-x"},
-        )
-        with pytest.raises(RuntimeError, match="no ID"):
-            dataset_manager.resolve_autodoc_dataset("proj-3")
-
-    def test_raises_when_no_snapshot_id(self, monkeypatch):
-        import domino_datasets
-
-        monkeypatch.setattr(
-            domino_datasets, "ensure_dataset",
-            lambda project_id, name, description: {"id": "ds-4"},
-        )
-        monkeypatch.setattr(
-            domino_datasets, "get_rw_snapshot_id",
-            lambda *a, **kw: "",
-        )
-        with pytest.raises(RuntimeError, match="rw snapshot"):
-            dataset_manager.resolve_autodoc_dataset("proj-4")
-
-
-class TestDatasetCtx:
-    def test_set_requires_both_ids(self):
-        import dataset_ctx
-        with pytest.raises(ValueError):
-            dataset_ctx.set_dataset_ctx("", "snap")
-        with pytest.raises(ValueError):
-            dataset_ctx.set_dataset_ctx("ds", "")
-
-    def test_get_raises_when_unset(self):
-        import dataset_ctx
-        dataset_ctx.clear_dataset_ctx()
-        with pytest.raises(RuntimeError, match="Dataset context not set"):
-            dataset_ctx.get_dataset_ctx()
-
-    def test_round_trip(self):
-        import dataset_ctx
-        dataset_ctx.set_dataset_ctx("ds-abc", "snap-abc")
-        ctx = dataset_ctx.get_dataset_ctx()
-        assert ctx.dataset_id == "ds-abc"
-        assert ctx.snapshot_id == "snap-abc"
-        dataset_ctx.clear_dataset_ctx()
+    def test_list_files(self):
+        import local_data_manager
+        with tempfile.TemporaryDirectory() as tmp:
+            local_data_manager.write_file(tmp, "a.txt", b"aa")
+            local_data_manager.write_file(tmp, "sub/b.txt", b"bb")
+            root_files = local_data_manager.list_files(tmp)
+            names = {f["fileName"] for f in root_files}
+            assert "a.txt" in names
+            assert "sub" in names
+            sub_files = local_data_manager.list_files(tmp, "sub")
+            assert len(sub_files) == 1
+            assert sub_files[0]["fileName"] == "b.txt"

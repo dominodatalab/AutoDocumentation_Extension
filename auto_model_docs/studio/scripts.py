@@ -10,6 +10,35 @@ MAIN_DOM_JS = r"""
         return r;
     }
 
+    // ── URL prefixing for Domino app proxy ──
+    // Domino serves this app under /apps/<id>/ (or /apps-internal/<id>/).
+    // The served page URL has no trailing slash, so relative URLs like
+    // "api/datasets" resolve to "/apps/api/datasets" and break. We derive
+    // the prefix from window.location.pathname and prepend it ourselves.
+    var _AD_APP_BASE = (function() {
+        var m = (window.location.pathname || '').match(/^(\/apps(?:-internal)?\/[^/]+)/i);
+        return m ? m[1] + '/' : '';
+    })();
+    function _adUrl(rel) {
+        if (!_AD_APP_BASE) return rel;
+        return _AD_APP_BASE + (rel.charAt(0) === '/' ? rel.slice(1) : rel);
+    }
+    // Rewrite any element with data-app-rel="path" to use the full prefix.
+    // Applies to <a href>, <form action>, and htmx hx-post/hx-get.
+    function _adApplyPrefix(root) {
+        var scope = root || document;
+        scope.querySelectorAll('[data-app-rel]').forEach(function(el) {
+            var rel = el.getAttribute('data-app-rel');
+            if (!rel) return;
+            var full = _adUrl(rel);
+            if (el.tagName === 'A') el.setAttribute('href', full);
+            else if (el.tagName === 'FORM') el.setAttribute('action', full);
+            if (el.hasAttribute('hx-post')) el.setAttribute('hx-post', full);
+            if (el.hasAttribute('hx-get')) el.setAttribute('hx-get', full);
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() { _adApplyPrefix(); });
+
     // ── Hardware tier card selection ──
     function selectHwTier(card, tierId) {
         var grid = card.closest('.hw-tier-grid');
@@ -74,7 +103,7 @@ MAIN_DOM_JS = r"""
         var langSelect = document.getElementById('lang-override-select');
 
         function detectLanguage(codeRoot) {
-            var url = 'api/detect-language';
+            var url = _adUrl('api/detect-language');
             if (codeRoot) url += '?code_root=' + encodeURIComponent(codeRoot);
             fetch(url)
                 .then(_checkResp).then(function(r) { return r.json(); })
@@ -123,7 +152,7 @@ MAIN_DOM_JS = r"""
                     var pid = projectIdInput.value.trim();
                     var qs = pid ? '?projectId=' + encodeURIComponent(pid) : '';
                     // Resolve project name
-                    fetch('api/resolve-project' + qs)
+                    fetch(_adUrl('api/resolve-project') + qs)
                         .then(_checkResp).then(function(r) { return r.text(); })
                         .then(function(html) {
                             var el = document.getElementById('project-id-resolved');
@@ -134,11 +163,12 @@ MAIN_DOM_JS = r"""
                         .catch(function() {});
                     // Refresh hardware tiers
                     if (typeof htmx !== 'undefined') {
-                        htmx.ajax('GET', 'api/hardware-tiers' + qs, {
+                        htmx.ajax('GET', _adUrl('api/hardware-tiers') + qs, {
                             target: '#field-hardware_tier',
                             swap: 'outerHTML'
                         });
                     }
+                    loadDatasets();
                 }, 300);
             }
             projectIdInput.addEventListener('change', onProjectIdChange);
@@ -160,28 +190,54 @@ MAIN_DOM_JS = r"""
         var _specCurrentDatasetId = '';
         var _specCurrentDatasetName = '';
         var _specCurrentSnapshotId = '';
+        var _specCurrentDatasetPath = '';
         var _specCurrentPath = '';
         var _specAutoDocSpecsId = '';
+        var _specBrowseAbort = null;
 
-        function getProjectIdParam() {
-            var formEl = document.getElementById('main-form');
-            var pid = '';
-            // Check projectId from query string
+        function resolvedProjectId() {
             var params = new URLSearchParams(window.location.search);
-            pid = params.get('projectId') || params.get('project_id') || '';
-            // Also check the project-id field
+            var pid = params.get('projectId') || params.get('project_id') || '';
             if (!pid) {
                 var pidInput = document.getElementById('field-project-id');
                 if (pidInput) pid = pidInput.value.trim();
             }
-            return pid ? '&projectId=' + encodeURIComponent(pid) : '';
+            return pid;
+        }
+
+        function queryApiDatasets() {
+            var pid = resolvedProjectId();
+            return pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+        }
+
+        function queryApiDatasetFiles(relPath) {
+            var parts = [];
+            var pid = resolvedProjectId();
+            if (pid) parts.push('projectId=' + encodeURIComponent(pid));
+            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
+            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
+            if (relPath) parts.push('path=' + encodeURIComponent(relPath));
+            return parts.length ? ('?' + parts.join('&')) : '?';
+        }
+
+        function queryJobHistory() {
+            var parts = [];
+            var pid = resolvedProjectId();
+            if (pid) parts.push('projectId=' + encodeURIComponent(pid));
+            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
+            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
+            return parts.length ? ('?' + parts.join('&')) : '';
         }
 
         function loadDatasets() {
             if (!specDatasetSelect) return;
+            var pid = resolvedProjectId();
+            if (!pid) {
+                specDatasetSelect.innerHTML = '<option value="">Set a project ID first</option>';
+                return;
+            }
             console.log('[spec-browser] Loading writable datasets...');
-            var qs = '?' + getProjectIdParam().replace(/^&/, '');
-            fetch('api/datasets' + qs)
+            fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
                     if (datasets.error) {
@@ -192,19 +248,19 @@ MAIN_DOM_JS = r"""
                     _specDatasets = datasets;
                     console.log('[spec-browser] Loaded ' + datasets.length + ' datasets:', datasets.map(function(d) { return d.name; }));
                     if (datasets.length === 0) {
-                        specDatasetSelect.innerHTML = '<option value="">No datasets found for this project</option>';
-                        console.warn('[spec-browser] No writable datasets returned — upload a spec file to auto-create one');
+                        specDatasetSelect.innerHTML = '<option value="">No datasets found</option>';
+                        console.warn('[spec-browser] No writable datasets returned');
                         return;
                     }
-                    var html = '<option value="">Choose a dataset...</option>';
+                    var html = '';
                     for (var i = 0; i < datasets.length; i++) {
-                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '">'
+                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
                             + datasets[i].name + '</option>';
                     }
                     specDatasetSelect.innerHTML = html;
 
-                    // Auto-select autodoc if it exists
-                    for (var j = 0; j < datasets.length; j++) {
+                    var j;
+                    for (j = 0; j < datasets.length; j++) {
                         if (datasets[j].name === 'autodoc') {
                             specDatasetSelect.value = datasets[j].id;
                             _specAutoDocSpecsId = datasets[j].id;
@@ -212,6 +268,9 @@ MAIN_DOM_JS = r"""
                             return;
                         }
                     }
+                    specDatasetSelect.selectedIndex = 0;
+                    _specAutoDocSpecsId = datasets[0].id;
+                    onDatasetChange();
                 })
                 .catch(function(err) {
                     console.error('[spec-browser] Failed to load datasets:', err);
@@ -226,10 +285,17 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetId = specDatasetSelect.value;
             _specCurrentDatasetName = opt ? opt.getAttribute('data-name') || '' : '';
             _specCurrentSnapshotId = opt ? opt.getAttribute('data-snapshot') || '' : '';
+            _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
+            if (specPathHidden) specPathHidden.value = '';
+            if (specSelectedIndicator) specSelectedIndicator.style.display = 'none';
+            if (specSelectedName) specSelectedName.textContent = '';
+            var svm = document.getElementById('spec-validation-msg');
+            if (svm) svm.remove();
             if (_specCurrentDatasetId) {
                 browseFiles('');
             } else {
+                if (_specBrowseAbort) { _specBrowseAbort.abort(); _specBrowseAbort = null; }
                 if (specFileList) specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
                 if (specBreadcrumb) specBreadcrumb.innerHTML = '';
             }
@@ -237,22 +303,27 @@ MAIN_DOM_JS = r"""
 
         function browseFiles(path) {
             _specCurrentPath = path;
-            if (!specFileList) return;
+            if (!specFileList) return Promise.resolve();
+            if (!_specCurrentDatasetId) {
+                specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
+                return Promise.resolve();
+            }
             console.log('[spec-browser] Browsing path:', path || '(root)', 'in dataset:', _specCurrentDatasetName);
             specFileList.innerHTML = '<span class="spec-file-empty">Loading...</span>';
             renderBreadcrumb(path);
 
-            var qs = '?datasetId=' + encodeURIComponent(_specCurrentDatasetId);
-            if (_specCurrentSnapshotId) qs += '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId);
-            if (path) qs += '&path=' + encodeURIComponent(path);
-            qs += getProjectIdParam();
-
-            fetch('api/dataset-files' + qs)
+            if (_specBrowseAbort) _specBrowseAbort.abort();
+            var ctrl = _specBrowseAbort = new AbortController();
+            return fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
-                    if (files.error) {
-                        console.error('[spec-browser] File listing error:', files.error);
-                        specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
+                    if (!Array.isArray(files)) {
+                        if (files && files.error) {
+                            console.error('[spec-browser] File listing error:', files.error);
+                            specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
+                        } else {
+                            specFileList.innerHTML = '<span class="spec-file-empty">Unexpected response from server</span>';
+                        }
                         return;
                     }
                     console.log('[spec-browser] Found ' + files.length + ' items at path:', path || '(root)');
@@ -261,7 +332,6 @@ MAIN_DOM_JS = r"""
                         return;
                     }
                     var html = '';
-                    // Sort: directories first, then files
                     files.sort(function(a, b) {
                         if (a.isDirectory && !b.isDirectory) return -1;
                         if (!a.isDirectory && b.isDirectory) return 1;
@@ -280,13 +350,13 @@ MAIN_DOM_JS = r"""
                     }
                     specFileList.innerHTML = html;
 
-                    // Attach click handlers
                     var items = specFileList.querySelectorAll('.spec-file-item');
                     for (var j = 0; j < items.length; j++) {
                         items[j].addEventListener('click', onFileClick);
                     }
                 })
-                .catch(function() {
+                .catch(function(err) {
+                    if (err && err.name === 'AbortError') return;
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
                 });
         }
@@ -355,33 +425,44 @@ MAIN_DOM_JS = r"""
                 // Validate spec content before uploading
                 if (typeof validateSpecContent === 'function') validateSpecContent(file);
 
-                // Ensure autodoc dataset exists, then upload
-                var qs = '?' + getProjectIdParam().replace(/^&/, '');
-                fetch('api/ensure-autodoc-specs' + qs, { method: 'POST' })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(ds) {
-                        if (ds.error) throw new Error(ds.error);
-                        console.log('[spec-browser] autodoc dataset ensured: id=' + ds.id);
-                        _specAutoDocSpecsId = ds.id;
-                        var fd = new FormData();
-                        fd.append('datasetId', ds.id);
-                        fd.append('datasetName', ds.name || 'autodoc');
-                        fd.append('file', file);
-                        return fetch('api/upload-spec-to-dataset' + qs, { method: 'POST', body: fd });
-                    })
+                var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
+                if (!uploadDsId) {
+                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.style.color = '#ba1a1a'; }
+                    return;
+                }
+                var qs = queryApiDatasets();
+                var fd = new FormData();
+                fd.append('datasetId', uploadDsId);
+                fd.append('relativeDir', _specCurrentPath || '');
+                fd.append('file', file);
+                fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.style.color = '#2e7d32'; }
-                        // Select the uploaded file
-                        selectSpecFile('autodoc', result.path);
-                        // Refresh datasets if autodoc was just created
-                        loadDatasets();
+                        var dsName = _specCurrentDatasetName || 'dataset';
+                        var savedPath = result.path;
+                        selectSpecFile(dsName, savedPath);
+                        return browseFiles(_specCurrentPath).then(function() {
+                            if (!savedPath || !specFileList) return;
+                            var rows = specFileList.querySelectorAll('.spec-file-item');
+                            for (var ri = 0; ri < rows.length; ri++) {
+                                if (rows[ri].getAttribute('data-dir') === 'true') continue;
+                                if (rows[ri].getAttribute('data-path') === savedPath) {
+                                    for (var rj = 0; rj < rows.length; rj++) rows[rj].classList.remove('selected');
+                                    rows[ri].classList.add('selected');
+                                    break;
+                                }
+                            }
+                        });
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.style.color = '#ba1a1a'; }
+                    })
+                    .finally(function() {
+                        specMachineUpload.value = '';
                     });
             });
         }
@@ -428,7 +509,7 @@ MAIN_DOM_JS = r"""
             fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
             if (resultEl) resultEl.innerHTML = '<span style="color:var(--outline);font-size:0.8125rem;">Validating spec...</span>';
-            fetch('validate-spec', { method: 'POST', body: fd })
+            fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (resultEl) resultEl.outerHTML = html;
@@ -497,11 +578,22 @@ MAIN_DOM_JS = r"""
         // belong to a different user.
         document.body.addEventListener('htmx:configRequest', function(e) {
             var pid = new URLSearchParams(window.location.search).get('projectId');
-            if (!pid) return;
-            var path = e.detail.path || '';
-            if (/[?&]projectId=/.test(path)) return;
-            e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
-                'projectId=' + encodeURIComponent(pid);
+            if (pid) {
+                var path = e.detail.path || '';
+                if (!/[?&]projectId=/.test(path)) {
+                    e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
+                        'projectId=' + encodeURIComponent(pid);
+                }
+            }
+            if (_specCurrentDatasetId) {
+                e.detail.parameters['datasetId'] = _specCurrentDatasetId;
+            }
+            if (_specCurrentSnapshotId) {
+                e.detail.parameters['snapshotId'] = _specCurrentSnapshotId;
+            }
+            if (_specCurrentDatasetPath) {
+                e.detail.parameters['datasetPath'] = _specCurrentDatasetPath;
+            }
         });
 
         // Poll job history — pause while an HTMX request targets the history panel
@@ -526,7 +618,7 @@ MAIN_DOM_JS = r"""
                 wasOpen = details.open;
                 prevCount = details.querySelectorAll('tbody tr').length;
             }
-            fetch('job-history?' + getProjectIdParam().replace(/^&/, ''))
+            fetch(_adUrl('job-history') + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
                     if (!_htmxBusy) {

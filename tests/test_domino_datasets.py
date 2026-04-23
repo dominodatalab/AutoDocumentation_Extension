@@ -77,64 +77,39 @@ class TestResolveProjectId:
 class TestListDatasets:
     @patch.object(ds, "_api_request")
     def test_single_page(self, mock_req):
-        """v2 API returns datasets with nested 'dataset' wrapper."""
-        mock_req.return_value = _mock_response(json_data={
-            "datasets": [
-                {"dataset": {"datasetId": "ds-1", "datasetName": "my-data",
-                             "readWriteSnapshotId": "snap-1"}},
-                {"dataset": {"datasetId": "ds-2", "datasetName": "autodoc-specs",
-                             "readWriteSnapshotId": "snap-2"}},
-            ]
-        })
+        mock_req.return_value = _mock_response(json_data=[
+            {"datasetRwDto": {"id": "ds-1", "name": "my-data",
+                              "readWriteSnapshotId": "snap-1", "datasetPath": "/mnt/ds1"}},
+            {"datasetRwDto": {"id": "ds-2", "name": "autodoc-specs",
+                              "readWriteSnapshotId": "snap-2", "datasetPath": "/mnt/ds2"}},
+        ])
         result = ds.list_datasets("proj-123")
         assert len(result) == 2
         assert result[0]["name"] == "my-data"
         assert result[0]["rwSnapshotId"] == "snap-1"
+        assert result[0]["datasetPath"] == "/mnt/ds1"
 
     @patch.object(ds, "_api_request")
-    def test_pagination(self, mock_req):
-        page1 = _mock_response(json_data={
-            "datasets": [{"dataset": {"datasetId": f"ds-{i}", "datasetName": f"ds{i}"}}
-                         for i in range(50)]
-        })
-        page2 = _mock_response(json_data={
-            "datasets": [{"dataset": {"datasetId": "ds-50", "datasetName": "ds50"}}]
-        })
-        mock_req.side_effect = [page1, page2]
-        result = ds.list_datasets("proj-123")
-        assert len(result) == 51
-        assert mock_req.call_count == 2
-
-    @patch.object(ds, "_api_request")
-    def test_no_minimum_permission(self, mock_req):
-        """Must NOT send minimumPermission (it causes 500)."""
-        mock_req.return_value = _mock_response(json_data={"datasets": []})
+    def test_uses_v4_endpoint(self, mock_req):
+        mock_req.return_value = _mock_response(json_data=[])
         ds.list_datasets("proj-123")
+        assert "/v4/datasetrw/datasets-v2" in mock_req.call_args.args[1]
         params = mock_req.call_args.kwargs.get("params", {})
-        assert "minimumPermission" not in params
-
-    @patch.object(ds, "_api_request")
-    def test_uses_v2_endpoint(self, mock_req):
-        mock_req.return_value = _mock_response(json_data={"datasets": []})
-        ds.list_datasets("proj-123")
-        assert "/api/datasetrw/v2/datasets" in mock_req.call_args.args[1]
+        assert params.get("includeStorageInfo") == "true"
 
     @patch.object(ds, "_api_request")
     def test_snapshot_ids_fallback(self, mock_req):
-        """snapshotIds array used when readWriteSnapshotId is absent."""
-        mock_req.return_value = _mock_response(json_data={
-            "datasets": [
-                {"dataset": {"datasetId": "ds-1", "datasetName": "t", "snapshotIds": ["snap-a"]}},
-                {"dataset": {"datasetId": "ds-2", "datasetName": "t2"}},
-            ]
-        })
+        mock_req.return_value = _mock_response(json_data=[
+            {"datasetRwDto": {"id": "ds-1", "name": "t", "snapshotIds": ["snap-a"]}},
+            {"datasetRwDto": {"id": "ds-2", "name": "t2"}},
+        ])
         result = ds.list_datasets("proj-123")
         assert result[0]["rwSnapshotId"] == "snap-a"
         assert result[1]["rwSnapshotId"] is None
 
     @patch.object(ds, "_api_request")
     def test_empty_datasets(self, mock_req):
-        mock_req.return_value = _mock_response(json_data={"datasets": []})
+        mock_req.return_value = _mock_response(json_data=[])
         result = ds.list_datasets("proj-123")
         assert result == []
 

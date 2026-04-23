@@ -16,7 +16,6 @@ from authorization import require_project_write
 from .state import (
     _get_default_code_root,
     _resolve_request_project_id,
-    bootstrap_dataset_ctx,
     domino_client,
     domino_datasets,
 )
@@ -24,15 +23,23 @@ from .state import (
 logger = logging.getLogger(__name__)
 
 
+def sanitize_dataset_subpath(raw: Optional[str]) -> str:
+    if raw is None or not str(raw).strip():
+        return ""
+    parts: list[str] = []
+    for seg in str(raw).replace("\\", "/").strip().strip("/").split("/"):
+        if not seg or seg == ".":
+            continue
+        if seg == "..":
+            raise ValueError("Invalid relativeDir")
+        parts.append(seg)
+    return "/".join(parts)
+
+
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
     async def api_branches(req: Request):
-        """Return an HTML fragment for branch selection.
-
-        Fetches branches from the target project's git repo via the
-        Domino API.  Falls back to a text input if the API fails.
-        """
         project_id = req.query_params.get("projectId") or None
         search = req.query_params.get("search", "")
         if project_id:
@@ -40,13 +47,11 @@ def register_api_routes(rt):
             if branches:
                 options = [Option(b["name"], value=b["name"]) for b in branches]
                 return Select(*options, name="branch", id="field-branch")
-        # Fallback: free-text input
         return Input(name="branch", id="field-branch", type="text", value="", placeholder="Default branch")
 
     rt("/api/branches")(api_branches)
 
     async def api_hardware_tiers(req: Request):
-        """Return an HTML <select> fragment with available hardware tiers."""
         project_id = req.query_params.get("projectId") or None
         tiers = domino_client.list_hardware_tiers(project_id=project_id)
         default_tier = domino_client.get_project_default_tier()
@@ -63,7 +68,6 @@ def register_api_routes(rt):
     rt("/api/hardware-tiers")(api_hardware_tiers)
 
     def api_detect_language(req: Request):
-        """Detect project language by counting source files in code_root."""
         from autodoc.core.models import detect_language as _detect_lang, LANGUAGE_PROFILES
 
         code_root_param = req.query_params.get("code_root", "")
@@ -95,7 +99,10 @@ def register_api_routes(rt):
     rt("/api/detect-language")(api_detect_language)
 
     async def api_datasets(req: Request):
-        """List writable datasets for the project."""
+        """List writable datasets for the project.
+
+        Each dataset includes datasetPath from the detail API.
+        """
         pid = _resolve_request_project_id(req)
         require_project_write(pid)
         try:
@@ -125,7 +132,6 @@ def register_api_routes(rt):
                 media_type="application/json",
             )
 
-        # Resolve snapshot ID if not provided
         if not snapshot_id:
             snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id, pid)
         if not snapshot_id:
@@ -147,41 +153,13 @@ def register_api_routes(rt):
 
     rt("/api/dataset-files")(api_dataset_files)
 
-    async def api_ensure_autodoc_specs(req: Request):
-        """Ensure the autodoc dataset exists, return its metadata.
-
-        Uses the unified 'autodoc' dataset (not the legacy 'autodoc-specs').
-        Specs live under the specs/ subdirectory within this dataset.
-        """
-        pid = _resolve_request_project_id(req)
-        require_project_write(pid)
-        try:
-            from dataset_manager import AUTODOC_DATASET_NAME
-            ds = domino_datasets.ensure_dataset(
-                pid,
-                name=AUTODOC_DATASET_NAME,
-                description="Auto Model Docs artifacts",
-            )
-            if not ds.get("id"):
-                raise RuntimeError("Dataset was created/found but has no ID — check Domino Datasets API response")
-            if not ds.get("rwSnapshotId"):
-                ds["rwSnapshotId"] = domino_datasets.get_rw_snapshot_id(ds["id"], pid)
-            return Response(json.dumps(ds), media_type="application/json")
-        except Exception as exc:
-            return Response(
-                json.dumps({"error": str(exc)}),
-                status_code=500,
-                media_type="application/json",
-            )
-
-    rt("/api/ensure-autodoc-specs")(api_ensure_autodoc_specs)
-
     async def api_upload_spec_to_dataset(req: Request):
-        """Upload a spec file via the DatasetStore."""
+        """Upload a spec file to a dataset."""
         pid = _resolve_request_project_id(req)
         require_project_write(pid)
         form = await req.form()
         file_upload = form.get("file")
+        dataset_id = form.get("datasetId", "")
 
         if not file_upload or not hasattr(file_upload, "read"):
             return Response(
@@ -189,21 +167,32 @@ def register_api_routes(rt):
                 status_code=400,
                 media_type="application/json",
             )
+        if not dataset_id:
+            return Response(
+                json.dumps({"error": "datasetId is required"}),
+                status_code=400,
+                media_type="application/json",
+            )
 
         raw_filename = getattr(file_upload, "filename", "spec.yaml")
-        # Sanitize: strip path components to prevent directory traversal
         filename = raw_filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] or "spec.yaml"
         content = await file_upload.read()
 
         try:
-            from artifact_layout import get_layout
-            from dataset_ctx import get_dataset_ctx
-            from dataset_manager import DatasetManager
-            bootstrap_dataset_ctx(pid)
-            upload_path = f"{get_layout().specs_dir}/{filename}"
-            DatasetManager.write_file(
-                get_dataset_ctx().dataset_id, upload_path, content
+            rel_dir = sanitize_dataset_subpath(
+                str(form.get("relativeDir", "") or "").strip()
             )
+        except ValueError as exc:
+            return Response(
+                json.dumps({"error": str(exc)}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        try:
+            from dataset_manager import DatasetManager
+            upload_path = f"{rel_dir}/{filename}" if rel_dir else filename
+            DatasetManager.write_file(dataset_id, upload_path, content)
             return Response(
                 json.dumps({"path": upload_path, "fileName": filename}),
                 media_type="application/json",
@@ -218,8 +207,6 @@ def register_api_routes(rt):
     rt("/api/upload-spec-to-dataset")(api_upload_spec_to_dataset)
 
     def api_download_template():
-        """Serve the bundled doc_spec.yaml as a downloadable reference template."""
-        # doc_spec.yaml is in auto_model_docs/ (parent of studio/)
         template_path = Path(__file__).resolve().parent.parent / "doc_spec.yaml"
         if not template_path.exists():
             return Response("Template not found", status_code=404)
@@ -232,7 +219,6 @@ def register_api_routes(rt):
     rt("/api/download-template")(api_download_template)
 
     async def api_resolve_project(req: Request):
-        """Return resolved project name for a given project ID."""
         pid = req.query_params.get("projectId", "").strip()
         if not pid:
             return Div(id="project-id-resolved")

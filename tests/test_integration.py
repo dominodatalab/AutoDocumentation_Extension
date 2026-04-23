@@ -63,7 +63,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     import domino_job_store as store
     import spec_store
     import auth_context
-    import dataset_ctx
     import dataset_manager
     import artifact_layout
 
@@ -108,7 +107,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(dataset_manager.DatasetManager, "file_exists", staticmethod(_mem_exists))
     monkeypatch.setattr(dataset_manager.DatasetManager, "read_file_meta", staticmethod(_mem_meta))
 
-    dataset_ctx.set_dataset_ctx("ds-integration", "snap-integration")
     artifact_layout.init_layout()
 
     # Mock domino_client
@@ -134,11 +132,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     mock_datasets = MagicMock()
     mock_datasets.list_datasets.return_value = [
-        {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1"},
+        {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
     ]
     mock_datasets.AUTODOC_SPECS_DATASET = "autodoc-specs"
     mock_datasets.build_spec_mount_path.return_value = "/mnt/data/autodoc-specs/spec.yaml"
     mock_datasets.get_rw_snapshot_id.return_value = "snap-1"
+    mock_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
     mock_datasets.list_files.return_value = []
 
     # Set up studio.state
@@ -155,8 +154,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_state.auth_context = auth_context
     mock_state._max_jobs = lambda: 2
     mock_state._resolve_request_project_id = lambda req: "proj-integration"
+    mock_state._resolve_request_dataset_ids = lambda req: ("ds-integration", "snap-integration")
     mock_state._get_default_code_root = lambda: Path("/mnt/code")
-    mock_state.bootstrap_dataset_ctx = lambda pid: None
     mock_state.logger = MagicMock()
 
     from dataclasses import dataclass
@@ -391,10 +390,7 @@ def integration_env(tmp_path, monkeypatch):
 
     yield env
 
-    # Restore
-    import dataset_ctx
     import artifact_layout
-    dataset_ctx.clear_dataset_ctx()
     artifact_layout.reset_layout()
 
     for key, val in saved_modules.items():
@@ -431,7 +427,7 @@ class TestApiRoutesIntegration:
         assert "error" in resp.json()
         integration_env["domino_datasets"].list_datasets.side_effect = None
         integration_env["domino_datasets"].list_datasets.return_value = [
-            {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1"},
+            {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
         ]
 
     def test_dataset_files_requires_dataset_id(self, client):
@@ -537,7 +533,7 @@ class TestJobRoutesIntegration:
         })
         assert resp.status_code == 200
 
-        jobs = store.get_user_jobs("integration_user")
+        jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
         assert len(jobs) >= 1
         assert jobs[0]["owner_id"] == "integration_user"
 
@@ -545,6 +541,7 @@ class TestJobRoutesIntegration:
         """Cancel via HTTP, verify status change in job index."""
         store = integration_env["store"]
         job_id = store.create_job(
+            "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
             project_id="proj-integration",
         )
@@ -552,17 +549,18 @@ class TestJobRoutesIntegration:
         resp = client.post("/cancel-queued-jobs")
         assert resp.status_code == 200
 
-        job = store.get_job(job_id)
+        job = store.get_job("ds-integration", "snap-integration", job_id)
         assert job["status"] == "cancelled"
 
     def test_stop_job_calls_domino_api(self, client, integration_env):
         """Stop via HTTP, verify Domino API call and job index update."""
         store = integration_env["store"]
         job_id = store.create_job(
+            "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
             project_id="proj-integration",
         )
-        store.update_job(job_id, status="submitted", domino_run_id="run-stop-test")
+        store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-stop-test")
 
         resp = client.post("/stop-job-history", data={"job_id": job_id})
         assert resp.status_code == 200
@@ -570,7 +568,7 @@ class TestJobRoutesIntegration:
         integration_env["domino_client"].stop_job.assert_called_with(
             "run-stop-test", project_id="proj-integration",
         )
-        job = store.get_job(job_id)
+        job = store.get_job("ds-integration", "snap-integration", job_id)
         assert job["status"] == "cancelled"
 
     def test_job_history_returns_submitted_jobs(self, client, integration_env):
@@ -610,10 +608,11 @@ class TestAuthorizationIntegration:
     def test_stop_job_denied_returns_403(self, client, integration_env):
         store = integration_env["store"]
         job_id = store.create_job(
+            "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
             project_id="proj-integration",
         )
-        store.update_job(job_id, status="submitted", domino_run_id="run-denied")
+        store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-denied")
         self._deny(integration_env["authz"], "require_domino_job_stop")
         resp = client.post("/stop-job-history", data={"job_id": job_id})
         assert resp.status_code == 403
@@ -684,10 +683,11 @@ class TestCrossCuttingIntegration:
         # Create 2 active jobs (AUTODOC_MAX_JOBS=2)
         for i in range(2):
             jid = store.create_job(
+                "ds-integration", "snap-integration",
                 "integration_user", "main", "small", "/spec.yaml",
                 project_id="proj-integration",
             )
-            store.update_job(jid, status="submitted", domino_run_id=f"run-{i}")
+            store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
 
         # Submit a 3rd via HTTP
         client.post("/run", data={
@@ -696,7 +696,7 @@ class TestCrossCuttingIntegration:
             "target_project": "proj-integration",
         })
 
-        jobs = store.get_user_jobs("integration_user")
+        jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
         newest = jobs[0]
         assert newest["status"] == "queued"
 
@@ -704,11 +704,11 @@ class TestCrossCuttingIntegration:
         """Cancel a job, then verify history endpoint shows updated status."""
         store = integration_env["store"]
         job_id = store.create_job(
+            "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
             project_id="proj-integration",
         )
 
-        # Cancel
         client.post("/cancel-queued-jobs")
 
         # History should show cancelled

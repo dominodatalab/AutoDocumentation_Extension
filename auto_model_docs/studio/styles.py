@@ -1132,6 +1132,16 @@ details[open] > .history-toggle::before {
     border-top: 1px solid var(--outline-variant);
 }
 
+.section-divider {
+    display: block;
+    width: 100%;
+    height: 0;
+    margin: 0.75rem 0;
+    padding: 0;
+    border: none;
+    border-top: 1px solid var(--ghost-border);
+}
+
 /* ── OR Divider ──────────────────────────────────────────────────── */
 .or-divider {
     display: flex;

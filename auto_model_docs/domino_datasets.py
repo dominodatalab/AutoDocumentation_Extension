@@ -93,45 +93,34 @@ def _api_request(
 # ---------------------------------------------------------------------------
 
 def list_datasets(project_id: Optional[str] = None) -> list[dict[str, Any]]:
-    """List datasets for a project.
+    """List datasets for a project via the v4 datasets-v2 endpoint.
 
-    Uses the v2 API without minimumPermission (that param isn't a valid
-    enum value and caused 500s).
+    Returns id, name, description, rwSnapshotId, and datasetPath per dataset.
     """
     pid = _resolve_project_id(project_id)
 
+    resp = _api_request(
+        "GET", "/v4/datasetrw/datasets-v2",
+        params={
+            "includeStorageInfo": "true",
+            "projectIdsToInclude": pid,
+        },
+    )
+    items = resp.json()
+    if not isinstance(items, list):
+        items = items.get("datasets") or items.get("items") or []
 
     datasets: list[dict[str, Any]] = []
-    offset = 0
-    page_size = 50
-
-    while True:
-        resp = _api_request(
-            "GET", "/api/datasetrw/v2/datasets",
-
-            params={
-                "projectIdsToInclude": pid,
-                "offset": offset,
-                "limit": page_size,
-            },
-        )
-        data = resp.json()
-        # v2 wraps each item: {"datasets": [{"dataset": {...}, "projectInfo": {...}}, ...]}
-        items = data.get("datasets") or data.get("items") or []
-        if not items:
-            break
-        for item in items:
-            ds = item.get("dataset", item) if isinstance(item, dict) else item
-            snapshot_ids = ds.get("snapshotIds") or []
-            datasets.append({
-                "id": ds.get("datasetId") or ds.get("id", ""),
-                "name": ds.get("datasetName") or ds.get("name", ""),
-                "description": ds.get("description", ""),
-                "rwSnapshotId": ds.get("readWriteSnapshotId") or (snapshot_ids[0] if snapshot_ids else None),
-            })
-        if len(items) < page_size:
-            break
-        offset += page_size
+    for item in items:
+        ds = item.get("datasetRwDto", item) if isinstance(item, dict) else item
+        snapshot_ids = ds.get("snapshotIds") or []
+        datasets.append({
+            "id": ds.get("id", ""),
+            "name": ds.get("name", ""),
+            "description": ds.get("description", ""),
+            "rwSnapshotId": ds.get("readWriteSnapshotId") or (snapshot_ids[0] if snapshot_ids else None),
+            "datasetPath": ds.get("datasetPath", ""),
+        })
 
     return datasets
 
@@ -200,6 +189,16 @@ def ensure_dataset(
             return ds
 
     raise RuntimeError(f"Failed to create or find dataset '{name}' in project {pid}")
+
+
+# ---------------------------------------------------------------------------
+# Dataset detail (includes datasetPath)
+# ---------------------------------------------------------------------------
+
+def get_dataset_detail(dataset_id: str) -> dict[str, Any]:
+    """Fetch full dataset metadata including datasetPath (mount location)."""
+    resp = _api_request("GET", f"/v4/datasetrw/datasets/{dataset_id}")
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------

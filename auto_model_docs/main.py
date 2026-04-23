@@ -151,6 +151,12 @@ console = Console()
     is_flag=True,
     help="Disable automatic Domino project filtering (scan all projects)",
 )
+@click.option(
+    "--dataset-path",
+    type=click.Path(),
+    required=True,
+    help="Mount path of the autodoc dataset (e.g. /domino/datasets/local/autodoc)",
+)
 def main(
     spec: str,
     code_root: str | None,
@@ -172,6 +178,7 @@ def main(
     models: str | None,
     latest_only: bool,
     disable_project_filtering: bool,
+    dataset_path: str,
 ) -> None:
     """Generate model documentation from ML codebases.
 
@@ -226,7 +233,6 @@ def main(
 
         from artifact_layout import init_layout, get_layout
         init_layout()
-        _init_cli_dataset_ctx()
         output_dir = get_layout().docs_dir
         code_dir = settings.code_root if settings.code_root.exists() else _get_default_code_root()
 
@@ -236,6 +242,7 @@ def main(
                 output_dir,
                 verbose,
                 Path(notebook_path) if notebook_path else None,
+                dataset_mount_path=dataset_path,
             )
             return
 
@@ -322,6 +329,7 @@ def main(
             model_names=model_names,
             latest_only=latest_only,
             disable_project_filtering=disable_project_filtering,
+            dataset_mount_path=dataset_path,
         )
 
         # Run generation with progress
@@ -372,17 +380,16 @@ def _regenerate_notebook_from_cache(
     output_dir: Path,
     verbose: bool,
     notebook_path: Path | None = None,
+    dataset_mount_path: str = "",
 ) -> None:
-    """Regenerate notebook from cached results without running full pipeline."""
     from autodoc.generation import NotebookBuilder
 
     console.print("\n[bold blue]Regenerating notebook from cache...[/]\n")
 
     from artifact_layout import get_layout
-    from dataset_ctx import get_dataset_ctx
-    from dataset_manager import DatasetManager
+    import local_data_manager
     cache_path = get_layout().generation_cache
-    if not DatasetManager.file_exists(get_dataset_ctx().snapshot_id, cache_path):
+    if not local_data_manager.file_exists(dataset_mount_path, cache_path):
         console.print(
             f"[bold red]Error:[/] No cached results found at {cache_path}",
             style="red",
@@ -390,17 +397,16 @@ def _regenerate_notebook_from_cache(
         console.print("[dim]Run full generation first with --notebook flag[/]")
         sys.exit(1)
 
-    # Create a minimal orchestrator just for notebook regeneration
-    # We don't need LLM client for this
     from autodoc.orchestrator import Orchestrator
 
-    # Create orchestrator with dummy values (won't be used)
     orchestrator = Orchestrator.__new__(Orchestrator)
     orchestrator.output_dir = output_dir
     orchestrator.notebook_path = notebook_path
+    orchestrator.dataset_mount_path = dataset_mount_path
     orchestrator.notebook_builder = NotebookBuilder(
         output_dir=output_dir,
         notebook_path=notebook_path,
+        dataset_mount_path=dataset_mount_path,
     )
 
     with Progress(
@@ -424,26 +430,6 @@ def _regenerate_notebook_from_cache(
     console.print()
 
 
-def _init_cli_dataset_ctx() -> None:
-    """Resolve the autodoc dataset for the current Domino job and set the
-    per-process dataset context so downstream helpers can read/write it.
-    """
-    from dataset_ctx import set_dataset_ctx
-    from dataset_manager import resolve_autodoc_dataset
-
-    project_id = os.environ.get("DOMINO_PROJECT_ID", "")
-    if not project_id:
-        raise RuntimeError(
-            "DOMINO_PROJECT_ID not set. "
-            "The CLI requires Domino environment variables."
-        )
-    try:
-        ds_id, snap_id = resolve_autodoc_dataset(project_id)
-        set_dataset_ctx(ds_id, snap_id)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to initialize dataset context for CLI: {exc}"
-        ) from exc
 
 
 def _get_default_code_root() -> Path:

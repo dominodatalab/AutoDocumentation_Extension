@@ -105,7 +105,7 @@ def _mock_studio_modules(monkeypatch):
     mock_state = ModuleType("studio.state")
     mock_state._max_jobs = MagicMock(return_value=1)
     mock_state._resolve_request_project_id = MagicMock(return_value="proj-123")
-    mock_state.bootstrap_dataset_ctx = MagicMock()
+    mock_state._resolve_request_dataset_ids = MagicMock(return_value=("ds-test", "snap-test"))
     mock_state._get_default_code_root = MagicMock(return_value=Path("/mnt/code"))
     mock_state.logger = MagicMock()
     mock_state.JobRequest = _MockJobRequest
@@ -114,6 +114,7 @@ def _mock_studio_modules(monkeypatch):
     mock_state.domino_job_store = MagicMock()
     mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
+    mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
 
     # ui_components module
     mock_ui = ModuleType("studio.ui_components")
@@ -406,7 +407,7 @@ class TestJobRoutes:
         routes = _register(mod, "register_job_routes")
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/job-history"](req)
-        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("test_user")
+        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("test_user", "ds-test", "snap-test")
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs(self, _mock_studio_modules):
@@ -414,7 +415,7 @@ class TestJobRoutes:
         routes = _register(mod, "register_job_routes")
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/cancel-queued-jobs"](req)
-        _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("test_user")
+        _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("ds-test", "snap-test", "test_user")
 
     @pytest.mark.asyncio
     async def test_stop_job(self, _mock_studio_modules):
@@ -428,7 +429,7 @@ class TestJobRoutes:
         req = _make_request(form_data={"job_id": "j1"})
         await routes["/stop-job-history"](req)
         _mock_studio_modules["state"].domino_client.stop_job.assert_called_once()
-        store.update_job.assert_called_with("j1", status="cancelled")
+        store.update_job.assert_called_with("ds-test", "snap-test", "j1", status="cancelled")
 
     @pytest.mark.asyncio
     async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules, monkeypatch):
@@ -438,7 +439,7 @@ class TestJobRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/job-history"](req)
         _mock_studio_modules["job_engine"].sync_jobs_for.assert_not_called()
-        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("")
+        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("", "ds-test", "snap-test")
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
@@ -553,3 +554,24 @@ class TestSpecRoutes:
 
     # delete_spec and cleanup_specs routes removed — Domino Datasets API
     # does not support file-level deletion.
+
+
+class TestSanitizeDatasetSubpath:
+    def test_empty(self):
+        from studio.routes_api import sanitize_dataset_subpath
+
+        assert sanitize_dataset_subpath("") == ""
+        assert sanitize_dataset_subpath(None) == ""
+
+    def test_normalizes_slashes(self):
+        from studio.routes_api import sanitize_dataset_subpath
+
+        assert sanitize_dataset_subpath("a/b") == "a/b"
+        assert sanitize_dataset_subpath("/a/b/") == "a/b"
+        assert sanitize_dataset_subpath("a//b") == "a/b"
+
+    def test_rejects_dotdot(self):
+        from studio.routes_api import sanitize_dataset_subpath
+
+        with pytest.raises(ValueError, match="Invalid"):
+            sanitize_dataset_subpath("a/../b")

@@ -70,22 +70,14 @@ class NotebookBuilder:
         output_dir: str = "docs",
         dependencies: List[str] | None = None,
         notebook_path: str | None = None,
+        dataset_mount_path: str = "",
     ):
-        """Initialize the notebook builder.
-
-        Args:
-            output_dir: Logical output directory (dataset-relative path).
-                Actual I/O goes through DatasetStore.
-            dependencies: List of package names to check/install. Defaults to
-                DEFAULT_DEPENDENCIES if not provided.
-            notebook_path: Custom path for the generated notebook. If not provided,
-                uses <output_dir>/model_docs_notebook.ipynb.
-        """
         self.output_dir = output_dir
         self.dependencies = (
             dependencies if dependencies is not None else self.DEFAULT_DEPENDENCIES.copy()
         )
         self.notebook_path = notebook_path
+        self.dataset_mount_path = dataset_mount_path
 
     def _sanitize_for_notebook(self, text: str) -> str:
         """Remove emojis and problematic unicode from text.
@@ -939,7 +931,7 @@ from pathlib import Path
 output_dir = Path("{output_dir}")  # Embedded at generation time
 notebook_path = Path("{notebook_path_str}")  # Embedded at generation time
 
-exporter = NotebookExporter(output_dir=output_dir)
+exporter = NotebookExporter(output_dir=output_dir, dataset_mount_path="{self.dataset_mount_path}")
 output_path = exporter.export_to_word(
     notebook_path=notebook_path,
     title=DOCUMENT_TITLE,
@@ -949,11 +941,9 @@ print(f"Exported to: {{output_path}}")'''
         return new_code_cell(source=code)
 
     def _save_notebook(self, nb: nbformat.NotebookNode) -> str:
-        """Save the notebook to the dataset via DatasetManager."""
         import io
+        import local_data_manager
         from artifact_layout import get_layout
-        from dataset_ctx import get_dataset_ctx
-        from dataset_manager import DatasetManager
 
         if self.notebook_path:
             filename = str(self.notebook_path).rsplit("/", 1)[-1]
@@ -964,9 +954,5 @@ print(f"Exported to: {{output_path}}")'''
 
         buffer = io.StringIO()
         nbformat.write(nb, buffer)
-        DatasetManager.write_file(
-            get_dataset_ctx().dataset_id,
-            dataset_path,
-            buffer.getvalue().encode("utf-8"),
-        )
+        local_data_manager.write_file(self.dataset_mount_path, dataset_path, buffer.getvalue().encode("utf-8"))
         return dataset_path
