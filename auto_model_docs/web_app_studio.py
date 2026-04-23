@@ -237,7 +237,9 @@ async def index(req: Request):
     spec_card_children.append(
         Div(
             Label("Spec file selection", Span(" *", cls="required-star")),
-            Label("Dataset to browse spec files", Span(" *", cls="required-star")),
+            Div(cls="section-divider"),
+       
+            Label("Select a dataset to browse files", Span(" *", cls="required-star")),
             Div(
                 Select(
                     Option("Loading datasets...", value="", disabled=True, selected=True),
@@ -245,6 +247,7 @@ async def index(req: Request):
                 ),
                 cls="field",
             ),
+            Label("Select a spec file", Span(" *", cls="required-star")),
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),
             Div(
                 Span("Select a dataset to browse spec files", style="color: var(--outline); font-size: 0.8125rem;"),
