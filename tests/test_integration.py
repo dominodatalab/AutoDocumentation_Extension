@@ -132,7 +132,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     mock_datasets = MagicMock()
     mock_datasets.list_datasets.return_value = [
-        {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1"},
+        {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
     ]
     mock_datasets.AUTODOC_SPECS_DATASET = "autodoc-specs"
     mock_datasets.build_spec_mount_path.return_value = "/mnt/data/autodoc-specs/spec.yaml"
@@ -427,7 +427,7 @@ class TestApiRoutesIntegration:
         assert "error" in resp.json()
         integration_env["domino_datasets"].list_datasets.side_effect = None
         integration_env["domino_datasets"].list_datasets.return_value = [
-            {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1"},
+            {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
         ]
 
     def test_dataset_files_requires_dataset_id(self, client):

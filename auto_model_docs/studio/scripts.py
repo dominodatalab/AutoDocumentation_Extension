@@ -139,6 +139,7 @@ MAIN_DOM_JS = r"""
                             swap: 'outerHTML'
                         });
                     }
+                    loadDatasets();
                 }, 300);
             }
             projectIdInput.addEventListener('change', onProjectIdChange);
@@ -201,8 +202,13 @@ MAIN_DOM_JS = r"""
 
         function loadDatasets() {
             if (!specDatasetSelect) return;
+            var pid = resolvedProjectId();
+            if (!pid) {
+                specDatasetSelect.innerHTML = '<option value="">Set a project ID first</option>';
+                return;
+            }
             console.log('[spec-browser] Loading writable datasets...');
-            fetch('api/datasets' + queryApiDatasets())
+            fetch('api/datasets?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
                     if (datasets.error) {

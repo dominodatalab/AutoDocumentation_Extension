@@ -94,17 +94,6 @@ def register_api_routes(rt):
         require_project_write(pid)
         try:
             datasets = domino_datasets.list_datasets(pid)
-            for ds in datasets:
-                ds_id = ds.get("id")
-                if ds_id:
-                    try:
-                        detail = domino_datasets.get_dataset_detail(ds_id)
-                        ds["datasetPath"] = detail.get("datasetPath", "")
-                        detail_rw = detail.get("readWriteSnapshotId")
-                        if detail_rw:
-                            ds["rwSnapshotId"] = detail_rw
-                    except Exception:
-                        ds["datasetPath"] = ""
             return Response(json.dumps(datasets), media_type="application/json")
         except Exception as exc:
             return Response(
