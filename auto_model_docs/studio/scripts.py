@@ -23,6 +23,21 @@ MAIN_DOM_JS = r"""
         if (!_AD_APP_BASE) return rel;
         return _AD_APP_BASE + (rel.charAt(0) === '/' ? rel.slice(1) : rel);
     }
+    // Rewrite any element with data-app-rel="path" to use the full prefix.
+    // Applies to <a href>, <form action>, and htmx hx-post/hx-get.
+    function _adApplyPrefix(root) {
+        var scope = root || document;
+        scope.querySelectorAll('[data-app-rel]').forEach(function(el) {
+            var rel = el.getAttribute('data-app-rel');
+            if (!rel) return;
+            var full = _adUrl(rel);
+            if (el.tagName === 'A') el.setAttribute('href', full);
+            else if (el.tagName === 'FORM') el.setAttribute('action', full);
+            if (el.hasAttribute('hx-post')) el.setAttribute('hx-post', full);
+            if (el.hasAttribute('hx-get')) el.setAttribute('hx-get', full);
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() { _adApplyPrefix(); });
 
     // ── Hardware tier card selection ──
     function selectHwTier(card, tierId) {
