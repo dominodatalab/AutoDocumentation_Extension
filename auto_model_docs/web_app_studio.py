@@ -768,6 +768,9 @@ async def capture_auth_context(request, call_next):
 @app.on_event("startup")
 async def _on_startup():
     import studio.state as _state
+    from artifact_layout import init_layout
+
+    init_layout()
     _state._STARTUP_WARNINGS = _validate_environment()
 
 
