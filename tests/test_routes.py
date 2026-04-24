@@ -391,7 +391,7 @@ class TestApiRoutes:
         assert body["defaultRoot"] == ""
         assert body["isGitBasedProject"] is None
         assert body["error"] == "missing_project_id"
-        assert [o["value"] for o in body["options"]] == [""]
+        assert body["options"] == []
 
     @pytest.mark.asyncio
     async def test_code_root_options_resolve_failed_error(self, _mock_studio_modules):
@@ -420,7 +420,7 @@ class TestApiRoutes:
         body = json.loads(result.body.decode())
         assert body["error"] == "browse_code_failed"
         assert body["isGitBasedProject"] is None
-        assert [o["value"] for o in body["options"]] == [""]
+        assert body["options"] == []
 
     @pytest.mark.asyncio
     async def test_code_root_options_from_browse(self, _mock_studio_modules):
@@ -444,10 +444,10 @@ class TestApiRoutes:
         assert result.status_code == 200
         body = json.loads(result.body.decode())
         assert body["isGitBasedProject"] is False
-        assert body["defaultRoot"] == ""
+        assert body["defaultRoot"] == "/mnt"
         assert body.get("error") is None
         vals = [o["value"] for o in body["options"]]
-        assert vals[0] == ""
+        assert vals[0] == "/mnt"
         assert "/mnt" in vals
         assert "/repos/simple-demo" in vals
 

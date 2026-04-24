@@ -248,10 +248,9 @@ class TestBrowseCodeAndCodeRootOptions:
         }
         out = code_root_options_from_browse_response(raw)
         assert out["isGitBasedProject"] is True
-        assert out["defaultRoot"] == ""
+        assert out["defaultRoot"] == "/mnt/code"
         vals = [o["value"] for o in out["options"]]
-        assert vals[0] == ""
-        assert vals[1] == "/mnt/code"
+        assert vals[0] == "/mnt/code"
         assert "/mnt/imported/code/lib" in vals
         labels = [o["label"] for o in out["options"]]
         assert any("lib" in lab for lab in labels)
@@ -259,8 +258,8 @@ class TestBrowseCodeAndCodeRootOptions:
     def test_code_root_dfs_only_default_when_no_repos(self):
         raw = {"projectSettings": {"isGitBasedProject": False, "repositories": []}}
         out = code_root_options_from_browse_response(raw)
-        assert out["defaultRoot"] == ""
-        assert [o["value"] for o in out["options"]] == ["", "/mnt"]
+        assert out["defaultRoot"] == "/mnt"
+        assert [o["value"] for o in out["options"]] == ["/mnt"]
 
     def test_code_root_skips_duplicate_of_default(self):
         raw = {
@@ -270,7 +269,7 @@ class TestBrowseCodeAndCodeRootOptions:
             },
         }
         out = code_root_options_from_browse_response(raw)
-        assert [o["value"] for o in out["options"]] == ["", "/mnt"]
+        assert [o["value"] for o in out["options"]] == ["/mnt"]
 
 
 # ===================================================================

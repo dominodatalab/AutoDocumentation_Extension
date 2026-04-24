@@ -214,11 +214,8 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
     manual = "/mnt/code" if is_git else "/mnt"
-    options: list[dict[str, str]] = [
-        {"value": "", "label": ""},
-        {"value": manual, "label": manual},
-    ]
-    seen: set[str] = {"", manual}
+    options: list[dict[str, str]] = [{"value": manual, "label": manual}]
+    seen: set[str] = {manual}
     for repo in ps.get("repositories") or []:
         if not isinstance(repo, dict):
             continue
@@ -231,7 +228,7 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
         options.append({"value": loc, "label": label})
     return {
         "isGitBasedProject": is_git,
-        "defaultRoot": "",
+        "defaultRoot": manual,
         "options": options,
     }
 

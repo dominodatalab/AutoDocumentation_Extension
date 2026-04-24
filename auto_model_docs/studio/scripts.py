@@ -586,7 +586,7 @@ MAIN_DOM_JS = r"""
                     .then(function(data) {
                         if (data && data.error) { showCodeRootError(); return; }
                         var opts = (data && data.options) || [];
-                        var defRoot = (data && data.defaultRoot) || '';
+                        var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
                         if (!opts.length) { showCodeRootError(); return; }
                         prefix.classList.remove('code-root-error');
                         prefix.classList.remove('code-root-loading');
@@ -607,7 +607,7 @@ MAIN_DOM_JS = r"""
                                 break;
                             }
                         }
-                        if (!found && prefix.options.length) prefix.selectedIndex = 0;
+                        if (!found) prefix.selectedIndex = 0;
                         sync();
                         detectLanguageFromCodeRoot();
                     })

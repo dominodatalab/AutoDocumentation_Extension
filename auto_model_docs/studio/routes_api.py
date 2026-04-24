@@ -245,7 +245,7 @@ def register_api_routes(rt):
             return {
                 "isGitBasedProject": None,
                 "defaultRoot": "",
-                "options": [{"value": "", "label": ""}],
+                "options": [],
                 "error": reason,
             }
 
