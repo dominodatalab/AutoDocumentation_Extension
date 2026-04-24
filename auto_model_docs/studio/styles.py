@@ -305,6 +305,14 @@ a:hover { color: var(--primary-container); }
 .code-root-prefix option {
     font-family: ui-monospace, monospace;
 }
+.code-root-prefix.code-root-error {
+    color: var(--error);
+    font-style: italic;
+}
+.code-root-prefix.code-root-loading {
+    color: var(--on-surface-variant);
+    font-style: italic;
+}
 .code-root-suffix {
     flex: 1;
     border: none;

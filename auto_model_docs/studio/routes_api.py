@@ -240,21 +240,30 @@ def register_api_routes(rt):
 
     async def api_code_root_options(req: Request):
         pid = (req.query_params.get("projectId") or "").strip()
-        fb = str(_get_default_code_root()).replace("\\", "/")
-        fb_is_git = fb.rstrip("/") == "/mnt/code"
-        fallback: dict = {
-            "isGitBasedProject": fb_is_git,
-            "defaultRoot": fb,
-            "options": [{"value": fb, "label": fb}],
-        }
+
+        def _error_payload(reason: str) -> dict:
+            return {
+                "isGitBasedProject": None,
+                "defaultRoot": "",
+                "options": [{"value": "", "label": ""}],
+                "error": reason,
+            }
+
         if not pid:
-            return Response(json.dumps(fallback), media_type="application/json")
+            return Response(
+                json.dumps(_error_payload("missing_project_id")),
+                media_type="application/json",
+            )
         info = domino_client.resolve_project(pid)
         if not info:
-            return Response(json.dumps(fallback), media_type="application/json")
+            return Response(
+                json.dumps(_error_payload("project_resolve_failed")),
+                media_type="application/json",
+            )
         try:
             raw = domino_client.browse_code(info.owner_username, info.name, path_string="")
             payload = domino_client.code_root_options_from_browse_response(raw)
+            payload["error"] = None
             return Response(json.dumps(payload), media_type="application/json")
         except Exception as exc:
             detail = str(exc)
@@ -264,6 +273,9 @@ def register_api_routes(rt):
                 except Exception:
                     pass
             logger.warning("browseCode for code-root-options failed: %s", detail)
-            return Response(json.dumps(fallback), media_type="application/json")
+            return Response(
+                json.dumps(_error_payload("browse_code_failed")),
+                media_type="application/json",
+            )
 
     rt("/api/code-root-options")(api_code_root_options)

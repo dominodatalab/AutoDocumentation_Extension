@@ -134,7 +134,14 @@ MAIN_DOM_JS = r"""
 
         function detectLanguageFromCodeRoot() {
             var cr = document.getElementById('field-code_root');
-            detectLanguage(cr ? cr.value : undefined);
+            var val = cr ? (cr.value || '').trim() : '';
+            if (!val) {
+                if (langRow) langRow.style.display = 'none';
+                if (langName) langName.textContent = '';
+                if (langCount) langCount.textContent = '';
+                return;
+            }
+            detectLanguage(val);
         }
 
         detectLanguageFromCodeRoot();
@@ -539,17 +546,50 @@ MAIN_DOM_JS = r"""
                 const sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
                 hidden.value = sub ? base + '/' + sub : base;
             }
+            function showCodeRootError() {
+                if (!prefix || prefix.tagName !== 'SELECT') return;
+                prefix.innerHTML = '';
+                var opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Could not retrieve source code';
+                opt.disabled = true;
+                opt.selected = true;
+                prefix.appendChild(opt);
+                prefix.classList.remove('code-root-loading');
+                prefix.classList.add('code-root-error');
+                if (hidden) hidden.value = '';
+                sync();
+                detectLanguageFromCodeRoot();
+            }
+            function showCodeRootLoading() {
+                if (!prefix || prefix.tagName !== 'SELECT') return;
+                prefix.innerHTML = '';
+                var opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Loading...';
+                opt.disabled = true;
+                opt.selected = true;
+                prefix.appendChild(opt);
+                prefix.classList.remove('code-root-error');
+                prefix.classList.add('code-root-loading');
+                if (hidden) hidden.value = '';
+                sync();
+            }
             function loadCodeRootOptions() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
                 var pid = new URLSearchParams(window.location.search).get('projectId');
-                if (!pid) return;
+                if (!pid) { showCodeRootError(); return; }
+                showCodeRootLoading();
                 var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
                 fetch(url)
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(data) {
-                        var opts = data.options || [];
-                        var defRoot = data.defaultRoot || '';
-                        if (!opts.length) return;
+                        if (data && data.error) { showCodeRootError(); return; }
+                        var opts = (data && data.options) || [];
+                        var defRoot = (data && data.defaultRoot) || '';
+                        if (!opts.length) { showCodeRootError(); return; }
+                        prefix.classList.remove('code-root-error');
+                        prefix.classList.remove('code-root-loading');
                         prefix.innerHTML = '';
                         for (var i = 0; i < opts.length; i++) {
                             var o = opts[i];
@@ -559,16 +599,19 @@ MAIN_DOM_JS = r"""
                             prefix.appendChild(opt);
                         }
                         var pick = defRoot;
+                        var found = false;
                         for (var j = 0; j < prefix.options.length; j++) {
                             if (prefix.options[j].value === pick) {
                                 prefix.selectedIndex = j;
+                                found = true;
                                 break;
                             }
                         }
+                        if (!found && prefix.options.length) prefix.selectedIndex = 0;
                         sync();
                         detectLanguageFromCodeRoot();
                     })
-                    .catch(function() {});
+                    .catch(function() { showCodeRootError(); });
             }
             if (suffix) {
                 suffix.addEventListener('input', sync);

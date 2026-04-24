@@ -19,7 +19,6 @@ configure_auth(user_auth)
 
 from studio.state import (
     _STARTUP_WARNINGS,
-    _get_default_code_root,
     _get_default_spec_path,
     domino_client,
     domino_job_store,
@@ -356,15 +355,14 @@ async def index(req: Request):
     # Run settings card
     run_card_children = []
 
-    _init_code_root = str(_get_default_code_root())
     run_card_children.append(
         Div(
             Label("Code root path", for_="code-root-prefix"),
             Div(
                 Select(
-                    Option(_init_code_root, value=_init_code_root, selected=True),
+                    Option("Loading...", value="", selected=True, disabled=True),
                     id="code-root-prefix",
-                    cls="code-root-prefix",
+                    cls="code-root-prefix code-root-loading",
                     aria_label="Code root base path",
                 ),
                 Input(
@@ -377,7 +375,7 @@ async def index(req: Request):
                     name="code_root",
                     id="field-code_root",
                     type="hidden",
-                    value=_init_code_root,
+                    value="",
                 ),
                 cls="code-root-wrap",
             ),

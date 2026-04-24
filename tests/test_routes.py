@@ -388,8 +388,39 @@ class TestApiRoutes:
         result = await routes["/api/code-root-options"](req)
         assert result.status_code == 200
         body = json.loads(result.body.decode())
-        assert body["defaultRoot"] == "/mnt/code"
-        assert len(body["options"]) == 1
+        assert body["defaultRoot"] == ""
+        assert body["isGitBasedProject"] is None
+        assert body["error"] == "missing_project_id"
+        assert [o["value"] for o in body["options"]] == [""]
+
+    @pytest.mark.asyncio
+    async def test_code_root_options_resolve_failed_error(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        client.resolve_project.return_value = None
+        req = _make_request(query_params={"projectId": "proj-1"})
+        result = await routes["/api/code-root-options"](req)
+        body = json.loads(result.body.decode())
+        assert body["error"] == "project_resolve_failed"
+
+    @pytest.mark.asyncio
+    async def test_code_root_options_browse_error_sets_error_flag(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        mock_info = MagicMock()
+        mock_info.name = "p"
+        mock_info.owner_username = "u"
+        client.resolve_project.return_value = mock_info
+        client.browse_code.side_effect = RuntimeError("browse failed")
+        req = _make_request(query_params={"projectId": "proj-1"})
+        result = await routes["/api/code-root-options"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body.decode())
+        assert body["error"] == "browse_code_failed"
+        assert body["isGitBasedProject"] is None
+        assert [o["value"] for o in body["options"]] == [""]
 
     @pytest.mark.asyncio
     async def test_code_root_options_from_browse(self, _mock_studio_modules):
@@ -413,8 +444,10 @@ class TestApiRoutes:
         assert result.status_code == 200
         body = json.loads(result.body.decode())
         assert body["isGitBasedProject"] is False
-        assert body["defaultRoot"] == "/mnt"
+        assert body["defaultRoot"] == ""
+        assert body.get("error") is None
         vals = [o["value"] for o in body["options"]]
+        assert vals[0] == ""
         assert "/mnt" in vals
         assert "/repos/simple-demo" in vals
 

@@ -213,9 +213,12 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
     """Build combobox payload from browseCode JSON (projectSettings)."""
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
-    default_root = "/mnt/code" if is_git else "/mnt"
-    options: list[dict[str, str]] = [{"value": default_root, "label": default_root}]
-    seen: set[str] = {default_root}
+    manual = "/mnt/code" if is_git else "/mnt"
+    options: list[dict[str, str]] = [
+        {"value": "", "label": ""},
+        {"value": manual, "label": manual},
+    ]
+    seen: set[str] = {"", manual}
     for repo in ps.get("repositories") or []:
         if not isinstance(repo, dict):
             continue
@@ -228,7 +231,7 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
         options.append({"value": loc, "label": label})
     return {
         "isGitBasedProject": is_git,
-        "defaultRoot": default_root,
+        "defaultRoot": "",
         "options": options,
     }
 
