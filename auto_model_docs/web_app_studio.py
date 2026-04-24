@@ -147,9 +147,9 @@ async def index(req: Request):
                 Div(
                     Div(
                         Span("Resolving project...",
-                             style="color: var(--outline); font-size: 0.875rem;"),
+                             cls="bootstrap-status-text"),
                     ),
-                    style="display: flex; justify-content: center; padding-top: 4rem;",
+                    cls="bootstrap-status-wrap",
                 ),
                 Div(
                     Div(
@@ -163,14 +163,13 @@ async def index(req: Request):
                         P(
                             "If you're running this as a Domino App, make sure the app is "
                             "configured to pass the project ID to the iframe URL.",
-                            style="color: var(--outline); margin-top: 0.5rem;",
+                            cls="bootstrap-error-detail",
                         ),
-                        style="background: rgba(186,26,26,0.06); border-left: 3px solid #ba1a1a; "
-                              "border-radius: 2px; padding: 1.5rem; max-width: 640px; "
-                              "font-family: Inter, sans-serif;",
+                        cls="bootstrap-error-card",
                     ),
                     id="project-id-error",
-                    style="display: none; justify-content: center; padding-top: 2rem;",
+                    cls="bootstrap-error-wrap",
+                    style="display: none;",
                 ),
                 cls="page",
             ),
@@ -248,15 +247,15 @@ async def index(req: Request):
             Label("Select a spec file", Span(" *", cls="required-star")),
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),
             Div(
-                Span("Select a dataset to browse spec files", style="color: var(--outline); font-size: 0.8125rem;"),
+                Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
                 id="spec-file-list",
                 cls="spec-file-list",
             ),
             Div(
-                Span("Selected: ", style="color: var(--outline);"),
-                Span(id="spec-selected-name", style="font-weight: 600; color: var(--on-surface);"),
+                Span("Selected: ", cls="spec-selected-label"),
+                Span(id="spec-selected-name", cls="spec-selected-value"),
                 id="spec-selected-indicator",
-                style="display: none; padding: 8px 0; font-size: 0.8125rem;",
+                cls="spec-selected-indicator",
             ),
             Div(
                 Span("OR", cls="or-divider-text"),
@@ -277,7 +276,8 @@ async def index(req: Request):
                 A("Download reference template", href="api/download-template",
                   data_app_rel="api/download-template",
                   download="doc_spec_template.yaml",
-                  style="color: var(--primary); font-size: 0.8125rem; margin-left: auto;"),
+                  cls="app-link",
+                  style="margin-left: auto;"),
                 cls="spec-actions-row",
             ),
             cls="field",
@@ -390,15 +390,14 @@ async def index(req: Request):
     # Language detection row (shown after code root is set)
     run_card_children.append(
         Div(
-            Span("Detected: ", style="color: var(--outline);"),
-            Span(id="lang-detected-name", style="color: var(--on-surface); font-weight: 600;"),
-            Span(id="lang-detected-count", style="color: var(--outline); margin-left: 4px;"),
+            Span("Detected: ", cls="lang-detection-label"),
+            Span(id="lang-detected-name", cls="lang-detection-value"),
+            Span(id="lang-detected-count", cls="lang-detection-count"),
             Button(
                 "Override",
                 id="lang-override-btn",
                 type="button",
-                style="background: none; border: none; color: var(--primary); cursor: pointer; "
-                      "padding: 8px 12px; min-height: 44px; font-size: inherit; margin-left: 8px;",
+                cls="lang-override-btn",
                 aria_label="Override detected language",
                 onclick="document.getElementById('lang-override-select').style.display = "
                         "document.getElementById('lang-override-select').style.display === 'none' ? 'inline-block' : 'none';",
@@ -409,12 +408,11 @@ async def index(req: Request):
                 Option("SAS", value="sas"),
                 Option("MATLAB", value="matlab"),
                 id="lang-override-select",
-                style="display: none; border: 1px solid var(--ghost-border); border-radius: 2px; "
-                      "padding: 4px 8px; margin-left: 4px; font-size: 0.8125rem;",
+                cls="lang-override-select",
                 onchange="handleLanguageOverride(this.value)",
             ),
             id="lang-detection-row",
-            style="display: none; padding: 8px 0; font-size: 0.8125rem;",
+            cls="lang-detection-row",
         )
     )
 
@@ -647,14 +645,11 @@ async def index(req: Request):
                 Div(
                     P(
                         get_deploy_version_label(),
-                        style="margin:0;color:var(--muted, #888);font-size:11px;"
-                              "font-family:monospace;letter-spacing:0.02em;",
+                        cls="header-version-text",
                     ),
                     A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
-                      style="color:var(--primary);font-size:12px;font-weight:600;"
-                            "text-decoration:underline;"),
-                    style="margin-left:auto;align-self:flex-start;display:flex;"
-                          "flex-direction:column;align-items:flex-end;gap:2px;",
+                      cls="header-logs-link"),
+                    cls="header-meta",
                 ),
                 cls="domino-header-inner",
             ),

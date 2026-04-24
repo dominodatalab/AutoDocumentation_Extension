@@ -160,7 +160,8 @@ def _mock_studio_modules(monkeypatch):
                 "Label", "Table", "Thead", "Tbody", "Tr", "Th", "Td",
                 "Ul", "Li", "Pre", "Button", "Details", "Summary")
     for name in fh_names:
-        setattr(mock_fh_common, name, lambda *a, _n=name, **kw: MagicMock(__ft_name__=_n))
+        ctor = MagicMock(side_effect=lambda *a, _n=name, **kw: MagicMock(__ft_name__=_n))
+        setattr(mock_fh_common, name, ctor)
     mock_fh_common.FT = type("FT", (), {})
 
     mock_fh = ModuleType("fasthtml")
@@ -365,6 +366,7 @@ class TestApiRoutes:
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
+        fh = sys.modules["fasthtml.common"]
         mock_info = MagicMock()
         mock_info.name = "my-project"
         mock_info.owner_username = "alice"
@@ -372,13 +374,31 @@ class TestApiRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/api/resolve-project"](req)
         client.resolve_project.assert_called_with("proj-123")
+        last_call = fh.Div.call_args_list[-1]
+        assert last_call.kwargs["id"] == "project-id-resolved"
+        assert last_call.kwargs["cls"] == "resolved"
 
     @pytest.mark.asyncio
     async def test_resolve_project_empty_id(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
+        fh = sys.modules["fasthtml.common"]
         req = _make_request(query_params={})
         await routes["/api/resolve-project"](req)  # should not raise
+        last_call = fh.Div.call_args_list[-1]
+        assert last_call.kwargs["id"] == "project-id-resolved"
+
+    @pytest.mark.asyncio
+    async def test_resolve_project_not_found_uses_error_class(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        fh = sys.modules["fasthtml.common"]
+        _mock_studio_modules["state"].domino_client.resolve_project.return_value = None
+        req = _make_request(query_params={"projectId": "proj-404"})
+        await routes["/api/resolve-project"](req)
+        last_call = fh.Div.call_args_list[-1]
+        assert last_call.kwargs["id"] == "project-id-resolved"
+        assert last_call.kwargs["cls"] == "error"
 
     @pytest.mark.asyncio
     async def test_code_root_options_no_project_id(self, _mock_studio_modules):
@@ -569,6 +589,7 @@ class TestSpecRoutes:
     async def test_validate_spec_valid(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
+        fh = sys.modules["fasthtml.common"]
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = []
 
         mock_upload = MagicMock()
@@ -576,24 +597,31 @@ class TestSpecRoutes:
         req = _make_request(form_data={"spec_upload": mock_upload})
         await routes["/validate-spec"](req)
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.assert_called_once()
+        span_calls = fh.Span.call_args_list
+        assert any(call.kwargs.get("cls") == "spec-validation-success" for call in span_calls)
 
     @pytest.mark.asyncio
     async def test_validate_spec_with_errors(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
+        fh = sys.modules["fasthtml.common"]
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = ["Missing title"]
 
         mock_upload = MagicMock()
         mock_upload.read = AsyncMock(return_value=b"sections: []")
         req = _make_request(form_data={"spec_upload": mock_upload})
         await routes["/validate-spec"](req)
+        assert any(call.kwargs.get("cls") == "spec-validation-error" for call in fh.Div.call_args_list)
+        assert any(call.kwargs.get("cls") == "spec-validation-error-list" for call in fh.Ul.call_args_list)
 
     @pytest.mark.asyncio
     async def test_validate_spec_empty_content(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
+        fh = sys.modules["fasthtml.common"]
         req = _make_request(form_data={})
         await routes["/validate-spec"](req)
+        assert any(call.kwargs.get("cls") == "spec-validation-empty" for call in fh.Span.call_args_list)
 
     @pytest.mark.asyncio
     async def test_save_spec(self, _mock_studio_modules):

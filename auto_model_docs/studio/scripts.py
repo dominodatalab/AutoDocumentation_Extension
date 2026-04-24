@@ -118,7 +118,7 @@ MAIN_DOM_JS = r"""
                         if (langName) langName.textContent = '';
                         if (langCount) langCount.textContent = '';
                         if (langRow) {
-                            langRow.innerHTML = '<span style="color:#767586;">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
+                            langRow.innerHTML = '<span class="lang-empty-state">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
                             langRow.style.display = '';
                         }
                     }
@@ -428,13 +428,13 @@ MAIN_DOM_JS = r"""
                 var file = e.target.files[0];
                 if (!file) return;
                 console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
-                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; }
+                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
                 // Validate spec content before uploading
                 if (typeof validateSpecContent === 'function') validateSpecContent(file);
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
-                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.style.color = '#ba1a1a'; }
+                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                     return;
                 }
                 var qs = queryApiDatasets();
@@ -447,7 +447,7 @@ MAIN_DOM_JS = r"""
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.style.color = '#2e7d32'; }
+                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
                         var dsName = _specCurrentDatasetName || 'dataset';
                         var savedPath = result.path;
                         selectSpecFile(dsName, savedPath);
@@ -466,7 +466,7 @@ MAIN_DOM_JS = r"""
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.style.color = '#ba1a1a'; }
+                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                     })
                     .finally(function() {
                         specMachineUpload.value = '';
@@ -515,7 +515,7 @@ MAIN_DOM_JS = r"""
             var fd = new FormData();
             fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
-            if (resultEl) resultEl.innerHTML = '<span style="color:var(--outline);font-size:0.8125rem;">Validating spec...</span>';
+            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
             fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
@@ -648,7 +648,7 @@ MAIN_DOM_JS = r"""
                     if (indicator) {
                         var el = document.createElement('div');
                         el.id = 'spec-validation-msg';
-                        el.style.cssText = 'color:#C20A29;font-size:13px;margin-top:6px;';
+                        el.className = 'spec-validation-msg';
                         el.textContent = msg;
                         indicator.parentNode.insertBefore(el, indicator.nextSibling);
                     } else {
