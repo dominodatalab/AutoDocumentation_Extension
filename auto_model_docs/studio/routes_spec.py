@@ -77,7 +77,7 @@ def register_spec_routes(rt):
         for s in specs:
             items.append(
                 Div(
-                    Span(s["name"], style="font-family: monospace;"),
+                    Span(s["name"], cls="spec-list-item-name"),
                     Span(f"{s['size_kb']} KB", style="color: var(--outline); margin: 0 0.75rem;"),
                     cls="spec-list-item",
                 )

@@ -646,6 +646,11 @@ class TestSpecRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/spec-list"](req)
         store.list_specs.assert_called_once()
+        fh = sys.modules["fasthtml.common"]
+        assert any(
+            c.args and c.args[0] == "spec1.yaml" and c.kwargs.get("cls") == "spec-list-item-name"
+            for c in fh.Span.call_args_list
+        )
 
     @pytest.mark.asyncio
     async def test_spec_list_empty(self, _mock_studio_modules):

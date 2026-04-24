@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 STUDIO_CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 :root {
@@ -55,8 +55,8 @@ STUDIO_CSS = """
     --info-container: #e8f1fb;
 
     /* Typography */
-    --font-headline: 'Inter', sans-serif;
-    --font-body: 'Inter', sans-serif;
+    --font-headline: 'Inter', 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-body: 'Inter', 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 
     /* Ambient shadows */
     --shadow-sm: 0 1px 2px rgba(46, 46, 56, 0.04), 0 8px 24px rgba(46, 46, 56, 0.04);
@@ -73,7 +73,7 @@ html, body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    background: var(--surface);
+    background: #ffffff;
     color: var(--on-surface);
     font-family: var(--font-body);
     font-size: 14px;
@@ -177,7 +177,7 @@ a:hover { color: var(--primary-container); }
     font-weight: 500;
 }
 #project-id-resolved.error {
-    color: var(--error);
+    color: var(--on-surface);
 }
 
 /* ── 3-Column Grid ────────────────────────────────────────────────── */
@@ -383,7 +383,7 @@ input[type="file"] {
     border-right: 1px solid #d6d6d6;
     font-size: 14px;
     color: #543fde;
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-body);
     white-space: nowrap;
     user-select: none;
     min-width: 6.5rem;
@@ -398,15 +398,13 @@ input[type="file"] {
     outline: none;
 }
 .code-root-prefix option {
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-body);
 }
 .code-root-prefix.code-root-error {
-    color: var(--error);
-    font-style: italic;
+    color: var(--on-surface);
 }
 .code-root-prefix.code-root-loading {
     color: var(--on-surface-variant);
-    font-style: italic;
 }
 .code-root-suffix {
     flex: 1;
@@ -418,7 +416,7 @@ input[type="file"] {
     background: transparent;
     outline: none;
     min-width: 0;
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-body);
 }
 .code-root-suffix::placeholder { color: #65657b; }
 
@@ -600,7 +598,7 @@ input[type="file"] {
 .spec-file-empty {
     padding: 24px 12px;
     text-align: center;
-    color: var(--outline);
+    color: var(--on-surface);
     font-size: 0.8125rem;
 }
 .spec-actions-row {
@@ -612,7 +610,7 @@ input[type="file"] {
 }
 .spec-upload-status {
     font-size: 0.8125rem;
-    color: var(--outline);
+    color: var(--on-surface);
 }
 .spec-validation-error {
     background: var(--error-container);
@@ -621,7 +619,7 @@ input[type="file"] {
     padding: 0.5rem 0.75rem;
     margin-top: 0.375rem;
     font-size: 0.8125rem;
-    color: var(--error);
+    color: var(--on-surface);
 }
 .spec-validation-error ul { color: var(--on-surface); }
 .spec-validation-error-list {
@@ -666,7 +664,7 @@ input[type="file"] {
 }
 .spec-info-badge-invalid {
     background: rgba(186, 26, 26, 0.1);
-    color: var(--error);
+    color: var(--on-surface);
 }
 
 /* ── Checkbox ─────────────────────────────────────────────────────── */
@@ -938,7 +936,7 @@ button.primary:disabled {
 }
 .terminal-status-failed {
     background: var(--error-container);
-    color: var(--error);
+    color: var(--on-surface);
 }
 .terminal-status-cancelled {
     background: var(--warning-container);
@@ -987,7 +985,8 @@ button.primary:disabled {
 .phase-pct {
     font-size: 10px;
     color: var(--outline);
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
 }
 .phase-check {
     color: var(--success);
@@ -1184,6 +1183,9 @@ button.primary:disabled {
     font-size: 0.8125rem;
     margin: 0;
 }
+.spec-list-item-name {
+    font-family: var(--font-body);
+}
 .history-table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -1230,7 +1232,7 @@ button.primary:disabled {
 .history-status-pending { background: var(--warning-container); color: var(--warning); }
 .history-status-running { background: var(--secondary-container); color: var(--primary); }
 .history-status-succeeded { background: var(--success-container); color: var(--success); }
-.history-status-failed { background: var(--error-container); color: var(--error); }
+.history-status-failed { background: var(--error-container); color: var(--on-surface); }
 .history-status-cancelled { background: var(--warning-container); color: var(--warning); }
 .history-toggle {
     font-size: 0.75rem;
@@ -1458,7 +1460,8 @@ details[open] > .history-toggle::before {
     margin: 0;
     color: rgba(255,255,255,0.45);
     font-size: 11px;
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
 }
 
@@ -1502,10 +1505,11 @@ details[open] > .history-toggle::before {
     max-width: 640px;
     font-family: var(--font-body);
     box-shadow: var(--shadow-sm);
+    color: var(--on-surface);
 }
 
 .bootstrap-error-detail {
-    color: var(--on-surface-variant);
+    color: var(--on-surface);
     margin-top: 0.5rem;
 }
 
@@ -1659,7 +1663,7 @@ details[open] > .history-toggle::before {
 }
 
 .spec-validation-empty {
-    color: var(--outline);
+    color: var(--on-surface);
 }
 
 .spec-validation-pending {
@@ -1668,7 +1672,7 @@ details[open] > .history-toggle::before {
 }
 
 .spec-validation-msg {
-    color: var(--error);
+    color: var(--on-surface);
     font-size: 13px;
     margin-top: 6px;
 }
