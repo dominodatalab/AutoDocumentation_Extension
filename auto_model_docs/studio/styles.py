@@ -261,15 +261,15 @@ a:hover { color: var(--primary-container); }
 input[type="text"]:not(.code-root-suffix),
 input[type="number"],
 input[type="password"],
-select:not(.code-root-prefix):not(.lang-override-select),
 textarea {
-    background: var(--surface-container-lowest);
+    background-color: #ffffff;
     border: 1px solid #d6d6d6;
-    border-radius: var(--radius-sm);
-    padding: 0.625rem 0.875rem;
-    color: var(--on-surface);
+    border-radius: 4px;
+    padding: 0 14px;
+    height: 36px;
+    color: #2e2e38;
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 14px;
     font-weight: 400;
     transition: border-color 0.15s ease;
     outline: none;
@@ -279,27 +279,64 @@ textarea {
     -webkit-appearance: none;
     appearance: none;
 }
+select:not(.code-root-prefix):not(.lang-override-select) {
+    background-color: #ffffff;
+    border: 1px solid #d6d6d6;
+    border-radius: 4px;
+    padding: 0 2rem 0 14px;
+    height: 36px;
+    color: #2e2e38;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 400;
+    transition: border-color 0.15s ease;
+    outline: none;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+}
+textarea {
+    height: auto;
+    padding: 8px 14px;
+    min-height: 72px;
+}
 input[type="text"]:not(.code-root-suffix):hover,
 input[type="number"]:hover,
 input[type="password"]:hover,
 select:not(.code-root-prefix):not(.lang-override-select):hover,
 textarea:hover {
-    border-color: var(--primary);
+    border-color: #543fde;
 }
 input[type="text"]:not(.code-root-suffix):focus,
 input[type="number"]:focus,
 input[type="password"]:focus,
 select:not(.code-root-prefix):not(.lang-override-select):focus,
 textarea:focus {
-    border-color: var(--primary);
+    border-color: #543fde;
     box-shadow: none;
+    outline: none;
 }
 input[type="text"]::placeholder,
 input[type="number"]::placeholder,
 input[type="password"]::placeholder,
 textarea::placeholder {
-    color: var(--outline);
+    color: #65657b;
+    font-size: 14px;
     font-weight: 400;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+    background: #ebebeb;
+    color: #65657b;
+    border-color: #65657b;
+    cursor: not-allowed;
 }
 input[type="checkbox"],
 input[type="radio"] {
@@ -314,13 +351,6 @@ input[type="radio"] {
 input[type="file"] {
     display: none !important;
 }
-select:not(.code-root-prefix):not(.lang-override-select) {
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    padding-right: 2rem;
-}
 .field-hint-text {
     display: block;
     font-size: 11px;
@@ -331,23 +361,28 @@ select:not(.code-root-prefix):not(.lang-override-select) {
 /* Code root combo */
 .code-root-wrap {
     display: flex;
-    border: 1px solid var(--ghost-border);
-    border-radius: var(--radius-md);
+    border: 1px solid #d6d6d6;
+    border-radius: 4px;
     overflow: hidden;
-    background: var(--surface-container-low);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: #ffffff;
+    transition: border-color 0.15s ease;
+    height: 36px;
+}
+.code-root-wrap:hover {
+    border-color: #543fde;
 }
 .code-root-wrap:focus-within {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(67, 67, 213, 0.12);
+    border-color: #543fde;
+    box-shadow: none;
 }
 .code-root-prefix {
-    padding: 0.625rem 0.875rem;
+    padding: 0 2rem 0 14px;
+    height: 36px;
     background: var(--surface-container-low);
     border: none;
-    border-right: 1px solid var(--ghost-border);
-    font-size: 0.8125rem;
-    color: var(--primary);
+    border-right: 1px solid #d6d6d6;
+    font-size: 14px;
+    color: #543fde;
     font-family: ui-monospace, monospace;
     white-space: nowrap;
     user-select: none;
@@ -355,6 +390,12 @@ select:not(.code-root-prefix):not(.lang-override-select) {
     max-width: 55%;
     flex-shrink: 0;
     cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    outline: none;
 }
 .code-root-prefix option {
     font-family: ui-monospace, monospace;
@@ -370,15 +411,16 @@ select:not(.code-root-prefix):not(.lang-override-select) {
 .code-root-suffix {
     flex: 1;
     border: none;
-    padding: 0.625rem 0.875rem;
-    font-size: 0.8125rem;
-    color: var(--on-surface);
+    padding: 0 14px;
+    height: 36px;
+    font-size: 14px;
+    color: #2e2e38;
     background: transparent;
     outline: none;
     min-width: 0;
     font-family: ui-monospace, monospace;
 }
-.code-root-suffix::placeholder { color: var(--outline); }
+.code-root-suffix::placeholder { color: #65657b; }
 
 /* Label row with info tooltip */
 .label-row {
@@ -849,22 +891,21 @@ button.primary:disabled {
     font-family: var(--font-body);
     font-size: 0.8125rem;
     font-weight: 500;
-    color: #311eae;
+    color: #ffffff;
     text-decoration: none;
     cursor: pointer;
     padding: 0.375rem 0.875rem;
     border-radius: var(--radius-sm);
-    background: #f0eefc;
-    border: 1px solid #d1cbf6;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    background: #543fde;
+    border: none;
+    transition: background 0.15s ease;
     min-height: 32px;
     display: inline-flex;
     align-items: center;
 }
 .terminal-action:hover {
-    background: #d1cbf6;
-    border-color: #d1cbf6;
-    color: #311eae;
+    background: #3b23d1;
+    color: #ffffff;
 }
 .terminal-action-disabled {
     opacity: 0.35;
@@ -1328,21 +1369,22 @@ details[open] > .history-toggle::before {
     justify-content: center;
     gap: 8px;
     width: 100%;
-    padding: 10px 16px;
+    padding: 0.625rem 1.25rem;
     margin-top: 12px;
-    background: #f0eefc;
-    color: #311eae;
-    border: 1px solid #d1cbf6;
+    background: #543fde;
+    color: #ffffff;
+    border: none;
     border-radius: var(--radius-sm);
-    font-size: 0.8125rem;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: background 0.15s ease;
+    min-height: 36px;
 }
 #gear-settings-btn:hover {
-    background: #d1cbf6;
-    border-color: #d1cbf6;
-    color: #311eae;
+    background: #3b23d1;
+    color: #ffffff;
 }
 #gear-settings-btn svg {
     flex-shrink: 0;
@@ -1526,13 +1568,29 @@ details[open] > .history-toggle::before {
 
 .lang-override-select {
     display: none;
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-sm);
-    padding: 4px 8px;
+    border: 1px solid #d6d6d6;
+    border-radius: 4px;
+    padding: 0 2rem 0 14px;
+    height: 36px;
     margin-left: 4px;
-    font-size: 0.8125rem;
-    background: var(--surface-container-lowest);
-    color: var(--on-surface);
+    font-size: 14px;
+    font-family: var(--font-body);
+    font-weight: 400;
+    background: #ffffff;
+    color: #2e2e38;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+.lang-override-select:hover,
+.lang-override-select:focus {
+    border-color: #543fde;
+    box-shadow: none;
 }
 
 .warning-banner {
