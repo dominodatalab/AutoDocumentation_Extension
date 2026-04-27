@@ -191,8 +191,6 @@ async def index(req: Request):
     _current_model = "kimi-k2-0905-preview"
 
     branch_options = []
-    tier_data = []
-    default_tier = ""
     tier_options = []
     if project_id:
         try:
@@ -201,13 +199,13 @@ async def index(req: Request):
         except Exception:
             pass
     try:
-        tier_data = domino_client.list_hardware_tiers(project_id=project_id)
+        tier_rows = domino_client.list_hardware_tiers(project_id=project_id) or []
         default_tier = domino_client.get_project_default_tier()
-        for t in tier_data:
+        for t in tier_rows:
             tid = t.get("id", "")
-            tname = t.get("name") or tid
+            label = t.get("option_label") or t.get("name") or tid
             is_default = t.get("isDefault", False) or tid == default_tier
-            tier_options.append(Option(tname, value=tid, selected=is_default))
+            tier_options.append(Option(label, value=tid, selected=is_default))
     except Exception:
         tier_options = []
     if not tier_options:
@@ -456,39 +454,19 @@ async def index(req: Request):
             cls="field",
         )
     )
-    # Hardware tier (card grid)
-    tier_cards = []
-    for t in tier_data if tier_data else []:
-        tid = t.get("id", "")
-        tname = t.get("name") or tid
-        is_default = t.get("isDefault", False) or tid == default_tier
-        tier_cards.append(
-            Div(
-                Div(tname, cls="hw-tier-card-name"),
-                cls=f"hw-tier-card{' selected' if is_default else ''}",
-                data_tier_id=tid,
-                onclick=f"selectHwTier(this, '{tid}')",
-            )
-        )
-    if not tier_cards:
-        tier_cards.append(
-            Div(
-                Div("(default)", cls="hw-tier-card-name"),
-                cls="hw-tier-card selected",
-                data_tier_id="",
-                onclick="selectHwTier(this, '')",
-            )
-        )
     run_card_children.append(
         Div(
             Div(
-                Label("Hardware tier"),
+                Label("Hardware tier", for_="field-hardware_tier"),
                 Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the Domino job."),
                 cls="label-row",
             ),
-            Input(type="hidden", name="hardware_tier", id="field-hardware_tier",
-                  value=default_tier or ""),
-            Div(*tier_cards, cls="hw-tier-grid"),
+            Select(
+                *tier_options,
+                name="hardware_tier",
+                id="field-hardware_tier",
+                cls="hw-tier-select",
+            ),
             cls="field",
         )
     )

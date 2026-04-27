@@ -1304,40 +1304,14 @@ details[open] > .history-toggle::before {
     color: var(--outline);
 }
 
-/* ── Hardware Tier Card Grid ─────────────────────────────────────── */
-.hw-tier-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.625rem;
+select.hw-tier-select {
+    width: 100%;
+    max-width: 100%;
 }
-.hw-tier-card {
-    padding: 0.75rem;
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    background: transparent;
-}
-.hw-tier-card:hover {
-    background: var(--surface-container-low);
-}
-.hw-tier-card.selected {
-    border-color: var(--primary-fixed-dim);
-    background: var(--primary-fixed);
-}
-.hw-tier-card-name {
-    font-family: var(--font-body);
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--on-surface);
-}
-.hw-tier-card.selected .hw-tier-card-name {
-    color: var(--primary);
-}
-.hw-tier-card-detail {
-    font-size: 10px;
-    color: var(--on-surface-variant);
-    margin-top: 0.125rem;
+select.hw-tier-select option {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    padding: 0.25rem 0;
 }
 
 /* ── Insight card ─────────────────────────────────────────────────── */

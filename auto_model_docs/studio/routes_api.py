@@ -59,8 +59,9 @@ def register_api_routes(rt):
         for t in tiers:
             tid = t.get("id", "")
             tname = t.get("name") or tid
+            label = t.get("option_label") or tname
             is_default = t.get("isDefault", False) or tid == default_tier
-            options.append(Option(tname, value=tid, selected=is_default))
+            options.append(Option(label, value=tid, selected=is_default))
         if not options:
             options = [Option("(default)", value="")]
         return Select(*options, name="hardware_tier", id="field-hardware_tier")
