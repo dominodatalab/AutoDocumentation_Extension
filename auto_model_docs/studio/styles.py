@@ -105,12 +105,14 @@ a:hover { color: var(--primary-container); }
 
 /* ── Header ───────────────────────────────────────────────────────── */
 .domino-header {
-    background: #2e2e38;
+    background: #ffffff;
     width: 100%;
     min-height: 44px;
-    padding: 0 2rem;
+    padding: 0.875rem 2rem;
     display: flex;
     align-items: center;
+    border-bottom: 1px solid var(--outline-variant);
+    box-sizing: border-box;
 }
 .domino-header-inner {
     max-width: 1440px;
@@ -120,9 +122,10 @@ a:hover { color: var(--primary-container); }
     flex-direction: row;
     align-items: center;
     gap: 1rem;
+    flex-wrap: wrap;
 }
 .domino-header-title {
-    color: #ffffff;
+    color: var(--on-surface);
     font-family: var(--font-body);
     font-size: 0.875rem;
     font-weight: 600;
@@ -133,7 +136,8 @@ a:hover { color: var(--primary-container); }
     font-family: var(--font-body);
     font-size: 0.8125rem;
     font-weight: 400;
-    color: rgba(255,255,255,0.6);
+    color: var(--on-surface-variant);
+    margin: 0;
 }
 .domino-header-version {
     font-family: var(--font-body);
@@ -1463,7 +1467,7 @@ select.hw-tier-select option {
 
 .header-meta {
     margin-left: auto;
-    align-self: flex-start;
+    align-self: center;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -1472,23 +1476,24 @@ select.hw-tier-select option {
 
 .header-version-text {
     margin: 0;
-    color: rgba(255,255,255,0.45);
+    color: var(--muted);
     font-size: 11px;
-    font-family: var(--font-body);
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
 }
 
 .header-logs-link {
-    color: rgba(255,255,255,0.75);
+    color: var(--primary);
     font-size: 12px;
-    font-weight: 500;
-    text-decoration: none;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 .header-logs-link:hover {
-    color: #ffffff;
-    text-decoration: none;
+    color: var(--primary-hover);
+    text-decoration: underline;
 }
 
 .bootstrap-status-wrap,
