@@ -1388,13 +1388,16 @@ select.hw-tier-select option {
 }
 #gear-popover-inner {
     background: #fff;
-    width: 420px;
+    width: fit-content;
+    max-width: calc(100vw - 2rem);
+    min-width: min(28rem, calc(100vw - 2rem));
     max-height: 80vh;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-float);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: hidden;
 }
 #gear-popover-header {
     display: flex;
@@ -1667,10 +1670,20 @@ select.hw-tier-select option {
 }
 #gear-popover-content {
     padding: 16px 20px 20px;
+    overflow-x: hidden;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+}
+#gear-popover-content .label-row {
+    flex-wrap: wrap;
+}
+#gear-popover-content .label-row > label {
+    min-width: 0;
 }
 
 /* ── Responsive ───────────────────────────────────────────────────── */
