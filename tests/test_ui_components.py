@@ -369,3 +369,12 @@ class TestRenderJobHistoryTable:
         _mock_dependencies["state"].domino_job_store.get_user_jobs.side_effect = RuntimeError("Not ready")
         result = ui._render_job_history_table("alice")
         assert result is not None
+
+
+class TestStudioPageInsightBanner:
+    def test_insight_card_is_single_full_width_banner_before_grid(self):
+        root = Path(__file__).resolve().parent.parent
+        src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        assert src.count('cls="insight-card"') == 1
+        assert "studio-page-insight" in src
+        assert src.index("studio-page-insight") < src.index('cls="studio-grid"')

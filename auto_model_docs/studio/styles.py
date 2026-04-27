@@ -155,6 +155,13 @@ a:hover { color: var(--primary-container); }
     width: 100%;
     min-height: calc(100vh - 100px);
 }
+.studio-page-insight {
+    width: 100%;
+    margin-bottom: 1.25rem;
+}
+.studio-page-insight .insight-card {
+    margin-top: 0;
+}
 .hero {
     padding: 0.25rem 0 1rem 0;
 }
@@ -196,7 +203,26 @@ a:hover { color: var(--primary-container); }
     display: grid;
     grid-template-columns: minmax(280px, 3fr) minmax(420px, 5fr) minmax(320px, 4fr);
     gap: 1.25rem;
-    align-items: start;
+    align-items: stretch;
+}
+.studio-col-left,
+.studio-col-mid,
+.studio-col-right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.studio-col-left > .bp-card,
+.studio-col-mid > .bp-card {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.studio-col-mid > .bp-card {
+    display: flex;
+    flex-direction: column;
+}
+.studio-col-mid > .bp-card > .card-footer {
+    margin-top: auto;
 }
 @media (max-width: 1200px) {
     .studio-grid {

@@ -331,16 +331,6 @@ async def index(req: Request):
 
     left_col_children.append(Div(*spec_card_children, cls="bp-card"))
 
-    # Insight card
-    left_col_children.append(
-        Div(
-            H4("Auto Model Docs Studio"),
-            P("Upload a YAML spec file to define which sections to include in your model documentation. "
-              "The system will parse endpoints and data models automatically."),
-            cls="insight-card",
-        )
-    )
-
     # MIDDLE COLUMN: Configuration & Run
     mid_col_children = [
         Div(
@@ -626,9 +616,18 @@ async def index(req: Request):
         ),
         # Page content
         Div(
-            # Environment warnings
+            Div(
+                Div(
+                    H4("Auto Model Docs Studio"),
+                    P(
+                        "Upload a YAML spec file to define which sections to include in your model documentation. "
+                        "The system will parse endpoints and data models automatically.",
+                    ),
+                    cls="insight-card",
+                ),
+                cls="studio-page-insight",
+            ),
             *_render_warnings_banner(_STARTUP_WARNINGS),
-            # Form wrapping 3 columns
             Form(
                 Div(
                     # Left column
