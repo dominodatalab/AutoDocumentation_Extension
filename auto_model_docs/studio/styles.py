@@ -107,11 +107,10 @@ a:hover { color: var(--primary-container); }
 .domino-header {
     background: #ffffff;
     width: 100%;
-    min-height: 44px;
-    padding: 0.875rem 2rem;
+    padding: 2rem 2rem 0.5rem;
     display: flex;
+    justify-content: center;
     align-items: center;
-    border-bottom: 1px solid var(--outline-variant);
     box-sizing: border-box;
 }
 .domino-header-inner {
@@ -119,23 +118,23 @@ a:hover { color: var(--primary-container); }
     margin: 0 auto;
     width: 100%;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
+    text-align: center;
+    gap: 0.35rem;
 }
 .domino-header-title {
     color: var(--on-surface);
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: 0;
+    font-family: var(--font-headline);
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
     margin: 0;
 }
 .domino-header-subtitle {
     font-family: var(--font-body);
     font-size: 0.8125rem;
-    font-weight: 400;
+    font-weight: 500;
     color: var(--on-surface-variant);
     margin: 0;
 }
@@ -1466,12 +1465,11 @@ select.hw-tier-select option {
 }
 
 .header-meta {
-    margin-left: auto;
-    align-self: center;
+    margin: 0.35rem 0 0;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 0.25rem;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .header-version-text {
@@ -1481,19 +1479,19 @@ select.hw-tier-select option {
     font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
+    text-align: center;
 }
 
 .header-logs-link {
     color: var(--primary);
     font-size: 12px;
     font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    text-decoration: none;
 }
 
 .header-logs-link:hover {
     color: var(--primary-hover);
-    text-decoration: underline;
+    text-decoration: none;
 }
 
 .bootstrap-status-wrap,
