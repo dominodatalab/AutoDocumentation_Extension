@@ -167,15 +167,28 @@ a:hover { color: var(--primary-container); }
     line-height: 1.5;
 }
 
+.target-project-callout {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--outline-variant);
+}
+.target-project-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.35rem;
+    line-height: 1.35;
+}
 .target-project-label-prefix {
     color: var(--on-surface);
-    font-size: 0.8125rem;
-    font-weight: 400;
+    font-size: 1.0625rem;
+    font-weight: 600;
 }
 .target-project-display {
-    font-size: 0.8125rem;
+    font-size: 1.25rem;
     font-weight: 700;
-    color: var(--on-surface);
+    color: var(--primary);
+    letter-spacing: -0.01em;
 }
 
 /* ── 3-Column Grid ────────────────────────────────────────────────── */

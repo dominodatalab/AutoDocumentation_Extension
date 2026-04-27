@@ -355,6 +355,21 @@ async def index(req: Request):
 
     run_card_children.append(
         Div(
+            Div(
+                Span("Target project: ", cls="target-project-label-prefix"),
+                Span(
+                    project_display_name or project_id or "",
+                    cls="target-project-display",
+                ),
+                cls="target-project-row",
+            ),
+            Input(type="hidden", name="project_id", value=project_id or ""),
+            cls="field target-project-callout",
+        )
+    )
+
+    run_card_children.append(
+        Div(
             Label("Code root path", for_="code-root-prefix"),
             Div(
                 Select(
@@ -414,20 +429,6 @@ async def index(req: Request):
         )
     )
 
-    run_card_children.append(
-        Div(
-            Div(
-                Span("Target project: ", cls="target-project-label-prefix"),
-                Span(
-                    project_display_name or project_id or "",
-                    cls="target-project-display",
-                ),
-                cls="label-row",
-            ),
-            Input(type="hidden", name="project_id", value=project_id or ""),
-            cls="field",
-        )
-    )
     # Branch
     if branch_options:
         branch_input = Select(*branch_options, name="branch", id="field-branch")
