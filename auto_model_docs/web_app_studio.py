@@ -601,15 +601,6 @@ async def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
-                Div(
-                    P(
-                        get_deploy_version_label(),
-                        cls="header-version-text",
-                    ),
-                    A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
-                      cls="header-logs-link"),
-                    cls="header-meta",
-                ),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
@@ -646,6 +637,15 @@ async def index(req: Request):
                 hx_swap="innerHTML",
                 hx_encoding="multipart/form-data",
                 enctype="multipart/form-data",
+            ),
+            Div(
+                P(
+                    get_deploy_version_label(),
+                    cls="header-version-text",
+                ),
+                A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
+                  cls="header-logs-link"),
+                cls="studio-footer-meta",
             ),
             cls="page",
         ),

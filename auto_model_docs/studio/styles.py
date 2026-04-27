@@ -154,9 +154,19 @@ a:hover { color: var(--primary-container); }
 .page {
     max-width: 1440px;
     margin: 0 auto;
-    padding: 2rem 2rem 5rem;
+    padding: 2rem 2rem 1.5rem;
     width: 100%;
     min-height: calc(100vh - 100px);
+    display: flex;
+    flex-direction: column;
+}
+.studio-footer-meta {
+    margin-top: auto;
+    padding-top: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
 }
 .studio-page-insight {
     width: 100%;
@@ -609,11 +619,23 @@ input[type="file"] {
 .spec-breadcrumb-sep { color: var(--outline-variant); margin: 0 2px; }
 .spec-breadcrumb-current { color: var(--on-surface); font-weight: 600; }
 .spec-file-list {
+    --spec-file-row: 2.75rem;
     border: 1px solid var(--outline-variant);
     border-radius: var(--radius-md);
-    max-height: 220px;
+    height: calc(5 * var(--spec-file-row));
+    min-height: calc(5 * var(--spec-file-row));
     overflow-y: auto;
     background: var(--surface-container-lowest);
+    display: flex;
+    flex-direction: column;
+}
+.spec-file-list > .spec-file-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    box-sizing: border-box;
 }
 .spec-file-item {
     display: flex;
@@ -623,6 +645,13 @@ input[type="file"] {
     font-size: 0.8125rem;
     cursor: pointer;
     transition: background 0.1s;
+    min-height: var(--spec-file-row);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+.spec-file-parent .spec-file-name {
+    color: var(--on-surface-variant);
+    font-weight: 600;
 }
 .spec-file-item + .spec-file-item {
     border-top: 1px solid var(--ghost-border);
@@ -1462,14 +1491,6 @@ select.hw-tier-select option {
 
 .app-link:hover {
     color: var(--primary-hover);
-}
-
-.header-meta {
-    margin: 0.35rem 0 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.35rem;
 }
 
 .header-version-text {

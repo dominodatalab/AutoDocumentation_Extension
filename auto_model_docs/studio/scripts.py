@@ -260,6 +260,14 @@ MAIN_DOM_JS = r"""
             }
         }
 
+        function specParentPath(p) {
+            if (!p) return null;
+            var parts = p.split('/').filter(Boolean);
+            if (parts.length === 0) return null;
+            parts.pop();
+            return parts.join('/');
+        }
+
         function browseFiles(path) {
             _specCurrentPath = path;
             if (!specFileList) return Promise.resolve();
@@ -287,10 +295,27 @@ MAIN_DOM_JS = r"""
                     }
                     console.log('[spec-browser] Found ' + files.length + ' items at path:', path || '(root)');
                     if (files.length === 0) {
-                        specFileList.innerHTML = '<span class="spec-file-empty">No YAML files found in this location</span>';
+                        var emptyMsg = 'No YAML files found in this location';
+                        var pPath = specParentPath(path);
+                        if (pPath !== null) {
+                            var up = '<div class="spec-file-item spec-file-parent" data-path="' + pPath + '" data-dir="true" data-name=".." data-parent="true">'
+                                + '<span class="spec-file-icon">\ud83d\udcc1</span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
+                            specFileList.innerHTML = up + '<span class="spec-file-empty">' + emptyMsg + '</span>';
+                            var upEl = specFileList.querySelector('.spec-file-parent');
+                            if (upEl) upEl.addEventListener('click', onFileClick);
+                        } else {
+                            specFileList.innerHTML = '<span class="spec-file-empty">' + emptyMsg + '</span>';
+                        }
                         return;
                     }
                     var html = '';
+                    var parentPath = specParentPath(path);
+                    if (parentPath !== null) {
+                        html += '<div class="spec-file-item spec-file-parent" data-path="' + parentPath + '" data-dir="true" data-name=".." data-parent="true">'
+                            + '<span class="spec-file-icon">\ud83d\udcc1</span>'
+                            + '<span class="spec-file-name">..</span>'
+                            + '<span class="spec-file-size"></span></div>';
+                    }
                     files.sort(function(a, b) {
                         if (a.isDirectory && !b.isDirectory) return -1;
                         if (!a.isDirectory && b.isDirectory) return 1;
