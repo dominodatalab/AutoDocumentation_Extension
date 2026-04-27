@@ -396,3 +396,6 @@ class TestSpecFileBrowserUi:
         assert "specParentPath" in scripts
         assert "spec-file-parent" in scripts
         assert "data-parent" in scripts
+        assert ".spec-file-list > .spec-file-item:last-of-type" in styles
+        assert "spec-file-list-pending" in scripts
+        assert "spec-file-list-pending" in styles

@@ -629,6 +629,11 @@ input[type="file"] {
     display: flex;
     flex-direction: column;
 }
+.spec-file-list.spec-file-list-pending {
+    pointer-events: none;
+    opacity: 0.55;
+    transition: opacity 0.12s ease;
+}
 .spec-file-list > .spec-file-empty {
     flex: 1;
     display: flex;
@@ -655,6 +660,9 @@ input[type="file"] {
 }
 .spec-file-item + .spec-file-item {
     border-top: 1px solid var(--ghost-border);
+}
+.spec-file-list > .spec-file-item:last-of-type {
+    border-bottom: 1px solid var(--ghost-border);
 }
 .spec-file-item:hover { background: var(--surface-container-low); }
 .spec-file-item.selected {

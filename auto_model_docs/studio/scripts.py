@@ -276,11 +276,11 @@ MAIN_DOM_JS = r"""
                 return Promise.resolve();
             }
             console.log('[spec-browser] Browsing path:', path || '(root)', 'in dataset:', _specCurrentDatasetName);
-            specFileList.innerHTML = '<span class="spec-file-empty">Loading...</span>';
             renderBreadcrumb(path);
 
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
+            specFileList.classList.add('spec-file-list-pending');
             return fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
@@ -342,6 +342,11 @@ MAIN_DOM_JS = r"""
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
+                })
+                .finally(function() {
+                    if (specFileList && _specBrowseAbort === ctrl) {
+                        specFileList.classList.remove('spec-file-list-pending');
+                    }
                 });
         }
 
