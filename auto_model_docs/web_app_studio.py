@@ -414,27 +414,17 @@ async def index(req: Request):
         )
     )
 
-    # Target project
     run_card_children.append(
         Div(
             Div(
-                Label("Target project", for_="field-project-id"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Domino project ID to run the job in. Leave blank to use the current project."),
+                Span("Target project: ", cls="target-project-label-prefix"),
+                Span(
+                    project_display_name or project_id or "",
+                    cls="target-project-display",
+                ),
                 cls="label-row",
             ),
-            Input(
-                name="target_project",
-                id="field-project-id",
-                type="text",
-                value="",
-                placeholder="Leave blank for current project",
-                autocomplete="off",
-            ),
-            Div(
-                (f"{project_display_name}" if project_display_name else ""),
-                id="project-id-resolved",
-                cls="resolved" if project_display_name else "",
-            ),
+            Input(type="hidden", name="project_id", value=project_id or ""),
             cls="field",
         )
     )

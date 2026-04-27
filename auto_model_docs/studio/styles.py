@@ -167,16 +167,14 @@ a:hover { color: var(--primary-container); }
     line-height: 1.5;
 }
 
-#project-id-resolved {
-    font-size: 0.78rem;
-    color: var(--outline);
-    padding: 0.25rem 0 0 0.15rem;
+.target-project-label-prefix {
+    color: var(--on-surface);
+    font-size: 0.8125rem;
+    font-weight: 400;
 }
-#project-id-resolved.resolved {
-    color: var(--primary);
-    font-weight: 500;
-}
-#project-id-resolved.error {
+.target-project-display {
+    font-size: 0.8125rem;
+    font-weight: 700;
     color: var(--on-surface);
 }
 

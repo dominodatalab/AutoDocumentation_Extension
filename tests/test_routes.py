@@ -362,45 +362,6 @@ class TestApiRoutes:
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_resolve_project(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        client = _mock_studio_modules["state"].domino_client
-        fh = sys.modules["fasthtml.common"]
-        mock_info = MagicMock()
-        mock_info.name = "my-project"
-        mock_info.owner_username = "alice"
-        client.resolve_project.return_value = mock_info
-        req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/api/resolve-project"](req)
-        client.resolve_project.assert_called_with("proj-123")
-        last_call = fh.Div.call_args_list[-1]
-        assert last_call.kwargs["id"] == "project-id-resolved"
-        assert last_call.kwargs["cls"] == "resolved"
-
-    @pytest.mark.asyncio
-    async def test_resolve_project_empty_id(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        fh = sys.modules["fasthtml.common"]
-        req = _make_request(query_params={})
-        await routes["/api/resolve-project"](req)  # should not raise
-        last_call = fh.Div.call_args_list[-1]
-        assert last_call.kwargs["id"] == "project-id-resolved"
-
-    @pytest.mark.asyncio
-    async def test_resolve_project_not_found_uses_error_class(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        fh = sys.modules["fasthtml.common"]
-        _mock_studio_modules["state"].domino_client.resolve_project.return_value = None
-        req = _make_request(query_params={"projectId": "proj-404"})
-        await routes["/api/resolve-project"](req)
-        last_call = fh.Div.call_args_list[-1]
-        assert last_call.kwargs["id"] == "project-id-resolved"
-        assert last_call.kwargs["cls"] == "error"
-
-    @pytest.mark.asyncio
     async def test_code_root_options_no_project_id(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")

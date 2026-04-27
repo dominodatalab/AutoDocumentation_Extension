@@ -448,17 +448,6 @@ class TestApiRoutesIntegration:
         resp = client.get("/api/download-template")
         assert resp.status_code == 200
 
-    def test_resolve_project(self, client, integration_env):
-        resp = client.get("/api/resolve-project?projectId=proj-integration")
-        assert resp.status_code == 200
-        body = resp.text
-        assert "test-owner" in body
-        assert "test-project" in body
-
-    def test_resolve_project_empty_id(self, client):
-        resp = client.get("/api/resolve-project")
-        assert resp.status_code == 200
-
     def test_branches(self, client, integration_env):
         resp = client.get("/api/branches?projectId=proj-integration")
         assert resp.status_code == 200

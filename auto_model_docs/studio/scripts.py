@@ -41,18 +41,16 @@ MAIN_DOM_JS = r"""
 
     document.addEventListener('DOMContentLoaded', function() {
 
-        // ── Auto-fill projectId from URL or postMessage ──
-        // Domino Apps run inside a cross-origin iframe; the proxy strips
-        // query params.  Try what we can; the user can always type it manually.
+        // ── Ensure projectId is on the page URL (reload if we only have hash / postMessage) ──
         (function() {
             function setProjectId(pid) {
                 if (!pid) return;
-                var input = document.getElementById('field-project-id');
-                if (input && !input.value) {
-                    input.value = pid;
-                    input.dataset.autoDocSet = 'true';
-                    input.dispatchEvent(new Event('change'));
-                }
+                try {
+                    var u = new URL(window.location.href);
+                    if (u.searchParams.get('projectId') === pid) return;
+                    u.searchParams.set('projectId', pid);
+                    window.location.replace(u.toString());
+                } catch (e) { /* ignore */ }
             }
             var pid = null;
             // 1. Own query string (direct / non-proxied access)
@@ -141,39 +139,6 @@ MAIN_DOM_JS = r"""
         const providerSelect    = document.getElementById('field-provider');
         const modelNameField    = document.getElementById('model-name-field');
 
-        // ── Resolve project, refresh tiers & output dir on change ─────
-        var projectIdInput = document.getElementById('field-project-id');
-        if (projectIdInput) {
-            var refreshTimer = null;
-            function onProjectIdChange() {
-                clearTimeout(refreshTimer);
-                refreshTimer = setTimeout(function() {
-                    var pid = projectIdInput.value.trim();
-                    var qs = pid ? '?projectId=' + encodeURIComponent(pid) : '';
-                    // Resolve project name
-                    fetch(_adUrl('api/resolve-project') + qs)
-                        .then(_checkResp).then(function(r) { return r.text(); })
-                        .then(function(html) {
-                            var el = document.getElementById('project-id-resolved');
-                            if (el) el.outerHTML = html;
-                            // Output location is fixed (autodoc dataset → docs/)
-                            // No need to update the display field.
-                        })
-                        .catch(function() {});
-                    // Refresh hardware tiers
-                    if (typeof htmx !== 'undefined') {
-                        htmx.ajax('GET', _adUrl('api/hardware-tiers') + qs, {
-                            target: '#field-hardware_tier',
-                            swap: 'outerHTML'
-                        });
-                    }
-                    loadDatasets();
-                }, 300);
-            }
-            projectIdInput.addEventListener('change', onProjectIdChange);
-            projectIdInput.addEventListener('blur', onProjectIdChange);
-        }
-
         // ── Dataset spec browser (Domino mode) ───────────────────────────
         var specDatasetSelect = document.getElementById('spec-dataset-select');
         var specFileList = document.getElementById('spec-file-list');
@@ -196,12 +161,7 @@ MAIN_DOM_JS = r"""
 
         function resolvedProjectId() {
             var params = new URLSearchParams(window.location.search);
-            var pid = params.get('projectId') || params.get('project_id') || '';
-            if (!pid) {
-                var pidInput = document.getElementById('field-project-id');
-                if (pidInput) pid = pidInput.value.trim();
-            }
-            return pid;
+            return params.get('projectId') || params.get('project_id') || '';
         }
 
         function queryApiDatasets() {
