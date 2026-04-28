@@ -392,6 +392,7 @@ class TestSpecFileBrowserUi:
         root = Path(__file__).resolve().parent.parent
         styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
         scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
         assert "calc(5 * var(--spec-file-row))" in styles
         assert "specParentPath" in scripts
         assert "spec-file-parent" in scripts
@@ -399,3 +400,4 @@ class TestSpecFileBrowserUi:
         assert ".spec-file-list > .spec-file-item:last-of-type" in styles
         assert "spec-file-list-pending" in scripts
         assert "spec-file-list-pending" in styles
+        assert 'id="spec-file-list"' in web

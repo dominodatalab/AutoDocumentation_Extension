@@ -244,6 +244,11 @@ async def index(req: Request):
             ),
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),           
             Div(
+                Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
+                id="spec-file-list",
+                cls="spec-file-list",
+            ),
+            Div(
                 Span("Selected: ", cls="spec-selected-label"),
                 Span(id="spec-selected-name", cls="spec-selected-value"),
                 id="spec-selected-indicator",
