@@ -401,3 +401,5 @@ class TestSpecFileBrowserUi:
         assert "spec-file-list-pending" in scripts
         assert "spec-file-list-pending" in styles
         assert 'id="spec-file-list"' in web
+        assert "spec-path-input" in web
+        assert "absoluteSpecFromRelative" in scripts

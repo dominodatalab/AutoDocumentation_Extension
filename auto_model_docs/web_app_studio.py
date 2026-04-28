@@ -224,15 +224,18 @@ async def index(req: Request):
 
     # Spec file card
     spec_card_children = []
-    # Hidden field that stores the resolved spec path for form submission
-    spec_card_children.append(
-        Input(name="spec_path", id="field-spec_path", type="hidden", value=""),
-    )
 
     # Dataset browser + upload
     spec_card_children.append(
         Div(
             Label("Spec file selection"),
+            A(
+                "Download reference template",
+                href="api/download-template",
+                data_app_rel="api/download-template",
+                download="doc_spec_template.yaml",
+                cls="app-link",
+            ),
             Hr(cls="section-divider"),
             Label("To browse for specfiles, select a dataset and a spec file in the navigator below", Span(" *", cls="required-star")),
             Div(
@@ -250,10 +253,19 @@ async def index(req: Request):
             ),
             Div(
                 Span("Selected: ", cls="spec-selected-label"),
-                Span(id="spec-selected-name", cls="spec-selected-value"),
+                Input(
+                    name="spec_path",
+                    id="field-spec_path",
+                    type="text",
+                    value="",
+                    cls="spec-path-input",
+                    placeholder="None",
+                    autocomplete="off",
+                    spellcheck="false",
+                ),
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
-            ),           
+            ),
             Div(
                 Label(
                     "Upload from my computer",
@@ -266,11 +278,6 @@ async def index(req: Request):
                     cls="upload-btn",
                 ),
                 Span(id="spec-upload-status", cls="spec-upload-status"),
-                A("Download reference template", href="api/download-template",
-                  data_app_rel="api/download-template",
-                  download="doc_spec_template.yaml",
-                  cls="app-link",
-                  style="margin-left: auto;"),
                 cls="spec-actions-row",
             ),
             cls="field",

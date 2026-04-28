@@ -1576,12 +1576,24 @@ select.hw-tier-select option {
     color: var(--outline);
 }
 
-.spec-selected-value {
+.spec-path-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--on-surface);
+    background: var(--surface-container-lowest);
+    white-space: nowrap;
+    overflow-x: auto;
 }
-.spec-selected-value:empty::before {
-    content: "None";
+.spec-path-input::placeholder {
     font-weight: 500;
     color: var(--outline);
 }

@@ -144,10 +144,9 @@ MAIN_DOM_JS = r"""
         var specFileList = document.getElementById('spec-file-list');
         var specBreadcrumb = document.getElementById('spec-breadcrumb');
         var specSelectedIndicator = document.getElementById('spec-selected-indicator');
-        var specSelectedName = document.getElementById('spec-selected-name');
         var specMachineUpload = document.getElementById('spec-machine-upload');
         var specUploadStatus = document.getElementById('spec-upload-status');
-        var specPathHidden = document.getElementById('field-spec_path');
+        var specPathField = document.getElementById('field-spec_path');
 
         // State
         var _specDatasets = [];
@@ -246,8 +245,7 @@ MAIN_DOM_JS = r"""
             _specCurrentSnapshotId = opt ? opt.getAttribute('data-snapshot') || '' : '';
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
-            if (specPathHidden) specPathHidden.value = '';
-            if (specSelectedName) specSelectedName.textContent = '';
+            if (specPathField) specPathField.value = '';
             var svm = document.getElementById('spec-validation-msg');
             if (svm) svm.remove();
             if (_specCurrentDatasetId) {
@@ -360,20 +358,23 @@ MAIN_DOM_JS = r"""
                 var items = specFileList.querySelectorAll('.spec-file-item');
                 for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
                 el.classList.add('selected');
-                selectSpecFile(_specCurrentDatasetName, path);
+                selectSpecFile(path);
             }
         }
 
-        function selectSpecFile(datasetName, filePath) {
-            console.log('[spec-browser] Selected:', datasetName + '/' + filePath);
+        function absoluteSpecFromRelative(relPath) {
+            var base = (_specCurrentDatasetPath || '').replace(/\/+$/, '');
+            var rel = (relPath || '').replace(/^\/+/, '');
+            if (base) return rel ? (base + '/' + rel) : base;
+            if (_specCurrentDatasetName && rel) return 'dataset://' + _specCurrentDatasetName + '/' + rel;
+            return rel || '';
+        }
+
+        function selectSpecFile(relFilePath) {
+            var abs = absoluteSpecFromRelative(relFilePath);
+            console.log('[spec-browser] Selected:', abs);
             if (specSelectedIndicator) specSelectedIndicator.style.display = 'flex';
-            if (specSelectedName) specSelectedName.textContent = datasetName + '/' + filePath;
-            // Build mount path and set the hidden form field
-            // The server will resolve the correct mount prefix
-            if (specPathHidden) {
-                // Use a marker so the server knows this is a dataset reference
-                specPathHidden.value = 'dataset://' + datasetName + '/' + filePath;
-            }
+            if (specPathField) specPathField.value = abs;
         }
 
         function renderBreadcrumb(path) {
@@ -431,7 +432,7 @@ MAIN_DOM_JS = r"""
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
                         var dsName = _specCurrentDatasetName || 'dataset';
                         var savedPath = result.path;
-                        selectSpecFile(dsName, savedPath);
+                        selectSpecFile(savedPath);
                         return browseFiles(_specCurrentPath).then(function() {
                             if (!savedPath || !specFileList) return;
                             var rows = specFileList.querySelectorAll('.spec-file-item');
