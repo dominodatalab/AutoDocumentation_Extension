@@ -1565,9 +1565,11 @@ select.hw-tier-select option {
 }
 
 .spec-selected-indicator {
-    display: none;
+    display: flex;
     padding: 8px 0;
     font-size: 0.8125rem;
+    align-items: center;
+    gap: 6px;
 }
 
 .spec-selected-label {
@@ -1577,6 +1579,11 @@ select.hw-tier-select option {
 .spec-selected-value {
     font-weight: 600;
     color: var(--on-surface);
+}
+.spec-selected-value:empty::before {
+    content: "None";
+    font-weight: 500;
+    color: var(--outline);
 }
 
 .lang-detection-row {

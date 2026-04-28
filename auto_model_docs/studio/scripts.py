@@ -247,7 +247,6 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
             if (specPathHidden) specPathHidden.value = '';
-            if (specSelectedIndicator) specSelectedIndicator.style.display = 'none';
             if (specSelectedName) specSelectedName.textContent = '';
             var svm = document.getElementById('spec-validation-msg');
             if (svm) svm.remove();
@@ -367,7 +366,7 @@ MAIN_DOM_JS = r"""
 
         function selectSpecFile(datasetName, filePath) {
             console.log('[spec-browser] Selected:', datasetName + '/' + filePath);
-            if (specSelectedIndicator) specSelectedIndicator.style.display = '';
+            if (specSelectedIndicator) specSelectedIndicator.style.display = 'flex';
             if (specSelectedName) specSelectedName.textContent = datasetName + '/' + filePath;
             // Build mount path and set the hidden form field
             // The server will resolve the correct mount prefix

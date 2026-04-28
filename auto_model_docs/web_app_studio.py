@@ -216,7 +216,7 @@ async def index(req: Request):
     # LEFT COLUMN: What to document
     left_col_children = [
         Div(
-            H2("What to document"),
+            H2("Documentation specification"),
             Span("Section 01", cls="step-badge"),
             cls="col-header",
         ),
@@ -234,7 +234,7 @@ async def index(req: Request):
         Div(
             Label("Spec file selection"),
             Hr(cls="section-divider"),
-            Label("Select a dataset to browse files", Span(" *", cls="required-star")),
+            Label("To browse for specfiles, select a dataset and a spec file in the navigator below", Span(" *", cls="required-star")),
             Div(
                 Select(
                     Option("Loading datasets...", value="", disabled=True, selected=True),
@@ -242,26 +242,16 @@ async def index(req: Request):
                 ),
                 cls="field",
             ),
-            Label("Select a spec file", Span(" *", cls="required-star")),
-            Div(id="spec-breadcrumb", cls="spec-breadcrumb"),
-            Div(
-                Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
-                id="spec-file-list",
-                cls="spec-file-list",
-            ),
+            Div(id="spec-breadcrumb", cls="spec-breadcrumb"),           
             Div(
                 Span("Selected: ", cls="spec-selected-label"),
                 Span(id="spec-selected-name", cls="spec-selected-value"),
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
-            ),
-            Div(
-                Span("OR", cls="or-divider-text"),
-                cls="or-divider",
-            ),
+            ),           
             Div(
                 Label(
-                    "Upload from my machine",
+                    "Upload from my computer",
                     Input(
                         type="file",
                         accept=".yaml,.yml",
