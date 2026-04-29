@@ -816,6 +816,22 @@ input[type="file"] {
     color: var(--primary);
     background: var(--surface-container);
 }
+.advanced-section-inline {
+    margin-top: 0.75rem;
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.advanced-inline-title {
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--on-surface);
+    padding: 0.65rem 1rem;
+    background: var(--surface-container-low);
+    border-bottom: 1px solid var(--outline-variant);
+}
 .advanced-summary-desc {
     font-weight: 400;
     font-size: 11px;
@@ -1415,82 +1431,6 @@ select.hw-tier-select option {
     margin: 0;
 }
 
-/* ── Gear settings button & modal ─────────────────────────────────── */
-#gear-settings-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    padding: 0.625rem 1.25rem;
-    margin-top: 12px;
-    background: #543fde;
-    color: #ffffff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    min-height: 36px;
-}
-#gear-settings-btn:hover {
-    background: #3b23d1;
-    color: #ffffff;
-}
-#gear-settings-btn svg {
-    flex-shrink: 0;
-}
-
-#gear-popover {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.35);
-}
-#gear-popover-inner {
-    background: #fff;
-    width: fit-content;
-    max-width: calc(100vw - 2rem);
-    min-width: min(28rem, calc(100vw - 2rem));
-    max-height: 80vh;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-float);
-    display: flex;
-    flex-direction: column;
-    overflow-x: hidden;
-    overflow-y: hidden;
-}
-#gear-popover-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--outline-variant);
-}
-.gear-popover-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--on-surface);
-}
-.gear-popover-close {
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: var(--on-surface-variant);
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-    line-height: 1;
-}
-.gear-popover-close:hover {
-    background: var(--surface-container);
-}
-
 .app-link {
     color: var(--primary);
     font-size: 0.8125rem;
@@ -1744,23 +1684,6 @@ select.hw-tier-select option {
 
 .lang-empty-state {
     color: var(--outline);
-}
-#gear-popover-content {
-    padding: 16px 20px 20px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1 1 auto;
-    min-height: 0;
-    min-width: 0;
-}
-#gear-popover-content .label-row {
-    flex-wrap: wrap;
-}
-#gear-popover-content .label-row > label {
-    min-width: 0;
 }
 
 /* ── Responsive ───────────────────────────────────────────────────── */

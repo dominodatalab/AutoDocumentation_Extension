@@ -403,3 +403,6 @@ class TestSpecFileBrowserUi:
         assert 'id="spec-file-list"' in web
         assert "spec-path-input" in web
         assert "absoluteSpecFromRelative" in scripts
+        assert "advanced-section-inline" in web
+        assert "gear-settings-btn" not in web
+        assert "gear-popover" not in web

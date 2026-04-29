@@ -124,6 +124,7 @@ class JobRequest:
     hardware_tier: Optional[str] = None
     spec_filename: Optional[str] = None  # original uploaded filename
     project_id: Optional[str] = None     # target Domino project (from ?projectId=)
+    openai_base_url: Optional[str] = None
 
 
 @dataclass

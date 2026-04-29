@@ -50,6 +50,7 @@ class _MockJobRequest:
     api_key_source: str = "domino_env"
     spec_filename: Optional[str] = None
     project_id: Optional[str] = None
+    openai_base_url: Optional[str] = None
 
 
 @dataclass

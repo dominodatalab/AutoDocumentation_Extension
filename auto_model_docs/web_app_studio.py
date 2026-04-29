@@ -183,6 +183,11 @@ async def index(req: Request):
 
 
     default_spec = _get_default_spec_path()
+    try:
+        from autodoc.core.config import Settings as _StudioSettings
+        _default_openai_base_url = _StudioSettings().openai_base_url or "https://api.openai.com/v1"
+    except Exception:
+        _default_openai_base_url = "https://api.openai.com/v1"
     import auth_context
     try:
         owner_id = auth_context.get_viewing_user().id
@@ -268,7 +273,7 @@ async def index(req: Request):
             ),
             Div(
                 Label(
-                    "Upload from my computer",
+                    "Upload spec",
                     Input(
                         type="file",
                         accept=".yaml,.yml",
@@ -454,21 +459,7 @@ async def index(req: Request):
         )
     )
 
-    # More run settings (expandable)
-    more_settings_children = []
-    # Gear button to open advanced settings modal
-    more_settings_children.append(
-        Button(
-            NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'),
-            Span("Advanced settings"),
-            type="button",
-            id="gear-settings-btn",
-            onclick="document.getElementById('gear-popover').style.display='flex'",
-        )
-    )
-
-    # Gear modal with advanced fields (still inside the form)
-    gear_popover_fields = [
+    advanced_settings_body = [
         Div(
             Div("Generation settings", cls="filter-section-title"),
             Div(
@@ -519,6 +510,28 @@ async def index(req: Request):
         ),
         Div(
             Div(
+                Label("OpenAI base URL", for_="field-openai_base_url"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="OpenAI-compatible API base URL (default matches official OpenAI). Change for proxies or other providers.",
+                ),
+                cls="label-row",
+            ),
+            Input(
+                name="openai_base_url",
+                id="field-openai_base_url",
+                type="text",
+                value=_default_openai_base_url,
+                placeholder=_default_openai_base_url,
+                data_default_url=_default_openai_base_url,
+            ),
+            cls="field",
+            id="openai-base-url-field",
+            style="display: none;",
+        ),
+        Div(
+            Div(
                 Label("Model", for_="field-model"),
                 Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use default (kimi-k2-0905-preview)"),
                 cls="label-row",
@@ -537,34 +550,11 @@ async def index(req: Request):
         ),
     ]
 
-    more_settings_children.append(
-        Div(
-            Div(
-                Div(
-                    Span("Advanced settings", cls="gear-popover-title"),
-                    Button(
-                        "\u2715",
-                        type="button",
-                        cls="gear-popover-close",
-                        onclick="document.getElementById('gear-popover').style.display='none'",
-                    ),
-                    id="gear-popover-header",
-                ),
-                Div(*gear_popover_fields, id="gear-popover-content"),
-                id="gear-popover-inner",
-            ),
-            id="gear-popover",
-            style="display: none;",
-            onclick="if(event.target===this)this.style.display='none'",
-        )
-    )
-
     run_card_children.append(
-        Details(
-            Summary("More run settings", cls="advanced-section-summary"),
-            Div(*more_settings_children, cls="advanced-content"),
-            cls="advanced-section",
-            open=True,
+        Div(
+            Div("Advanced settings", cls="advanced-inline-title"),
+            Div(*advanced_settings_body, cls="advanced-content"),
+            cls="advanced-section-inline",
         )
     )
 

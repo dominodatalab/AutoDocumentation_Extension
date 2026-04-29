@@ -61,6 +61,12 @@ console = Console()
     help="Model name override (uses provider default if not set)",
 )
 @click.option(
+    "--openai-base-url",
+    default=None,
+    type=str,
+    help="OpenAI-compatible API base URL (overrides OPENAI_BASE_URL / settings)",
+)
+@click.option(
     "--max-retries",
     default=None,
     type=int,
@@ -162,6 +168,7 @@ def main(
     code_root: str | None,
     provider: str,
     model: str | None,
+    openai_base_url: str | None,
     max_retries: int | None,
     initial_backoff: float | None,
     max_backoff: float | None,
@@ -214,6 +221,8 @@ def main(
             settings.llm_provider = provider
         if model:
             settings.llm_model = model
+        if openai_base_url:
+            settings.openai_base_url = openai_base_url.strip() or None
         if max_retries is not None:
             settings.llm_max_retries = max_retries
         if initial_backoff is not None:

@@ -467,6 +467,21 @@ MAIN_DOM_JS = r"""
         var ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-20250514';
         function toggleOpenAIFields() {
             const isOpenAI = providerSelect && providerSelect.value === 'openai';
+            var openaiBaseField = document.getElementById('openai-base-url-field');
+            var obuInput = document.getElementById('field-openai_base_url');
+            if (openaiBaseField) {
+                openaiBaseField.style.display = isOpenAI ? 'block' : 'none';
+            }
+            if (obuInput) {
+                if (isOpenAI) {
+                    if (!obuInput.value || !obuInput.value.trim()) {
+                        var dflt = obuInput.getAttribute('data-default-url');
+                        if (dflt) obuInput.value = dflt;
+                    }
+                } else {
+                    obuInput.value = '';
+                }
+            }
             if (modelNameField) {
                 modelNameField.style.display = 'flex';
             }
