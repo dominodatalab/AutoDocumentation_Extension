@@ -71,6 +71,17 @@ class TestLLMClientInit:
         assert client.model == "claude-sonnet-4-20250514"
         assert client.max_retries == 3
 
+    def test_anthropic_base_url_passed_to_sdk(self):
+        with patch("anthropic.AsyncAnthropic") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            LLMClient(
+                provider="anthropic",
+                api_key="sk-test",
+                base_url="https://gateway.example/v1",
+            )
+        mock_cls.assert_called_once()
+        assert mock_cls.call_args.kwargs.get("base_url") == "https://gateway.example/v1"
+
     def test_openai_defaults(self):
         """OpenAI provider sets expected model default and creates client."""
         with patch("openai.AsyncOpenAI") as mock_cls:

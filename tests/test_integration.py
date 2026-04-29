@@ -185,7 +185,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         api_key_source: str = "domino_env"
         spec_filename: Optional[str] = None
         project_id: Optional[str] = None
-        openai_base_url: Optional[str] = None
+        provider_base_url: Optional[str] = None
 
     @dataclass
     class DominoJobRecord:

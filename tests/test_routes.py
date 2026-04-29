@@ -33,7 +33,6 @@ class _MockJobRequest:
     provider: str = "anthropic"
     model: Optional[str] = None
     api_key: Optional[str] = None
-    base_url: Optional[str] = None
     code_root: Optional[str] = None
     max_files: Optional[int] = None
     workers: Optional[int] = None
@@ -50,7 +49,7 @@ class _MockJobRequest:
     api_key_source: str = "domino_env"
     spec_filename: Optional[str] = None
     project_id: Optional[str] = None
-    openai_base_url: Optional[str] = None
+    provider_base_url: Optional[str] = None
 
 
 @dataclass

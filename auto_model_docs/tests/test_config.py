@@ -66,6 +66,10 @@ class TestDefaultValues:
         s = _make_settings()
         assert s.openai_base_url is None
 
+    def test_anthropic_base_url_default_none(self):
+        s = _make_settings()
+        assert s.anthropic_base_url is None
+
     def test_code_root_default(self):
         s = _make_settings()
         assert s.code_root == Path("/mnt/code")

@@ -71,6 +71,11 @@ class Settings(BaseSettings):
         description="OpenAI-compatible API base URL (e.g., https://api.moonshot.ai/v1)",
         validation_alias=AliasChoices("AUTODOC_OPENAI_BASE_URL", "OPENAI_BASE_URL"),
     )
+    anthropic_base_url: Optional[str] = Field(
+        default=None,
+        description="Anthropic API base URL override (e.g., https://api.anthropic.com)",
+        validation_alias=AliasChoices("AUTODOC_ANTHROPIC_BASE_URL", "ANTHROPIC_BASE_URL"),
+    )
 
     # Paths
     code_root: Path = Field(

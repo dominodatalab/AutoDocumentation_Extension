@@ -185,9 +185,12 @@ async def index(req: Request):
     default_spec = _get_default_spec_path()
     try:
         from autodoc.core.config import Settings as _StudioSettings
-        _default_openai_base_url = _StudioSettings().openai_base_url or "https://api.openai.com/v1"
+        _ss = _StudioSettings()
+        _default_openai_base_url = _ss.openai_base_url or "https://api.openai.com/v1"
+        _default_anthropic_base_url = _ss.anthropic_base_url or "https://api.anthropic.com"
     except Exception:
         _default_openai_base_url = "https://api.openai.com/v1"
+        _default_anthropic_base_url = "https://api.anthropic.com"
     import auth_context
     try:
         owner_id = auth_context.get_viewing_user().id
@@ -510,25 +513,25 @@ async def index(req: Request):
         ),
         Div(
             Div(
-                Label("OpenAI base URL", for_="field-openai_base_url"),
+                Label("Provider API base URL", for_="field-provider_base_url"),
                 Span(
                     "\u24d8",
                     cls="info-tooltip",
-                    data_tooltip="OpenAI-compatible API base URL (default matches official OpenAI). Change for proxies or other providers.",
+                    data_tooltip="HTTP base URL for the selected provider (official defaults shown). Use for proxies or compatible gateways.",
                 ),
                 cls="label-row",
             ),
             Input(
-                name="openai_base_url",
-                id="field-openai_base_url",
+                name="provider_base_url",
+                id="field-provider_base_url",
                 type="text",
                 value=_default_openai_base_url,
                 placeholder=_default_openai_base_url,
-                data_default_url=_default_openai_base_url,
+                data_default_openai=_default_openai_base_url,
+                data_default_anthropic=_default_anthropic_base_url,
             ),
             cls="field",
-            id="openai-base-url-field",
-            style="display: none;",
+            id="provider-base-url-field",
         ),
         Div(
             Div(
