@@ -434,8 +434,8 @@ async def index(req: Request):
     run_card_children.append(
         Div(
             Div(
-                Label("Branch", for_="field-branch"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use the project's default branch."),
+                Label("Branch (Main Repository Only)", for_="field-branch"),
+                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use the project's default branch. Imported repositories are not affected.."),
                 cls="label-row",
             ),
             branch_input,
