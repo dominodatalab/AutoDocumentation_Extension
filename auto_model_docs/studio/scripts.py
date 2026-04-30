@@ -463,8 +463,8 @@ MAIN_DOM_JS = r"""
         }
 
         // ── Toggle base URL and model name fields based on provider selection
-        var OPENAI_DEFAULT_MODEL = 'kimi-k2-0905-preview';
-        var ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+        var OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
+        var ANTHROPIC_DEFAULT_MODEL = 'claude-haiku-4-5';
         function toggleOpenAIFields() {
             const isOpenAI = providerSelect && providerSelect.value === 'openai';
             var pbuInput = document.getElementById('field-provider_base_url');
@@ -478,17 +478,7 @@ MAIN_DOM_JS = r"""
             }
             var modelInput = document.getElementById('field-model');
             if (modelInput) {
-                if (isOpenAI) {
-                    if (!modelInput.value || modelInput.value === ANTHROPIC_DEFAULT_MODEL) {
-                        modelInput.value = OPENAI_DEFAULT_MODEL;
-                    }
-                    modelInput.placeholder = OPENAI_DEFAULT_MODEL;
-                } else {
-                    if (!modelInput.value || modelInput.value === OPENAI_DEFAULT_MODEL) {
-                        modelInput.value = ANTHROPIC_DEFAULT_MODEL;
-                    }
-                    modelInput.placeholder = ANTHROPIC_DEFAULT_MODEL;
-                }
+                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
             }
         }
 

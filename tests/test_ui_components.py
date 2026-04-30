@@ -406,3 +406,4 @@ class TestSpecFileBrowserUi:
         assert "advanced-section-inline" in web
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web
+        assert 'id="field-model", type="text", value=""' in web

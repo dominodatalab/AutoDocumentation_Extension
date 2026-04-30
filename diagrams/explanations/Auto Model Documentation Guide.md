@@ -162,7 +162,7 @@ Configure the LLM provider and model settings.
 | ----- | ----------- |
 | **Provider** | Select `anthropic` (Claude) or `openai` (GPT-4). Default: `openai` |
 | **API Key** | Your API key for the selected provider. Can also be set via environment variable. |
-| **Model** | Model name override. If blank, uses `claude-sonnet-4-20250514` for Anthropic or `gpt-4o` for OpenAI. |
+| **Model** | Model name override. If blank, uses `claude-haiku-4-5` for Anthropic or `gpt-5.4-mini` for OpenAI. |
 | **Base URL** | Custom API endpoint for OpenAI-compatible services (e.g., Azure OpenAI, local models). |
 
 ### **3.4 Advanced Options** {#34-advanced-options}
@@ -592,8 +592,8 @@ All settings can be configured via environment variables with or without the `AU
 
 | Provider | Default Model |
 | -------- | ------------- |
-| Anthropic | `claude-sonnet-4-20250514` |
-| OpenAI | `gpt-4o` |
+| Anthropic | `claude-haiku-4-5` |
+| OpenAI | `gpt-5.4-mini` |
 
 ### **8.3 MLflow Settings** {#83-mlflow-settings}
 

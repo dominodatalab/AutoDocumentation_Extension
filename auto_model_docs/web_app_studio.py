@@ -196,8 +196,6 @@ async def index(req: Request):
         owner_id = auth_context.get_viewing_user().id
     except Exception:
         owner_id = ""
-    _current_model = "kimi-k2-0905-preview"
-
     branch_options = []
     tier_options = []
     if project_id:
@@ -536,10 +534,14 @@ async def index(req: Request):
         Div(
             Div(
                 Label("Model", for_="field-model"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use default (kimi-k2-0905-preview)"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Leave blank to use provider default (see placeholder for example id).",
+                ),
                 cls="label-row",
             ),
-            Input(name="model", id="field-model", type="text", value=_current_model, placeholder="kimi-k2-0905-preview"),
+            Input(name="model", id="field-model", type="text", value="", placeholder=""),
             cls="field",
             id="model-name-field",
             style="display: none;",

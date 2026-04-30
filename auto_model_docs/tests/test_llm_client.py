@@ -68,7 +68,7 @@ class TestLLMClientInit:
             mock_cls.return_value = MagicMock()
             client = LLMClient(provider="anthropic", api_key="sk-test")
         assert client.provider == "anthropic"
-        assert client.model == "claude-sonnet-4-20250514"
+        assert client.model == "claude-haiku-4-5"
         assert client.max_retries == 3
 
     def test_anthropic_base_url_passed_to_sdk(self):
@@ -88,7 +88,7 @@ class TestLLMClientInit:
             mock_cls.return_value = MagicMock()
             client = LLMClient(provider="openai", api_key="sk-test")
         assert client.provider == "openai"
-        assert client.model == "gpt-4o"
+        assert client.model == "gpt-5.4-mini"
 
     def test_custom_model_override(self):
         """Explicit model name overrides default."""
