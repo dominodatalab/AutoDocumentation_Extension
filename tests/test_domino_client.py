@@ -363,6 +363,8 @@ def _make_job_request(**overrides) -> Any:
         branch="main",
         hardware_tier="small",
         spec_filename=None,
+        project_id=None,
+        provider_base_url=None,
     )
     defaults.update(overrides)
     return _JR(**defaults)
@@ -391,3 +393,21 @@ class TestBuildJobCommandStr:
         cmd = _bld_cmd(req, spec_path=None)
         assert "cp" not in cmd
         assert "artifacts" not in cmd
+
+    def test_includes_provider_base_url_when_set(self):
+        req = _make_job_request(
+            provider="openai",
+            provider_base_url="https://api.example/v1",
+        )
+        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        assert "--provider-base-url" in cmd
+        assert "https://api.example/v1" in cmd
+
+    def test_includes_provider_base_url_for_anthropic(self):
+        req = _make_job_request(
+            provider="anthropic",
+            provider_base_url="https://api.anthropic.example",
+        )
+        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        assert "--provider-base-url" in cmd
+        assert "https://api.anthropic.example" in cmd

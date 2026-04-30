@@ -369,3 +369,40 @@ class TestRenderJobHistoryTable:
         _mock_dependencies["state"].domino_job_store.get_user_jobs.side_effect = RuntimeError("Not ready")
         result = ui._render_job_history_table("alice")
         assert result is not None
+
+
+class TestStudioPageInsightBanner:
+    def test_insight_card_is_single_full_width_banner_before_grid(self):
+        root = Path(__file__).resolve().parent.parent
+        src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        assert src.count('cls="insight-card"') == 1
+        assert "studio-page-insight" in src
+        assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
+
+    def test_version_and_logs_footer_after_main_form_not_in_header(self):
+        root = Path(__file__).resolve().parent.parent
+        src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        assert "studio-footer-meta" in src
+        assert 'cls="header-meta"' not in src
+        assert src.index('id="main-form"') < src.index("studio-footer-meta")
+
+
+class TestSpecFileBrowserUi:
+    def test_spec_list_fixed_height_and_parent_nav_in_scripts(self):
+        root = Path(__file__).resolve().parent.parent
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        assert "calc(5 * var(--spec-file-row))" in styles
+        assert "specParentPath" in scripts
+        assert "spec-file-parent" in scripts
+        assert "data-parent" in scripts
+        assert ".spec-file-list > .spec-file-item:last-of-type" in styles
+        assert "spec-file-list-pending" in scripts
+        assert "spec-file-list-pending" in styles
+        assert 'id="spec-file-list"' in web
+        assert "spec-path-input" in web
+        assert "absoluteSpecFromRelative" in scripts
+        assert "advanced-section-inline" in web
+        assert "gear-settings-btn" not in web
+        assert "gear-popover" not in web

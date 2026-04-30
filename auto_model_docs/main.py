@@ -61,6 +61,12 @@ console = Console()
     help="Model name override (uses provider default if not set)",
 )
 @click.option(
+    "--provider-base-url",
+    default=None,
+    type=str,
+    help="Override API base URL for the selected provider (OpenAI or Anthropic)",
+)
+@click.option(
     "--max-retries",
     default=None,
     type=int,
@@ -162,6 +168,7 @@ def main(
     code_root: str | None,
     provider: str,
     model: str | None,
+    provider_base_url: str | None,
     max_retries: int | None,
     initial_backoff: float | None,
     max_backoff: float | None,
@@ -214,6 +221,12 @@ def main(
             settings.llm_provider = provider
         if model:
             settings.llm_model = model
+        if provider_base_url:
+            b = provider_base_url.strip() or None
+            if (settings.llm_provider or "").lower() == "anthropic":
+                settings.anthropic_base_url = b
+            else:
+                settings.openai_base_url = b
         if max_retries is not None:
             settings.llm_max_retries = max_retries
         if initial_backoff is not None:
@@ -294,11 +307,16 @@ def main(
             sys.exit(1)
 
         # Initialize components
+        _pbu = (
+            settings.anthropic_base_url
+            if (settings.llm_provider or "").lower() == "anthropic"
+            else settings.openai_base_url
+        )
         llm = LLMClient(
             provider=settings.llm_provider,
             model=settings.get_model_name(),
             api_key=api_key,
-            base_url=settings.openai_base_url,
+            base_url=_pbu,
             max_retries=settings.llm_max_retries,
             initial_backoff=settings.llm_initial_backoff,
             max_backoff=settings.llm_max_backoff,

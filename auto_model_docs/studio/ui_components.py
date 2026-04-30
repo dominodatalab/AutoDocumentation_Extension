@@ -139,22 +139,21 @@ def _render_warnings_banner(warnings: list) -> list:
         return []
     banners = []
     style_map = {
-        "info": "background: rgba(93,95,239,0.06); border-left: 3px solid #5d5fef; color: #191b22;",
-        "warning": "background: rgba(144,68,0,0.06); border-left: 3px solid #904400; color: #191b22;",
-        "error": "background: rgba(186,26,26,0.06); border-left: 3px solid #ba1a1a; color: #191b22;",
+        "info": "warning-banner warning-banner-info",
+        "warning": "warning-banner warning-banner-warning",
+        "error": "warning-banner warning-banner-error",
     }
     for w in warnings:
         style = style_map.get(w.level, style_map["info"])
         banners.append(
             Div(
-                Span(f"{w.message} {w.action}", style="flex: 1; font-family: Inter, sans-serif; font-size: 0.8125rem;"),
+                Span(f"{w.message} {w.action}", cls="warning-banner-message"),
                 Button(
                     "\u00d7", type="button",
-                    style="background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0 0.5rem; color: #464555;",
+                    cls="warning-banner-close",
                     onclick="this.parentElement.remove();",
                 ),
-                style=f"{style} padding: 0.625rem 1rem; border-radius: 2px; margin-bottom: 0.5rem; "
-                      "display: flex; align-items: center;",
+                cls=style,
             )
         )
     return banners
@@ -214,11 +213,9 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
             Span(f"Job queued \u2014 you already have {max_j} active job{'s' if max_j != 1 else ''}. "
                  "It will start automatically when a slot opens. To free a slot: stop a running job above, "
                  "or switch to the History tab and use "),
-            Span("Cancel queued", style="font-weight: 600;"),
+            Span("Cancel queued", cls="spec-selected-value"),
             Span(" to remove pending jobs."),
-            style="background: rgba(144,68,0,0.06); border-left: 3px solid #904400; "
-                  "border-radius: 2px; padding: 0.625rem 1rem; margin-bottom: 0.75rem; "
-                  "font-size: 0.8125rem; color: #191b22; line-height: 1.5; font-family: Inter, sans-serif;",
+            cls="inline-callout inline-callout-warning",
             role="alert",
         )
 
@@ -322,11 +319,9 @@ def _render_job_history_table(owner_id: str, dataset_id: str = "", snapshot_id: 
             Span("\u26a0 "),
             Span(f"Job queued \u2014 you already have {max_j} active job{'s' if max_j != 1 else ''}. "
                  "It will start automatically when a slot opens. To free a slot, stop a running job or use "),
-            Span("Cancel queued", style="font-weight: 600;"),
+            Span("Cancel queued", cls="spec-selected-value"),
             Span(" below."),
-            style="background: rgba(144,68,0,0.06); border-left: 3px solid #904400; "
-                  "border-radius: 2px; padding: 0.625rem 1rem; margin-bottom: 0.75rem; "
-                  "font-size: 0.8125rem; color: #191b22; line-height: 1.5; font-family: Inter, sans-serif;",
+            cls="inline-callout inline-callout-warning",
             role="alert",
         )
 

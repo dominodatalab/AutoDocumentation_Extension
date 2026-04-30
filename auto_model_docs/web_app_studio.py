@@ -147,9 +147,9 @@ async def index(req: Request):
                 Div(
                     Div(
                         Span("Resolving project...",
-                             style="color: var(--outline); font-size: 0.875rem;"),
+                             cls="bootstrap-status-text"),
                     ),
-                    style="display: flex; justify-content: center; padding-top: 4rem;",
+                    cls="bootstrap-status-wrap",
                 ),
                 Div(
                     Div(
@@ -163,14 +163,13 @@ async def index(req: Request):
                         P(
                             "If you're running this as a Domino App, make sure the app is "
                             "configured to pass the project ID to the iframe URL.",
-                            style="color: var(--outline); margin-top: 0.5rem;",
+                            cls="bootstrap-error-detail",
                         ),
-                        style="background: rgba(186,26,26,0.06); border-left: 3px solid #ba1a1a; "
-                              "border-radius: 2px; padding: 1.5rem; max-width: 640px; "
-                              "font-family: Inter, sans-serif;",
+                        cls="bootstrap-error-card",
                     ),
                     id="project-id-error",
-                    style="display: none; justify-content: center; padding-top: 2rem;",
+                    cls="bootstrap-error-wrap",
+                    style="display: none;",
                 ),
                 cls="page",
             ),
@@ -184,6 +183,14 @@ async def index(req: Request):
 
 
     default_spec = _get_default_spec_path()
+    try:
+        from autodoc.core.config import Settings as _StudioSettings
+        _ss = _StudioSettings()
+        _default_openai_base_url = _ss.openai_base_url or "https://api.openai.com/v1"
+        _default_anthropic_base_url = _ss.anthropic_base_url or "https://api.anthropic.com"
+    except Exception:
+        _default_openai_base_url = "https://api.openai.com/v1"
+        _default_anthropic_base_url = "https://api.anthropic.com"
     import auth_context
     try:
         owner_id = auth_context.get_viewing_user().id
@@ -192,8 +199,6 @@ async def index(req: Request):
     _current_model = "kimi-k2-0905-preview"
 
     branch_options = []
-    tier_data = []
-    default_tier = ""
     tier_options = []
     if project_id:
         try:
@@ -202,13 +207,13 @@ async def index(req: Request):
         except Exception:
             pass
     try:
-        tier_data = domino_client.list_hardware_tiers(project_id=project_id)
+        tier_rows = domino_client.list_hardware_tiers(project_id=project_id) or []
         default_tier = domino_client.get_project_default_tier()
-        for t in tier_data:
+        for t in tier_rows:
             tid = t.get("id", "")
-            tname = t.get("name") or tid
+            label = t.get("option_label") or t.get("name") or tid
             is_default = t.get("isDefault", False) or tid == default_tier
-            tier_options.append(Option(tname, value=tid, selected=is_default))
+            tier_options.append(Option(label, value=tid, selected=is_default))
     except Exception:
         tier_options = []
     if not tier_options:
@@ -219,7 +224,7 @@ async def index(req: Request):
     # LEFT COLUMN: What to document
     left_col_children = [
         Div(
-            H2("What to document"),
+            H2("Documentation specification"),
             Span("Section 01", cls="step-badge"),
             cls="col-header",
         ),
@@ -227,17 +232,20 @@ async def index(req: Request):
 
     # Spec file card
     spec_card_children = []
-    # Hidden field that stores the resolved spec path for form submission
-    spec_card_children.append(
-        Input(name="spec_path", id="field-spec_path", type="hidden", value=""),
-    )
 
     # Dataset browser + upload
     spec_card_children.append(
         Div(
             Label("Spec file selection"),
+            A(
+                "Download reference template",
+                href="api/download-template",
+                data_app_rel="api/download-template",
+                download="doc_spec_template.yaml",
+                cls="app-link",
+            ),
             Hr(cls="section-divider"),
-            Label("Select a dataset to browse files", Span(" *", cls="required-star")),
+            Label("To browse for specfiles, select a dataset and a spec file in the navigator below", Span(" *", cls="required-star")),
             Div(
                 Select(
                     Option("Loading datasets...", value="", disabled=True, selected=True),
@@ -245,26 +253,30 @@ async def index(req: Request):
                 ),
                 cls="field",
             ),
-            Label("Select a spec file", Span(" *", cls="required-star")),
-            Div(id="spec-breadcrumb", cls="spec-breadcrumb"),
+            Div(id="spec-breadcrumb", cls="spec-breadcrumb"),           
             Div(
-                Span("Select a dataset to browse spec files", style="color: var(--outline); font-size: 0.8125rem;"),
+                Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
                 id="spec-file-list",
                 cls="spec-file-list",
             ),
             Div(
-                Span("Selected: ", style="color: var(--outline);"),
-                Span(id="spec-selected-name", style="font-weight: 600; color: var(--on-surface);"),
+                Span("Selected: ", cls="spec-selected-label"),
+                Input(
+                    name="spec_path",
+                    id="field-spec_path",
+                    type="text",
+                    value="",
+                    cls="spec-path-input",
+                    placeholder="None",
+                    autocomplete="off",
+                    spellcheck="false",
+                ),
                 id="spec-selected-indicator",
-                style="display: none; padding: 8px 0; font-size: 0.8125rem;",
-            ),
-            Div(
-                Span("OR", cls="or-divider-text"),
-                cls="or-divider",
+                cls="spec-selected-indicator",
             ),
             Div(
                 Label(
-                    "Upload from my machine",
+                    "Upload spec",
                     Input(
                         type="file",
                         accept=".yaml,.yml",
@@ -274,10 +286,6 @@ async def index(req: Request):
                     cls="upload-btn",
                 ),
                 Span(id="spec-upload-status", cls="spec-upload-status"),
-                A("Download reference template", href="api/download-template",
-                  data_app_rel="api/download-template",
-                  download="doc_spec_template.yaml",
-                  style="color: var(--primary); font-size: 0.8125rem; margin-left: auto;"),
                 cls="spec-actions-row",
             ),
             cls="field",
@@ -333,16 +341,6 @@ async def index(req: Request):
 
     left_col_children.append(Div(*spec_card_children, cls="bp-card"))
 
-    # Insight card
-    left_col_children.append(
-        Div(
-            H4("Auto Model Docs Studio"),
-            P("Upload a YAML spec file to define which sections to include in your model documentation. "
-              "The system will parse endpoints and data models automatically."),
-            cls="insight-card",
-        )
-    )
-
     # MIDDLE COLUMN: Configuration & Run
     mid_col_children = [
         Div(
@@ -354,6 +352,21 @@ async def index(req: Request):
 
     # Run settings card
     run_card_children = []
+
+    run_card_children.append(
+        Div(
+            Div(
+                Span("Target project: ", cls="target-project-label-prefix"),
+                Span(
+                    project_display_name or project_id or "",
+                    cls="target-project-display",
+                ),
+                cls="target-project-row",
+            ),
+            Input(type="hidden", name="project_id", value=project_id or ""),
+            cls="field target-project-callout",
+        )
+    )
 
     run_card_children.append(
         Div(
@@ -390,15 +403,14 @@ async def index(req: Request):
     # Language detection row (shown after code root is set)
     run_card_children.append(
         Div(
-            Span("Detected: ", style="color: var(--outline);"),
-            Span(id="lang-detected-name", style="color: var(--on-surface); font-weight: 600;"),
-            Span(id="lang-detected-count", style="color: var(--outline); margin-left: 4px;"),
+            Span("Detected: ", cls="lang-detection-label"),
+            Span(id="lang-detected-name", cls="lang-detection-value"),
+            Span(id="lang-detected-count", cls="lang-detection-count"),
             Button(
                 "Override",
                 id="lang-override-btn",
                 type="button",
-                style="background: none; border: none; color: var(--primary); cursor: pointer; "
-                      "padding: 8px 12px; min-height: 44px; font-size: inherit; margin-left: 8px;",
+                cls="lang-override-btn",
                 aria_label="Override detected language",
                 onclick="document.getElementById('lang-override-select').style.display = "
                         "document.getElementById('lang-override-select').style.display === 'none' ? 'inline-block' : 'none';",
@@ -409,39 +421,14 @@ async def index(req: Request):
                 Option("SAS", value="sas"),
                 Option("MATLAB", value="matlab"),
                 id="lang-override-select",
-                style="display: none; border: 1px solid var(--ghost-border); border-radius: 2px; "
-                      "padding: 4px 8px; margin-left: 4px; font-size: 0.8125rem;",
+                cls="lang-override-select",
                 onchange="handleLanguageOverride(this.value)",
             ),
             id="lang-detection-row",
-            style="display: none; padding: 8px 0; font-size: 0.8125rem;",
+            cls="lang-detection-row",
         )
     )
 
-    # Target project
-    run_card_children.append(
-        Div(
-            Div(
-                Label("Target project", for_="field-project-id"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Domino project ID to run the job in. Leave blank to use the current project."),
-                cls="label-row",
-            ),
-            Input(
-                name="target_project",
-                id="field-project-id",
-                type="text",
-                value="",
-                placeholder="Leave blank for current project",
-                autocomplete="off",
-            ),
-            Div(
-                (f"{project_display_name}" if project_display_name else ""),
-                id="project-id-resolved",
-                cls="resolved" if project_display_name else "",
-            ),
-            cls="field",
-        )
-    )
     # Branch
     if branch_options:
         branch_input = Select(*branch_options, name="branch", id="field-branch")
@@ -450,66 +437,32 @@ async def index(req: Request):
     run_card_children.append(
         Div(
             Div(
-                Label("Branch", for_="field-branch"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use the project's default branch."),
+                Label("Branch (Main Repository Only)", for_="field-branch"),
+                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use the project's default branch. Imported repositories are not affected.."),
                 cls="label-row",
             ),
             branch_input,
             cls="field",
         )
     )
-    # Hardware tier (card grid)
-    tier_cards = []
-    for t in tier_data if tier_data else []:
-        tid = t.get("id", "")
-        tname = t.get("name") or tid
-        is_default = t.get("isDefault", False) or tid == default_tier
-        tier_cards.append(
-            Div(
-                Div(tname, cls="hw-tier-card-name"),
-                cls=f"hw-tier-card{' selected' if is_default else ''}",
-                data_tier_id=tid,
-                onclick=f"selectHwTier(this, '{tid}')",
-            )
-        )
-    if not tier_cards:
-        tier_cards.append(
-            Div(
-                Div("(default)", cls="hw-tier-card-name"),
-                cls="hw-tier-card selected",
-                data_tier_id="",
-                onclick="selectHwTier(this, '')",
-            )
-        )
     run_card_children.append(
         Div(
             Div(
-                Label("Hardware tier"),
+                Label("Hardware tier", for_="field-hardware_tier"),
                 Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the Domino job."),
                 cls="label-row",
             ),
-            Input(type="hidden", name="hardware_tier", id="field-hardware_tier",
-                  value=default_tier or ""),
-            Div(*tier_cards, cls="hw-tier-grid"),
+            Select(
+                *tier_options,
+                name="hardware_tier",
+                id="field-hardware_tier",
+                cls="hw-tier-select",
+            ),
             cls="field",
         )
     )
 
-    # More run settings (expandable)
-    more_settings_children = []
-    # Gear button to open advanced settings modal
-    more_settings_children.append(
-        Button(
-            NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'),
-            Span("Advanced settings"),
-            type="button",
-            id="gear-settings-btn",
-            onclick="document.getElementById('gear-popover').style.display='flex'",
-        )
-    )
-
-    # Gear modal with advanced fields (still inside the form)
-    gear_popover_fields = [
+    advanced_settings_body = [
         Div(
             Div("Generation settings", cls="filter-section-title"),
             Div(
@@ -560,6 +513,28 @@ async def index(req: Request):
         ),
         Div(
             Div(
+                Label("Provider API base URL", for_="field-provider_base_url"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="HTTP base URL for the selected provider (official defaults shown). Use for proxies or compatible gateways.",
+                ),
+                cls="label-row",
+            ),
+            Input(
+                name="provider_base_url",
+                id="field-provider_base_url",
+                type="text",
+                value=_default_openai_base_url,
+                placeholder=_default_openai_base_url,
+                data_default_openai=_default_openai_base_url,
+                data_default_anthropic=_default_anthropic_base_url,
+            ),
+            cls="field",
+            id="provider-base-url-field",
+        ),
+        Div(
+            Div(
                 Label("Model", for_="field-model"),
                 Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use default (kimi-k2-0905-preview)"),
                 cls="label-row",
@@ -578,34 +553,11 @@ async def index(req: Request):
         ),
     ]
 
-    more_settings_children.append(
-        Div(
-            Div(
-                Div(
-                    Span("Advanced settings", cls="gear-popover-title"),
-                    Button(
-                        "\u2715",
-                        type="button",
-                        cls="gear-popover-close",
-                        onclick="document.getElementById('gear-popover').style.display='none'",
-                    ),
-                    id="gear-popover-header",
-                ),
-                Div(*gear_popover_fields, id="gear-popover-content"),
-                id="gear-popover-inner",
-            ),
-            id="gear-popover",
-            style="display: none;",
-            onclick="if(event.target===this)this.style.display='none'",
-        )
-    )
-
     run_card_children.append(
-        Details(
-            Summary("More run settings", cls="advanced-section-summary"),
-            Div(*more_settings_children, cls="advanced-content"),
-            cls="advanced-section",
-            open=True,
+        Div(
+            Div("Advanced settings", cls="advanced-inline-title"),
+            Div(*advanced_settings_body, cls="advanced-content"),
+            cls="advanced-section-inline",
         )
     )
 
@@ -644,27 +596,24 @@ async def index(req: Request):
             Div(
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
-                Div(
-                    P(
-                        get_deploy_version_label(),
-                        style="margin:0;color:var(--muted, #888);font-size:11px;"
-                              "font-family:monospace;letter-spacing:0.02em;",
-                    ),
-                    A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
-                      style="color:var(--primary);font-size:12px;font-weight:600;"
-                            "text-decoration:underline;"),
-                    style="margin-left:auto;align-self:flex-start;display:flex;"
-                          "flex-direction:column;align-items:flex-end;gap:2px;",
-                ),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
         ),
         # Page content
         Div(
-            # Environment warnings
+            Div(
+                Div(
+                    H4("Auto Model Docs Studio"),
+                    P(
+                        "Upload a YAML spec file to define which sections to include in your model documentation. "
+                        "The system will parse endpoints and data models automatically.",
+                    ),
+                    cls="insight-card",
+                ),
+                cls="studio-page-insight",
+            ),
             *_render_warnings_banner(_STARTUP_WARNINGS),
-            # Form wrapping 3 columns
             Form(
                 Div(
                     # Left column
@@ -683,6 +632,15 @@ async def index(req: Request):
                 hx_swap="innerHTML",
                 hx_encoding="multipart/form-data",
                 enctype="multipart/form-data",
+            ),
+            Div(
+                P(
+                    get_deploy_version_label(),
+                    cls="header-version-text",
+                ),
+                A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
+                  cls="header-logs-link"),
+                cls="studio-footer-meta",
             ),
             cls="page",
         ),

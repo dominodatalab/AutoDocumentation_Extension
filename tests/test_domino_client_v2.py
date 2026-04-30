@@ -62,8 +62,12 @@ class TestListHardwareTiers:
         ]
         tiers = dc.list_hardware_tiers(project_id="proj-123")
         assert len(tiers) == 2
-        assert tiers[0] == {"id": "small", "name": "Small", "isDefault": True}
-        assert tiers[1] == {"id": "large", "name": "Large GPU", "isDefault": False}
+        assert tiers[0]["id"] == "small"
+        assert tiers[0]["name"] == "Small"
+        assert tiers[0]["isDefault"] is True
+        assert tiers[0]["option_label"] == "Small"
+        assert tiers[1]["id"] == "large"
+        assert tiers[1]["isDefault"] is False
 
     @patch.object(dc, "_domino_request")
     def test_nested_data_format(self, mock_req):
@@ -73,6 +77,51 @@ class TestListHardwareTiers:
         tiers = dc.list_hardware_tiers(project_id="proj-123")
         assert len(tiers) == 1
         assert tiers[0]["id"] == "medium"
+        assert tiers[0]["option_label"] == "Medium"
+
+    @patch.object(dc, "_domino_request")
+    def test_option_label_includes_specs_capacity_price(self, mock_req):
+        mock_req.return_value = [
+            {
+                "hardwareTier": {
+                    "id": "small-k8s",
+                    "name": "Small",
+                    "hwtFlags": {"isDefault": True},
+                    "hwtResources": {
+                        "cores": 1,
+                        "memory": {"value": 4, "unit": "GiB"},
+                    },
+                    "gpuConfiguration": {"numberOfGpus": 0, "gpuKey": "nvidia.com/gpu"},
+                    "centsPerMinute": 0.01,
+                },
+                "capacity": {"capacityLevel": "CAN_EXECUTE_WITH_CURRENT_INSTANCES"},
+            },
+        ]
+        tiers = dc.list_hardware_tiers(project_id="proj-123")
+        assert len(tiers) == 1
+        ol = tiers[0]["option_label"]
+        assert tiers[0]["capacity_label"] == "< 1 MIN"
+        assert "Small" in ol
+        assert "1 core" in ol
+        assert "$0.0001/min" in ol
+        assert "< 1 MIN" in ol
+
+    @patch.object(dc, "_domino_request")
+    def test_option_label_appends_spot_when_enabled(self, mock_req):
+        mock_req.return_value = [
+            {
+                "hardwareTier": {
+                    "id": "spot-tier",
+                    "name": "Spot tier",
+                    "hwtFlags": {"isDefault": False},
+                    "hwtResources": {"cores": 1, "memory": {"value": 1, "unit": "GiB"}},
+                    "capacityTypeRestrictions": {"enableSpotInstances": True},
+                },
+                "capacity": {},
+            },
+        ]
+        tiers = dc.list_hardware_tiers(project_id="proj-123")
+        assert "Spot" in tiers[0]["option_label"]
 
     @patch.object(dc, "_domino_request")
     def test_api_error_returns_empty(self, mock_req):

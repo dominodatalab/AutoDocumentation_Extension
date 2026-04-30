@@ -185,6 +185,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         api_key_source: str = "domino_env"
         spec_filename: Optional[str] = None
         project_id: Optional[str] = None
+        provider_base_url: Optional[str] = None
 
     @dataclass
     class DominoJobRecord:
@@ -446,17 +447,6 @@ class TestApiRoutesIntegration:
 
     def test_download_template(self, client):
         resp = client.get("/api/download-template")
-        assert resp.status_code == 200
-
-    def test_resolve_project(self, client, integration_env):
-        resp = client.get("/api/resolve-project?projectId=proj-integration")
-        assert resp.status_code == 200
-        body = resp.text
-        assert "test-owner" in body
-        assert "test-project" in body
-
-    def test_resolve_project_empty_id(self, client):
-        resp = client.get("/api/resolve-project")
         assert resp.status_code == 200
 
     def test_branches(self, client, integration_env):

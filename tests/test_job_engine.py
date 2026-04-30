@@ -32,7 +32,6 @@ class JobRequest:
     provider: str = "anthropic"
     model: Optional[str] = None
     api_key: Optional[str] = None
-    base_url: Optional[str] = None
     code_root: Optional[str] = None
     max_files: Optional[int] = None
     workers: Optional[int] = None
@@ -49,6 +48,7 @@ class JobRequest:
     api_key_source: str = "domino_env"
     spec_filename: Optional[str] = None
     project_id: Optional[str] = None
+    provider_base_url: Optional[str] = None
 
 
 @dataclass
@@ -160,6 +160,39 @@ def _import_job_engine():
 
 
 # ---------------------------------------------------------------------------
+# _parse_request
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_parse_request_provider_base_url_preserved():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {}
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "proj-x",
+            "provider": "anthropic",
+            "provider_base_url": "https://a.example",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.provider_base_url == "https://a.example"
+
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "proj-x",
+            "provider": "openai",
+            "provider_base_url": "https://ok/v1",
+        }
+    )
+    jr2 = await je._parse_request(req)
+    assert jr2.provider_base_url == "https://ok/v1"
+
+
+# ---------------------------------------------------------------------------
 # _build_job_command
 # ---------------------------------------------------------------------------
 
@@ -174,6 +207,29 @@ class TestBuildJobCommand:
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
+
+    def test_provider_base_url_in_command_for_either_provider(self):
+        je = _import_job_engine()
+        cmd_anth = je._build_job_command(
+            JobRequest(
+                provider="anthropic",
+                provider_base_url="https://proxy/v1",
+                project_id="p",
+            ),
+            "/spec.yaml",
+        )
+        assert "--provider-base-url" in cmd_anth
+        assert "https://proxy/v1" in cmd_anth
+        cmd_open = je._build_job_command(
+            JobRequest(
+                provider="openai",
+                provider_base_url="https://proxy/v1",
+                project_id="p",
+            ),
+            "/spec.yaml",
+        )
+        assert "--provider-base-url" in cmd_open
+        assert "https://proxy/v1" in cmd_open
 
     def test_all_options(self):
         je = _import_job_engine()

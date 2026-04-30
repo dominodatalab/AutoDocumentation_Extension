@@ -27,7 +27,7 @@ def register_spec_routes(rt):
 
         if not content or not content.strip():
             return Div(
-                Span("No spec content to validate.", style="color: var(--outline);"),
+                Span("No spec content to validate.", cls="spec-validation-empty"),
                 id="spec-validation-result",
             )
 
@@ -36,15 +36,15 @@ def register_spec_routes(rt):
             error_items = [Li(e) for e in errors]
             return Div(
                 Div(
-                    Span("Spec validation failed", style="font-weight: 600; color: var(--error);"),
-                    Ul(*error_items, style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; font-size: 0.8125rem;"),
+                    Span("Spec validation failed", cls="spec-selected-value"),
+                    Ul(*error_items, cls="spec-validation-error-list"),
                     cls="spec-validation-error",
                 ),
                 id="spec-validation-result",
             )
 
         return Div(
-            Span("Spec is valid", style="color: var(--success); font-weight: 500; font-size: 0.8125rem;"),
+            Span("Spec is valid", cls="spec-validation-success"),
             id="spec-validation-result",
         )
 
@@ -77,7 +77,7 @@ def register_spec_routes(rt):
         for s in specs:
             items.append(
                 Div(
-                    Span(s["name"], style="font-family: monospace;"),
+                    Span(s["name"], cls="spec-list-item-name"),
                     Span(f"{s['size_kb']} KB", style="color: var(--outline); margin: 0 0.75rem;"),
                     cls="spec-list-item",
                 )

@@ -39,28 +39,18 @@ MAIN_DOM_JS = r"""
     }
     document.addEventListener('DOMContentLoaded', function() { _adApplyPrefix(); });
 
-    // ── Hardware tier card selection ──
-    function selectHwTier(card, tierId) {
-        var grid = card.closest('.hw-tier-grid');
-        grid.querySelectorAll('.hw-tier-card').forEach(function(c) { c.classList.remove('selected'); });
-        card.classList.add('selected');
-        document.getElementById('field-hardware_tier').value = tierId;
-    }
-
     document.addEventListener('DOMContentLoaded', function() {
 
-        // ── Auto-fill projectId from URL or postMessage ──
-        // Domino Apps run inside a cross-origin iframe; the proxy strips
-        // query params.  Try what we can; the user can always type it manually.
+        // ── Ensure projectId is on the page URL (reload if we only have hash / postMessage) ──
         (function() {
             function setProjectId(pid) {
                 if (!pid) return;
-                var input = document.getElementById('field-project-id');
-                if (input && !input.value) {
-                    input.value = pid;
-                    input.dataset.autoDocSet = 'true';
-                    input.dispatchEvent(new Event('change'));
-                }
+                try {
+                    var u = new URL(window.location.href);
+                    if (u.searchParams.get('projectId') === pid) return;
+                    u.searchParams.set('projectId', pid);
+                    window.location.replace(u.toString());
+                } catch (e) { /* ignore */ }
             }
             var pid = null;
             // 1. Own query string (direct / non-proxied access)
@@ -118,7 +108,7 @@ MAIN_DOM_JS = r"""
                         if (langName) langName.textContent = '';
                         if (langCount) langCount.textContent = '';
                         if (langRow) {
-                            langRow.innerHTML = '<span style="color:#767586;">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
+                            langRow.innerHTML = '<span class="lang-empty-state">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
                             langRow.style.display = '';
                         }
                     }
@@ -149,48 +139,14 @@ MAIN_DOM_JS = r"""
         const providerSelect    = document.getElementById('field-provider');
         const modelNameField    = document.getElementById('model-name-field');
 
-        // ── Resolve project, refresh tiers & output dir on change ─────
-        var projectIdInput = document.getElementById('field-project-id');
-        if (projectIdInput) {
-            var refreshTimer = null;
-            function onProjectIdChange() {
-                clearTimeout(refreshTimer);
-                refreshTimer = setTimeout(function() {
-                    var pid = projectIdInput.value.trim();
-                    var qs = pid ? '?projectId=' + encodeURIComponent(pid) : '';
-                    // Resolve project name
-                    fetch(_adUrl('api/resolve-project') + qs)
-                        .then(_checkResp).then(function(r) { return r.text(); })
-                        .then(function(html) {
-                            var el = document.getElementById('project-id-resolved');
-                            if (el) el.outerHTML = html;
-                            // Output location is fixed (autodoc dataset → docs/)
-                            // No need to update the display field.
-                        })
-                        .catch(function() {});
-                    // Refresh hardware tiers
-                    if (typeof htmx !== 'undefined') {
-                        htmx.ajax('GET', _adUrl('api/hardware-tiers') + qs, {
-                            target: '#field-hardware_tier',
-                            swap: 'outerHTML'
-                        });
-                    }
-                    loadDatasets();
-                }, 300);
-            }
-            projectIdInput.addEventListener('change', onProjectIdChange);
-            projectIdInput.addEventListener('blur', onProjectIdChange);
-        }
-
         // ── Dataset spec browser (Domino mode) ───────────────────────────
         var specDatasetSelect = document.getElementById('spec-dataset-select');
         var specFileList = document.getElementById('spec-file-list');
         var specBreadcrumb = document.getElementById('spec-breadcrumb');
         var specSelectedIndicator = document.getElementById('spec-selected-indicator');
-        var specSelectedName = document.getElementById('spec-selected-name');
         var specMachineUpload = document.getElementById('spec-machine-upload');
         var specUploadStatus = document.getElementById('spec-upload-status');
-        var specPathHidden = document.getElementById('field-spec_path');
+        var specPathField = document.getElementById('field-spec_path');
 
         // State
         var _specDatasets = [];
@@ -204,12 +160,7 @@ MAIN_DOM_JS = r"""
 
         function resolvedProjectId() {
             var params = new URLSearchParams(window.location.search);
-            var pid = params.get('projectId') || params.get('project_id') || '';
-            if (!pid) {
-                var pidInput = document.getElementById('field-project-id');
-                if (pidInput) pid = pidInput.value.trim();
-            }
-            return pid;
+            return params.get('projectId') || params.get('project_id') || '';
         }
 
         function queryApiDatasets() {
@@ -294,9 +245,7 @@ MAIN_DOM_JS = r"""
             _specCurrentSnapshotId = opt ? opt.getAttribute('data-snapshot') || '' : '';
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
-            if (specPathHidden) specPathHidden.value = '';
-            if (specSelectedIndicator) specSelectedIndicator.style.display = 'none';
-            if (specSelectedName) specSelectedName.textContent = '';
+            if (specPathField) specPathField.value = '';
             var svm = document.getElementById('spec-validation-msg');
             if (svm) svm.remove();
             if (_specCurrentDatasetId) {
@@ -308,6 +257,14 @@ MAIN_DOM_JS = r"""
             }
         }
 
+        function specParentPath(p) {
+            if (!p) return null;
+            var parts = p.split('/').filter(Boolean);
+            if (parts.length === 0) return null;
+            parts.pop();
+            return parts.join('/');
+        }
+
         function browseFiles(path) {
             _specCurrentPath = path;
             if (!specFileList) return Promise.resolve();
@@ -316,11 +273,11 @@ MAIN_DOM_JS = r"""
                 return Promise.resolve();
             }
             console.log('[spec-browser] Browsing path:', path || '(root)', 'in dataset:', _specCurrentDatasetName);
-            specFileList.innerHTML = '<span class="spec-file-empty">Loading...</span>';
             renderBreadcrumb(path);
 
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
+            specFileList.classList.add('spec-file-list-pending');
             return fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
@@ -335,10 +292,27 @@ MAIN_DOM_JS = r"""
                     }
                     console.log('[spec-browser] Found ' + files.length + ' items at path:', path || '(root)');
                     if (files.length === 0) {
-                        specFileList.innerHTML = '<span class="spec-file-empty">No YAML files found in this location</span>';
+                        var emptyMsg = 'No YAML files found in this location';
+                        var pPath = specParentPath(path);
+                        if (pPath !== null) {
+                            var up = '<div class="spec-file-item spec-file-parent" data-path="' + pPath + '" data-dir="true" data-name=".." data-parent="true">'
+                                + '<span class="spec-file-icon">\ud83d\udcc1</span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
+                            specFileList.innerHTML = up + '<span class="spec-file-empty">' + emptyMsg + '</span>';
+                            var upEl = specFileList.querySelector('.spec-file-parent');
+                            if (upEl) upEl.addEventListener('click', onFileClick);
+                        } else {
+                            specFileList.innerHTML = '<span class="spec-file-empty">' + emptyMsg + '</span>';
+                        }
                         return;
                     }
                     var html = '';
+                    var parentPath = specParentPath(path);
+                    if (parentPath !== null) {
+                        html += '<div class="spec-file-item spec-file-parent" data-path="' + parentPath + '" data-dir="true" data-name=".." data-parent="true">'
+                            + '<span class="spec-file-icon">\ud83d\udcc1</span>'
+                            + '<span class="spec-file-name">..</span>'
+                            + '<span class="spec-file-size"></span></div>';
+                    }
                     files.sort(function(a, b) {
                         if (a.isDirectory && !b.isDirectory) return -1;
                         if (!a.isDirectory && b.isDirectory) return 1;
@@ -365,6 +339,11 @@ MAIN_DOM_JS = r"""
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
+                })
+                .finally(function() {
+                    if (specFileList && _specBrowseAbort === ctrl) {
+                        specFileList.classList.remove('spec-file-list-pending');
+                    }
                 });
         }
 
@@ -379,20 +358,23 @@ MAIN_DOM_JS = r"""
                 var items = specFileList.querySelectorAll('.spec-file-item');
                 for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
                 el.classList.add('selected');
-                selectSpecFile(_specCurrentDatasetName, path);
+                selectSpecFile(path);
             }
         }
 
-        function selectSpecFile(datasetName, filePath) {
-            console.log('[spec-browser] Selected:', datasetName + '/' + filePath);
-            if (specSelectedIndicator) specSelectedIndicator.style.display = '';
-            if (specSelectedName) specSelectedName.textContent = datasetName + '/' + filePath;
-            // Build mount path and set the hidden form field
-            // The server will resolve the correct mount prefix
-            if (specPathHidden) {
-                // Use a marker so the server knows this is a dataset reference
-                specPathHidden.value = 'dataset://' + datasetName + '/' + filePath;
-            }
+        function absoluteSpecFromRelative(relPath) {
+            var base = (_specCurrentDatasetPath || '').replace(/\/+$/, '');
+            var rel = (relPath || '').replace(/^\/+/, '');
+            if (base) return rel ? (base + '/' + rel) : base;
+            if (_specCurrentDatasetName && rel) return 'dataset://' + _specCurrentDatasetName + '/' + rel;
+            return rel || '';
+        }
+
+        function selectSpecFile(relFilePath) {
+            var abs = absoluteSpecFromRelative(relFilePath);
+            console.log('[spec-browser] Selected:', abs);
+            if (specSelectedIndicator) specSelectedIndicator.style.display = 'flex';
+            if (specPathField) specPathField.value = abs;
         }
 
         function renderBreadcrumb(path) {
@@ -428,13 +410,13 @@ MAIN_DOM_JS = r"""
                 var file = e.target.files[0];
                 if (!file) return;
                 console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
-                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; }
+                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
                 // Validate spec content before uploading
                 if (typeof validateSpecContent === 'function') validateSpecContent(file);
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
-                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.style.color = '#ba1a1a'; }
+                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                     return;
                 }
                 var qs = queryApiDatasets();
@@ -447,10 +429,10 @@ MAIN_DOM_JS = r"""
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.style.color = '#2e7d32'; }
+                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
                         var dsName = _specCurrentDatasetName || 'dataset';
                         var savedPath = result.path;
-                        selectSpecFile(dsName, savedPath);
+                        selectSpecFile(savedPath);
                         return browseFiles(_specCurrentPath).then(function() {
                             if (!savedPath || !specFileList) return;
                             var rows = specFileList.querySelectorAll('.spec-file-item');
@@ -466,7 +448,7 @@ MAIN_DOM_JS = r"""
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.style.color = '#ba1a1a'; }
+                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                     })
                     .finally(function() {
                         specMachineUpload.value = '';
@@ -485,6 +467,12 @@ MAIN_DOM_JS = r"""
         var ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-20250514';
         function toggleOpenAIFields() {
             const isOpenAI = providerSelect && providerSelect.value === 'openai';
+            var pbuInput = document.getElementById('field-provider_base_url');
+            if (pbuInput) {
+                var dkey = isOpenAI ? 'data-default-openai' : 'data-default-anthropic';
+                var dflt = pbuInput.getAttribute(dkey);
+                if (dflt) pbuInput.value = dflt;
+            }
             if (modelNameField) {
                 modelNameField.style.display = 'flex';
             }
@@ -515,7 +503,7 @@ MAIN_DOM_JS = r"""
             var fd = new FormData();
             fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
-            if (resultEl) resultEl.innerHTML = '<span style="color:var(--outline);font-size:0.8125rem;">Validating spec...</span>';
+            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
             fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
                 .then(_checkResp).then(function(r) { return r.text(); })
                 .then(function(html) {
@@ -648,7 +636,7 @@ MAIN_DOM_JS = r"""
                     if (indicator) {
                         var el = document.createElement('div');
                         el.id = 'spec-validation-msg';
-                        el.style.cssText = 'color:#C20A29;font-size:13px;margin-top:6px;';
+                        el.className = 'spec-validation-msg';
                         el.textContent = msg;
                         indicator.parentNode.insertBefore(el, indicator.nextSibling);
                     } else {

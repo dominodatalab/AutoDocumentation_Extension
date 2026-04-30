@@ -45,10 +45,13 @@ async def _parse_request(req: Request) -> JobRequest:
     if not project_id:
         raise RuntimeError("No target project ID available. The app requires ?projectId= in the URL.")
 
+    _prov = (form.get("provider") or "anthropic").strip().lower()
+    _pbu = (form.get("provider_base_url") or "").strip() or None
+
     return JobRequest(
         spec_path=form.get("spec_path") or None,
         spec_content=spec_content,
-        provider=form.get("provider", "anthropic"),
+        provider=_prov,
         model=form.get("model") or None,
         code_root=form.get("code_root") or None,
         max_files=_sanitize_optional_int(form.get("max_files")),
@@ -65,6 +68,7 @@ async def _parse_request(req: Request) -> JobRequest:
         hardware_tier=form.get("hardware_tier") or None,
         spec_filename=spec_filename,
         project_id=project_id,
+        provider_base_url=_pbu,
     )
 
 
@@ -92,6 +96,8 @@ def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: 
         command += ["--planning-workers", str(req.planning_workers)]
     if req.timeout:
         command += ["--timeout", str(req.timeout)]
+    if req.provider_base_url:
+        command += ["--provider-base-url", req.provider_base_url]
     if req.experiment_names:
         command += ["--experiments", req.experiment_names]
     if req.model_names:

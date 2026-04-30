@@ -293,10 +293,130 @@ def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]
 # Hardware tiers
 # ---------------------------------------------------------------------------
 
+_HW_CAPACITY_LABELS: dict[str, str] = {
+    "FULL": "NO ESTIMATE",
+    "REQUIRES_LAUNCHING_INSTANCE": "< 7 MIN",
+    "CAN_EXECUTE_WITH_CURRENT_INSTANCES": "< 1 MIN",
+    "UNKNOWN": "NO ESTIMATE",
+}
+
+
+def _hw_capacity_label(capacity_level: Any) -> str:
+    if capacity_level is None:
+        return ""
+    key = str(capacity_level).strip().upper().replace("-", "_")
+    return _HW_CAPACITY_LABELS.get(key, "")
+
+
+def _hw_format_price(cents_per_minute: Any) -> str:
+    try:
+        c = float(cents_per_minute or 0)
+    except (TypeError, ValueError):
+        return ""
+    if c <= 0:
+        return ""
+    return f"${(c / 100.0):.4f}/min"
+
+
+def _hw_memory_ram_label(mem: Any) -> str:
+    if mem is None:
+        return ""
+    if isinstance(mem, dict):
+        val = mem.get("value")
+        unit = (mem.get("unit") or "").strip()
+        if val is not None:
+            base = f"{val} {unit}".strip()
+            if base.upper().endswith("RAM"):
+                return base
+            return f"{base} RAM" if base else ""
+    return str(mem)
+
+
+def _hw_core_label(cores: Any) -> str:
+    try:
+        c = float(cores)
+    except (TypeError, ValueError):
+        return ""
+    if c <= 0:
+        return ""
+    if abs(c - 1.0) < 1e-9:
+        return "1 core"
+    if abs(c - round(c)) < 1e-9:
+        return f"{int(round(c))} cores"
+    return f"{c} cores"
+
+
+def _hw_gpu_label(gpu: Any) -> str:
+    if not isinstance(gpu, dict):
+        return ""
+    try:
+        n = int(gpu.get("numberOfGpus", 0) or 0)
+    except (TypeError, ValueError):
+        return ""
+    if n == 1:
+        return "1 GPU"
+    if n > 1:
+        return f"{n} GPUs"
+    return ""
+
+
+def _hw_specs_subtitle(hw: dict[str, Any]) -> str:
+    res = hw.get("hwtResources") or hw.get("resources") or {}
+    if not isinstance(res, dict):
+        res = {}
+    parts: list[str] = []
+    cl = _hw_core_label(res.get("cores"))
+    if cl:
+        parts.append(cl)
+    ml = _hw_memory_ram_label(res.get("memory"))
+    if ml:
+        parts.append(ml)
+    gl = _hw_gpu_label(hw.get("gpuConfiguration"))
+    if gl:
+        parts.append(gl)
+    pl = _hw_format_price(hw.get("centsPerMinute"))
+    if pl:
+        parts.append(pl)
+    return " \u00b7 ".join(parts)
+
+
+def _hw_spot_enabled(hw: dict[str, Any]) -> bool:
+    r = hw.get("capacityTypeRestrictions")
+    if isinstance(r, dict):
+        return bool(r.get("enableSpotInstances"))
+    return False
+
+
+def _hw_option_label(hw: dict[str, Any], capacity: Optional[dict[str, Any]]) -> str:
+    name = (hw.get("name") or hw.get("id") or "").strip() or "(unnamed)"
+    specs = _hw_specs_subtitle(hw)
+    cap_level = None
+    if isinstance(capacity, dict):
+        cap_level = capacity.get("capacityLevel")
+    elif isinstance(hw.get("capacity"), dict):
+        cap_level = hw["capacity"].get("capacityLevel")
+    cap_txt = _hw_capacity_label(cap_level)
+    spot = _hw_spot_enabled(hw)
+    tail: list[str] = []
+    if specs:
+        tail.append(specs)
+    if cap_txt:
+        tail.append(cap_txt)
+    if spot:
+        tail.append("Spot")
+    if not tail:
+        return name
+    return f"{name} - " + " \u00b7 ".join(tail)
+
+
 def list_hardware_tiers(project_id: Optional[str] = None) -> list[dict[str, Any]]:
     """Return available hardware tiers for a project.
 
     Requires *project_id* — does not fall back to the app project.
+
+    Each dict includes ``id``, ``name``, ``isDefault``, ``option_label`` (for
+    ``<select>`` option text mirroring Domino hardware tier summaries), and
+    optional ``specs_subtitle`` / ``capacity_label`` derived from the v4 API.
     """
     pid = project_id
     if not pid:
@@ -307,15 +427,20 @@ def list_hardware_tiers(project_id: Optional[str] = None) -> list[dict[str, Any]
         tiers = data if isinstance(data, list) else data.get("hardwareTiers", data.get("data", []))
         results = []
         for t in tiers:
-            hw = t.get("hardwareTier", t) if isinstance(t, dict) else t
+            row = t if isinstance(t, dict) else {}
+            hw = row.get("hardwareTier", row) if isinstance(row, dict) else t
             if not isinstance(hw, dict):
                 continue
+            cap = row.get("capacity") if isinstance(row.get("capacity"), dict) else None
+            is_default = hw.get("hwtFlags", {}).get("isDefault", False) if isinstance(hw.get("hwtFlags"), dict) else hw.get("isDefault", False)
+            cap_level = cap.get("capacityLevel") if isinstance(cap, dict) else None
             results.append({
                 "id": hw.get("id", ""),
                 "name": hw.get("name") or hw.get("id", ""),
-                "isDefault": hw.get("hwtFlags", {}).get("isDefault", False)
-                    if isinstance(hw.get("hwtFlags"), dict)
-                    else hw.get("isDefault", False),
+                "isDefault": bool(is_default),
+                "specs_subtitle": _hw_specs_subtitle(hw),
+                "capacity_label": _hw_capacity_label(cap_level),
+                "option_label": _hw_option_label(hw, cap),
             })
         return results
     except Exception as exc:

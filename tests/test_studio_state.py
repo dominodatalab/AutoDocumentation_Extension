@@ -77,7 +77,7 @@ class TestJobRequest:
             "planning_workers", "timeout", "notebook", "notebook_path",
             "experiment_names", "model_names", "latest_only", "verbose",
             "branch", "hardware_tier", "spec_filename",
-            "project_id",
+            "project_id", "provider_base_url",
         }
         assert expected.issubset(field_names)
 

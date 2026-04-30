@@ -48,7 +48,7 @@ class LLMClient:
             provider: LLM provider ("anthropic" or "openai").
             model: Model name override. If None, uses provider defaults.
             api_key: API key. If None, reads from environment variable.
-            base_url: OpenAI-compatible API base URL. If None, reads from environment.
+            base_url: API base URL for the active provider. If None, SDK env defaults apply.
             max_retries: Max retries for transient or rate-limit errors.
             initial_backoff: Initial backoff delay in seconds.
             max_backoff: Maximum backoff delay in seconds.
@@ -69,7 +69,8 @@ class LLMClient:
             key = api_key or os.environ.get("ANTHROPIC_API_KEY")
             if not key:
                 raise LLMError("ANTHROPIC_API_KEY not set")
-            self.client = AsyncAnthropic(api_key=key)
+            url = base_url or os.environ.get("ANTHROPIC_BASE_URL")
+            self.client = AsyncAnthropic(api_key=key, base_url=url)
 
         elif self.provider == "openai":
             from openai import AsyncOpenAI

@@ -59,8 +59,9 @@ def register_api_routes(rt):
         for t in tiers:
             tid = t.get("id", "")
             tname = t.get("name") or tid
+            label = t.get("option_label") or tname
             is_default = t.get("isDefault", False) or tid == default_tier
-            options.append(Option(tname, value=tid, selected=is_default))
+            options.append(Option(label, value=tid, selected=is_default))
         if not options:
             options = [Option("(default)", value="")]
         return Select(*options, name="hardware_tier", id="field-hardware_tier")
@@ -217,26 +218,6 @@ def register_api_routes(rt):
         )
 
     rt("/api/download-template")(api_download_template)
-
-    async def api_resolve_project(req: Request):
-        pid = req.query_params.get("projectId", "").strip()
-        if not pid:
-            return Div(id="project-id-resolved")
-        info = domino_client.resolve_project(pid)
-        if info:
-            return Div(
-                f"{info.owner_username}/{info.name}",
-                id="project-id-resolved",
-                cls="resolved",
-                data_project_name=info.name,
-            )
-        return Div(
-            "Could not resolve project ID",
-            id="project-id-resolved",
-            cls="error",
-        )
-
-    rt("/api/resolve-project")(api_resolve_project)
 
     async def api_code_root_options(req: Request):
         pid = (req.query_params.get("projectId") or "").strip()
