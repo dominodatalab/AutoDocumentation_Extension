@@ -849,6 +849,21 @@ input[type="file"] {
 .advanced-checkbox-row .checkbox-field {
     margin-bottom: 0;
 }
+.advanced-subsection-title {
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--on-surface);
+    margin: 0 0 0.625rem 0;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--outline-variant);
+    letter-spacing: normal;
+    text-transform: none;
+}
+.advanced-grid + .advanced-subsection-title {
+    margin-top: 1rem;
+    padding-top: 0.35rem;
+}
 
 /* Filter section */
 .filter-section {

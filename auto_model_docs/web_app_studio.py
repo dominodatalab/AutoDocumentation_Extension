@@ -483,7 +483,7 @@ async def index(req: Request):
 
     advanced_settings_body = [
         Div(
-            Div("Generation settings", cls="filter-section-title"),
+            Div("Generation settings", cls="advanced-subsection-title"),
             Div(
                 Div(
                     Label("Max files", for_="field-max_files"),
@@ -519,26 +519,42 @@ async def index(req: Request):
                 ),
                 cls="advanced-grid",
             ),
-            Div("LLM retries", cls="filter-section-title"),
+            Div("LLM API call settings", cls="advanced-subsection-title"),
             Div(
                 Div(
-                    Label("Max retries", for_="field-max_retries"),
+                    Div(
+                        Label("Max retries", for_="field-max_retries"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Number of retries on LLM API calls."),
+                        cls="label-row",
+                    ),
                     Input(name="max_retries", id="field-max_retries", type="number", value="5", min="0", step="1"),
                     cls="field",
                 ),
                 Div(
-                    Label("Initial backoff (sec)", for_="field-initial_backoff"),
+                    Div(
+                        Label("Initial backoff (sec)", for_="field-initial_backoff"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Delay before the first retry; grows with each attempt."),
+                        cls="label-row",
+                    ),
                     Input(name="initial_backoff", id="field-initial_backoff", type="number", value="10", min="0", step="1"),
                     cls="field",
                 ),
                 Div(
-                    Label("Max backoff (sec)", for_="field-max_backoff"),
+                    Div(
+                        Label("Max backoff (sec)", for_="field-max_backoff"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Cap on delay between retries."),
+                        cls="label-row",
+                    ),
                     Input(name="max_backoff", id="field-max_backoff", type="number", value="120", min="0", step="1"),
                     cls="field",
                 ),
                 Div(
-                    Label("Backoff jitter", for_="field-backoff_jitter"),
-                    Input(name="backoff_jitter", id="field-backoff_jitter", type="number", value="0.2", min="0", step="any"),
+                    Div(
+                        Label("Backoff jitter", for_="field-backoff_jitter"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Random extra delay so retries do not align."),
+                        cls="label-row",
+                    ),
+                    Input(name="backoff_jitter", id="field-backoff_jitter", type="number", value="0.2", min="0", step="0.1"),
                     cls="field",
                 ),
                 cls="advanced-grid",
