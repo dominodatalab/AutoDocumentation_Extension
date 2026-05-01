@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -365,6 +366,7 @@ def _make_job_request(**overrides) -> Any:
         spec_filename=None,
         project_id=None,
         provider_base_url=None,
+        language="auto",
     )
     defaults.update(overrides)
     return _JR(**defaults)
@@ -411,3 +413,16 @@ class TestBuildJobCommandStr:
         cmd = _bld_cmd(req, spec_path="/spec.yaml")
         assert "--provider-base-url" in cmd
         assert "https://api.anthropic.example" in cmd
+
+    def test_includes_language_when_set(self):
+        req = _make_job_request(language="r")
+        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        assert "--language" in cmd
+        parts = shlex.split(cmd)
+        assert parts[parts.index("--language") + 1] == "r"
+
+    def test_includes_language_auto_by_default(self):
+        req = _make_job_request()
+        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        parts = shlex.split(cmd)
+        assert parts[parts.index("--language") + 1] == "auto"

@@ -77,9 +77,18 @@ class TestJobRequest:
             "planning_workers", "timeout", "notebook", "notebook_path",
             "experiment_names", "model_names", "latest_only", "verbose",
             "branch", "hardware_tier", "spec_filename",
-            "project_id", "provider_base_url",
+            "project_id", "provider_base_url", "language",
         }
         assert expected.issubset(field_names)
+
+    def test_language_defaults_to_auto(self, state_module):
+        jr = state_module.JobRequest(
+            spec_path=None, spec_content=None, provider="anthropic", model=None,
+            code_root=None, max_files=None, workers=None, planning_workers=None,
+            timeout=None, notebook=False, notebook_path=None,
+            experiment_names=None, model_names=None, latest_only=False, verbose=False,
+        )
+        assert jr.language == "auto"
 
 
 class TestDominoJobRecord:

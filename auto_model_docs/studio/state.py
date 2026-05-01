@@ -125,6 +125,7 @@ class JobRequest:
     spec_filename: Optional[str] = None  # original uploaded filename
     project_id: Optional[str] = None     # target Domino project (from ?projectId=)
     provider_base_url: Optional[str] = None
+    language: str = "auto"
 
 
 @dataclass

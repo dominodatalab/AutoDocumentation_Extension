@@ -36,6 +36,8 @@ from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
+from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
+
 from temporary_versioning import get_deploy_version_label
 
 
@@ -414,6 +416,7 @@ async def index(req: Request):
                         "document.getElementById('lang-override-select').style.display === 'none' ? 'inline-block' : 'none';",
             ),
             Select(
+                Option("Auto-detect", value="auto", selected=True),
                 Option("Python", value="python"),
                 Option("R", value="r"),
                 Option("SAS", value="sas"),
@@ -440,6 +443,25 @@ async def index(req: Request):
                 cls="label-row",
             ),
             branch_input,
+            cls="field",
+        )
+    )
+    _lang_opts = [
+        Option("Auto-detect", value="auto", selected=True),
+        *[Option(LANGUAGE_PROFILES[k].display_name, value=k) for k in LANGUAGE_PRIORITY],
+    ]
+    run_card_children.append(
+        Div(
+            Div(
+                Label("Programming language", for_="field-language"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Same choices as the CLI --language flag. Auto-detect picks python, r, sas, or matlab from files under code root.",
+                ),
+                cls="label-row",
+            ),
+            Select(*_lang_opts, name="language", id="field-language"),
             cls="field",
         )
     )

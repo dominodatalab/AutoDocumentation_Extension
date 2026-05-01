@@ -158,6 +158,12 @@ console = Console()
     help="Disable automatic Domino project filtering (scan all projects)",
 )
 @click.option(
+    "--language",
+    default="auto",
+    type=click.Choice(["auto", "python", "r", "sas", "matlab"], case_sensitive=False),
+    help="Programming language for scanning, or auto to detect from repository files",
+)
+@click.option(
     "--dataset-path",
     type=click.Path(),
     required=True,
@@ -185,6 +191,7 @@ def main(
     models: str | None,
     latest_only: bool,
     disable_project_filtering: bool,
+    language: str,
     dataset_path: str,
 ) -> None:
     """Generate model documentation from ML codebases.
@@ -348,6 +355,7 @@ def main(
             latest_only=latest_only,
             disable_project_filtering=disable_project_filtering,
             dataset_mount_path=dataset_path,
+            language=language,
         )
 
         # Run generation with progress

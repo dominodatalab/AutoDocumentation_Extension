@@ -91,6 +91,7 @@ MAIN_DOM_JS = r"""
         var langCount = document.getElementById('lang-detected-count');
         var langInput = document.getElementById('field-detected-language');
         var langSelect = document.getElementById('lang-override-select');
+        var langFieldMain = document.getElementById('field-language');
 
         function detectLanguage(codeRoot) {
             var url = _adUrl('api/detect-language');
@@ -117,10 +118,19 @@ MAIN_DOM_JS = r"""
         }
 
         window.handleLanguageOverride = function(lang) {
-            if (langInput) langInput.value = lang;
+            if (langInput) langInput.value = lang === 'auto' ? 'python' : lang;
+            if (langFieldMain) langFieldMain.value = lang;
             var cr = document.getElementById('field-code_root');
             detectLanguage(cr ? cr.value : undefined);
         };
+
+        if (langFieldMain) {
+            langFieldMain.addEventListener('change', function() {
+                var v = this.value || 'auto';
+                if (langInput) langInput.value = v === 'auto' ? 'python' : v;
+                if (langSelect) langSelect.value = v;
+            });
+        }
 
         function detectLanguageFromCodeRoot() {
             var cr = document.getElementById('field-code_root');

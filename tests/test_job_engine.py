@@ -49,6 +49,7 @@ class JobRequest:
     spec_filename: Optional[str] = None
     project_id: Optional[str] = None
     provider_base_url: Optional[str] = None
+    language: str = "auto"
 
 
 @dataclass
@@ -192,6 +193,51 @@ async def test_parse_request_provider_base_url_preserved():
     assert jr2.provider_base_url == "https://ok/v1"
 
 
+@pytest.mark.asyncio
+async def test_parse_request_language_defaults_to_auto_when_missing():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {}
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "proj-x",
+            "provider": "anthropic",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.language == "auto"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_language_allowed_and_invalid():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {}
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "proj-x",
+            "provider": "anthropic",
+            "language": "sas",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.language == "sas"
+
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "proj-x",
+            "provider": "anthropic",
+            "language": "fortran",
+        }
+    )
+    jr2 = await je._parse_request(req)
+    assert jr2.language == "auto"
+
+
 # ---------------------------------------------------------------------------
 # _build_job_command
 # ---------------------------------------------------------------------------
@@ -207,6 +253,9 @@ class TestBuildJobCommand:
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
+        assert "--language" in cmd
+        i = cmd.index("--language")
+        assert cmd[i + 1] == "auto"
 
     def test_provider_base_url_in_command_for_either_provider(self):
         je = _import_job_engine()

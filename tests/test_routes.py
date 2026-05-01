@@ -50,6 +50,7 @@ class _MockJobRequest:
     spec_filename: Optional[str] = None
     project_id: Optional[str] = None
     provider_base_url: Optional[str] = None
+    language: str = "auto"
 
 
 @dataclass

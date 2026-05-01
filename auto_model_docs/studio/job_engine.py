@@ -47,6 +47,9 @@ async def _parse_request(req: Request) -> JobRequest:
 
     _prov = (form.get("provider") or "anthropic").strip().lower()
     _pbu = (form.get("provider_base_url") or "").strip() or None
+    _lang_raw = (form.get("language") or "auto").strip().lower()
+    _allowed_lang = {"auto", "python", "r", "sas", "matlab"}
+    _language = _lang_raw if _lang_raw in _allowed_lang else "auto"
 
     return JobRequest(
         spec_path=form.get("spec_path") or None,
@@ -69,6 +72,7 @@ async def _parse_request(req: Request) -> JobRequest:
         spec_filename=spec_filename,
         project_id=project_id,
         provider_base_url=_pbu,
+        language=_language,
     )
 
 
@@ -107,6 +111,7 @@ def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: 
     command += ["--notebook"]
     if req.verbose:
         command += ["--verbose"]
+    command += ["--language", req.language]
     return command
 
 

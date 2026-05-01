@@ -186,6 +186,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         spec_filename: Optional[str] = None
         project_id: Optional[str] = None
         provider_base_url: Optional[str] = None
+        language: str = "auto"
 
     @dataclass
     class DominoJobRecord:
