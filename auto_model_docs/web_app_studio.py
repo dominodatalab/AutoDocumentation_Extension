@@ -363,8 +363,33 @@ async def index(req: Request):
                 ),
                 cls="target-project-row",
             ),
-            Input(type="hidden", name="project_id", value=project_id or ""),
             cls="field target-project-callout",
+        )
+    )
+
+    run_card_children.append(
+        Div(
+            Label(
+                Input(type="checkbox", name="disable_project_filtering", id="field-disable_project_filtering"),
+                Span("Disable Domino project filter for MLflow"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="When checked, MLflow scanning includes experiments not tagged with this Domino project.",
+                ),
+                cls="checkbox-field",
+            ),
+            Label(
+                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
+                Span("Notebook from cache only"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+                ),
+                cls="checkbox-field",
+            ),
+            cls="run-visible-options",
         )
     )
 
@@ -614,26 +639,6 @@ async def index(req: Request):
             ),
             Input(name="notebook_path", id="field-notebook_path", type="text", value="", placeholder=""),
             cls="field",
-        ),
-        Label(
-            Input(type="checkbox", name="disable_project_filtering", id="field-disable_project_filtering"),
-            Span("Disable Domino project filter for MLflow"),
-            Span(
-                "\u24d8",
-                cls="info-tooltip",
-                data_tooltip="When checked, MLflow scanning includes experiments not tagged with this Domino project.",
-            ),
-            cls="checkbox-field",
-        ),
-        Label(
-            Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
-            Span("Notebook from cache only"),
-            Span(
-                "\u24d8",
-                cls="info-tooltip",
-                data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
-            ),
-            cls="checkbox-field",
         ),
         Label(
             Input(type="checkbox", name="notebook", id="field-notebook", checked=True),

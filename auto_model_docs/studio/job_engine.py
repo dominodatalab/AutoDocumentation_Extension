@@ -72,12 +72,11 @@ async def _parse_request(req: Request) -> JobRequest:
         spec_filename = getattr(spec_upload, "filename", None)
 
     project_id = (
-        form.get("target_project")
-        or form.get("project_id")
-        or req.query_params.get("projectId")
+        (req.query_params.get("projectId") or req.query_params.get("project_id") or "").strip()
+        or None
     )
     if not project_id:
-        raise RuntimeError("No target project ID available. The app requires ?projectId= in the URL.")
+        raise RuntimeError("No target project ID available. The app requires ?projectId= on the request URL.")
 
     _prov = (form.get("provider") or "anthropic").strip().lower()
     _pbu = (form.get("provider_base_url") or "").strip() or None

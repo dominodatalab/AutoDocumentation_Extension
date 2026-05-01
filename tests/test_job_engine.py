@@ -177,10 +177,9 @@ async def test_parse_request_provider_base_url_preserved():
     from unittest.mock import MagicMock
 
     req = MagicMock()
-    req.query_params = {}
+    req.query_params = {"projectId": "proj-x"}
     req.form = AsyncMock(
         return_value={
-            "target_project": "proj-x",
             "provider": "anthropic",
             "provider_base_url": "https://a.example",
         }
@@ -190,7 +189,6 @@ async def test_parse_request_provider_base_url_preserved():
 
     req.form = AsyncMock(
         return_value={
-            "target_project": "proj-x",
             "provider": "openai",
             "provider_base_url": "https://ok/v1",
         }
@@ -205,10 +203,9 @@ async def test_parse_request_language_defaults_to_auto_when_missing():
     from unittest.mock import MagicMock
 
     req = MagicMock()
-    req.query_params = {}
+    req.query_params = {"projectId": "proj-x"}
     req.form = AsyncMock(
         return_value={
-            "target_project": "proj-x",
             "provider": "anthropic",
         }
     )
@@ -222,10 +219,9 @@ async def test_parse_request_language_allowed_and_invalid():
     from unittest.mock import MagicMock
 
     req = MagicMock()
-    req.query_params = {}
+    req.query_params = {"projectId": "proj-x"}
     req.form = AsyncMock(
         return_value={
-            "target_project": "proj-x",
             "provider": "anthropic",
             "language": "sas",
         }
@@ -235,13 +231,51 @@ async def test_parse_request_language_allowed_and_invalid():
 
     req.form = AsyncMock(
         return_value={
-            "target_project": "proj-x",
             "provider": "anthropic",
             "language": "fortran",
         }
     )
     jr2 = await je._parse_request(req)
     assert jr2.language == "auto"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_project_id_only_from_query():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "from-query"}
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "form-should-not-win",
+            "project_id": "hidden-should-not-win",
+            "provider": "anthropic",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.project_id == "from-query"
+
+    req.query_params = {"project_id": "snake-query"}
+    jr2 = await je._parse_request(req)
+    assert jr2.project_id == "snake-query"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_raises_when_no_query_project_id():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {}
+    req.form = AsyncMock(
+        return_value={
+            "target_project": "only-form-not-enough",
+            "provider": "anthropic",
+        }
+    )
+    with pytest.raises(RuntimeError, match="project ID"):
+        await je._parse_request(req)
 
 
 # ---------------------------------------------------------------------------

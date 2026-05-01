@@ -523,11 +523,13 @@ class TestJobRoutesIntegration:
         """Submit via HTTP, verify record appears in job index."""
         store = integration_env["store"]
 
-        resp = client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        resp = client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+            },
+        )
         assert resp.status_code == 200
 
         jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
@@ -570,11 +572,13 @@ class TestJobRoutesIntegration:
 
     def test_job_history_returns_submitted_jobs(self, client, integration_env):
         """Jobs created via /run appear in /job-history."""
-        client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+            },
+        )
 
         resp = client.get("/job-history")
         assert resp.status_code == 200
@@ -595,11 +599,13 @@ class TestAuthorizationIntegration:
 
     def test_run_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_start")
-        resp = client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        resp = client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+            },
+        )
         assert resp.status_code == 403
 
     def test_stop_job_denied_returns_403(self, client, integration_env):
@@ -686,21 +692,23 @@ class TestCrossCuttingIntegration:
             )
             store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
 
-        client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-            "code_root": "/mnt/code",
-            "max_files": "50",
-            "workers": "4",
-            "planning_workers": "3",
-            "timeout": "120",
-            "max_retries": "5",
-            "initial_backoff": "10",
-            "max_backoff": "120",
-            "backoff_jitter": "0.2",
-            "verbose": "true",
-        })
+        client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+                "code_root": "/mnt/code",
+                "max_files": "50",
+                "workers": "4",
+                "planning_workers": "3",
+                "timeout": "120",
+                "max_retries": "5",
+                "initial_backoff": "10",
+                "max_backoff": "120",
+                "backoff_jitter": "0.2",
+                "verbose": "true",
+            },
+        )
 
         jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
         newest = jobs[0]
