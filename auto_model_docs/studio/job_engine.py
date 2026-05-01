@@ -90,8 +90,8 @@ def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: 
         command += ["--provider", req.provider]
     if req.model:
         command += ["--model", req.model]
-    if req.code_root:
-        command += ["--code-root", req.code_root]
+    code_root_arg = (req.code_root or "").strip() or "/mnt/code"
+    command += ["--code-root", code_root_arg]
     if req.max_files:
         command += ["--max-files", str(req.max_files)]
     if req.workers:
@@ -103,9 +103,9 @@ def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: 
     if req.provider_base_url:
         command += ["--provider-base-url", req.provider_base_url]
     if req.experiment_names:
-        command += ["--experiments", req.experiment_names]
+        command += ["--filtered-experiments", req.experiment_names]
     if req.model_names:
-        command += ["--models", req.model_names]
+        command += ["--filtered-models", req.model_names]
     if req.latest_only:
         command += ["--latest-only"]
     command += ["--notebook"]

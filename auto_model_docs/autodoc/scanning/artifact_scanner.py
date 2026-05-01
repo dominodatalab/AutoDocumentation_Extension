@@ -442,7 +442,7 @@ class ArtifactScanner:
                             models.append(model_info)
 
                     except Exception as e:
-                        logger.info(f"    ✗ Version {version.version}: Error - {str(e)}")
+                        logger.debug(f"    ✗ Version {version.version}: Error - {str(e)}")
                         # Skip versions that can't be loaded - already filtered by model name patterns above
 
             # Apply latest_only filtering

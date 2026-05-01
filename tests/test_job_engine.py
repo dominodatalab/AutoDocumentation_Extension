@@ -256,6 +256,8 @@ class TestBuildJobCommand:
         assert "--language" in cmd
         i = cmd.index("--language")
         assert cmd[i + 1] == "auto"
+        cr = cmd.index("--code-root")
+        assert cmd[cr + 1] == "/mnt/code"
 
     def test_provider_base_url_in_command_for_either_provider(self):
         je = _import_job_engine()
@@ -297,8 +299,8 @@ class TestBuildJobCommand:
         assert "--generation-workers" in cmd
         assert "--planning-workers" in cmd
         assert "--timeout" in cmd
-        assert "--experiments" in cmd
-        assert "--models" in cmd
+        assert "--filtered-experiments" in cmd
+        assert "--filtered-models" in cmd
         assert "--latest-only" in cmd
 
     def test_no_spec_path(self):

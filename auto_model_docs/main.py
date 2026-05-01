@@ -25,9 +25,6 @@ from autodoc.core.models import DocumentSpec
 from autodoc.llm import LLMClient
 from autodoc.orchestrator import Orchestrator
 from autodoc.scanning import ContentSanitizer
-from domino_auth import configure_auth, cli_auth
-
-configure_auth(cli_auth)
 
 
 console = Console()
@@ -44,8 +41,9 @@ console = Console()
 @click.option(
     "--code-root",
     "-c",
+    required=True,
     type=click.Path(exists=True),
-    help="Root directory of codebase to analyze (default: /mnt/code or ./)",
+    help="Root directory of codebase to analyze",
 )
 @click.option(
     "--provider",
@@ -138,14 +136,16 @@ console = Console()
     help="Timeout for individual LLM API calls in seconds (default: 120)",
 )
 @click.option(
-    "--experiments",
+    "--filtered-experiments",
+    "filtered_experiments",
     type=str,
-    help="Comma-separated list of experiment names/patterns to include. Supports wildcards: * (any) and ? (single char). Example: customer_churn*,fraud_detection",
+    help="Comma-separated experiment names/patterns to include. Wildcards: * and ?. Example: customer_churn*,fraud_detection",
 )
 @click.option(
-    "--models", 
+    "--filtered-models",
+    "filtered_models",
     type=str,
-    help="Comma-separated list of model names/patterns to include. Supports wildcards: * (any) and ? (single char). Example: churn*,fraud_detector",
+    help="Comma-separated MLflow model names/patterns to include. Wildcards: * and ?. Example: churn*,fraud_detector",
 )
 @click.option(
     "--latest-only",
@@ -171,7 +171,7 @@ console = Console()
 )
 def main(
     spec: str,
-    code_root: str | None,
+    code_root: str,
     provider: str,
     model: str | None,
     provider_base_url: str | None,
@@ -187,8 +187,8 @@ def main(
     notebook_from_cache: bool,
     notebook_path: str | None,
     timeout: float,
-    experiments: str | None,
-    models: str | None,
+    filtered_experiments: str | None,
+    filtered_models: str | None,
     latest_only: bool,
     disable_project_filtering: bool,
     language: str,
@@ -206,11 +206,19 @@ def main(
 
     Environment variables (can be set in .env file):
 
-        ANTHROPIC_API_KEY - API key for Anthropic Claude
-        OPENAI_API_KEY - API key for OpenAI GPT-4
+        DOMINO_PROJECT_ID - Required. Domino project ID for MLflow filtering metadata.
+        ANTHROPIC_API_KEY / OPENAI_API_KEY - LLM credentials (see Settings)
 
     For full configuration options, see the Settings class in autodoc/core/config.py
     """
+    if not (os.environ.get("DOMINO_PROJECT_ID") or "").strip():
+        console.print(
+            "\n[bold red]Error:[/] DOMINO_PROJECT_ID is required. "
+            "Set it to your Domino project ID before running.",
+            style="red",
+        )
+        sys.exit(1)
+
     try:
         # Configure logging based on verbosity
         log_level = logging.INFO if verbose else logging.WARNING
@@ -242,8 +250,7 @@ def main(
             settings.llm_max_backoff = max_backoff
         if backoff_jitter is not None:
             settings.llm_backoff_jitter = backoff_jitter
-        if code_root:
-            settings.code_root = Path(code_root)
+        settings.code_root = Path(code_root)
         if max_files:
             settings.max_files = max_files
         if workers:
@@ -254,7 +261,7 @@ def main(
         from artifact_layout import init_layout, get_layout
         init_layout()
         output_dir = get_layout().docs_dir
-        code_dir = settings.code_root if settings.code_root.exists() else _get_default_code_root()
+        code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)
         if notebook_from_cache:
@@ -266,14 +273,15 @@ def main(
             )
             return
 
-        # Parse CSV filtering options
         experiment_names = None
-        if experiments:
-            experiment_names = [name.strip() for name in experiments.split(",") if name.strip()]
-            
+        if filtered_experiments:
+            experiment_names = [
+                name.strip() for name in filtered_experiments.split(",") if name.strip()
+            ]
+
         model_names = None
-        if models:
-            model_names = [name.strip() for name in models.split(",") if name.strip()]
+        if filtered_models:
+            model_names = [name.strip() for name in filtered_models.split(",") if name.strip()]
 
         # Load document spec
         console.print(f"\n[bold blue]Loading specification:[/] {spec}")
@@ -454,17 +462,6 @@ def _regenerate_notebook_from_cache(
     console.print(f"\n[bold green]Success![/] Notebook regenerated:")
     console.print(f"  [cyan]{result_notebook_path}[/]")
     console.print()
-
-
-
-
-def _get_default_code_root() -> Path:
-    """Get default code root directory."""
-    # Check Domino environment first
-    if Path("/mnt/code").exists():
-        return Path("/mnt/code")
-    # Fall back to current directory
-    return Path(".")
 
 
 if __name__ == "__main__":
