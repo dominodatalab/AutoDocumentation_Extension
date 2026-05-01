@@ -350,49 +350,62 @@ def _make_job_request(**overrides) -> Any:
         spec_content=None,
         provider="anthropic",
         model=None,
-        code_root=None,
-        max_files=None,
-        workers=None,
-        planning_workers=None,
-        timeout=None,
+        code_root="/mnt/code",
+        max_files=50,
+        workers=4,
+        planning_workers=3,
+        timeout=120.0,
         notebook=True,
         notebook_path=None,
         experiment_names=None,
         model_names=None,
         latest_only=False,
-        verbose=False,
+        verbose=True,
         branch="main",
         hardware_tier="small",
         spec_filename=None,
         project_id=None,
         provider_base_url=None,
         language="auto",
+        max_retries=5,
+        initial_backoff=10.0,
+        max_backoff=120.0,
+        backoff_jitter=0.2,
+        notebook_from_cache=False,
+        disable_project_filtering=False,
     )
     defaults.update(overrides)
     return _JR(**defaults)
+
+
+_ds = "/domino/datasets/local/autodoc"
 
 
 @skip_no_webapp
 class TestBuildJobCommandStr:
     """Tests for _build_job_command_str (in studio/job_engine.py)."""
 
-    def test_includes_notebook_flag(self):
-        """Domino jobs should always include --notebook."""
-        req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path=None)
+    def test_includes_notebook_flag_when_enabled(self):
+        req = _make_job_request(notebook=True)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml", _ds)
         assert "--notebook" in cmd
+
+    def test_omits_notebook_when_disabled(self):
+        req = _make_job_request(notebook=False)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml", _ds)
+        assert "--notebook" not in cmd
 
     def test_includes_spec_path(self):
         """Spec path should appear in the command."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path="/mnt/data/specs/my_spec.yaml")
+        cmd = _bld_cmd(req, "/mnt/data/specs/my_spec.yaml", _ds)
         assert "--spec" in cmd
         assert "/mnt/data/specs/my_spec.yaml" in cmd
 
     def test_no_artifacts_copy(self):
         """Command should not include any cp or artifacts step."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path=None)
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "cp" not in cmd
         assert "artifacts" not in cmd
 
@@ -401,7 +414,7 @@ class TestBuildJobCommandStr:
             provider="openai",
             provider_base_url="https://api.example/v1",
         )
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "--provider-base-url" in cmd
         assert "https://api.example/v1" in cmd
 
@@ -410,19 +423,19 @@ class TestBuildJobCommandStr:
             provider="anthropic",
             provider_base_url="https://api.anthropic.example",
         )
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "--provider-base-url" in cmd
         assert "https://api.anthropic.example" in cmd
 
     def test_includes_language_when_set(self):
         req = _make_job_request(language="r")
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "--language" in cmd
         parts = shlex.split(cmd)
         assert parts[parts.index("--language") + 1] == "r"
 
     def test_includes_language_auto_by_default(self):
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         parts = shlex.split(cmd)
         assert parts[parts.index("--language") + 1] == "auto"

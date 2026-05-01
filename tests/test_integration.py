@@ -187,6 +187,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         project_id: Optional[str] = None
         provider_base_url: Optional[str] = None
         language: str = "auto"
+        max_retries: Optional[int] = None
+        initial_backoff: Optional[float] = None
+        max_backoff: Optional[float] = None
+        backoff_jitter: Optional[float] = None
+        notebook_from_cache: bool = False
+        disable_project_filtering: bool = False
 
     @dataclass
     class DominoJobRecord:
@@ -680,11 +686,20 @@ class TestCrossCuttingIntegration:
             )
             store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
 
-        # Submit a 3rd via HTTP
         client.post("/run", data={
             "spec_path": "dataset://autodoc-specs/spec.yaml",
             "provider": "anthropic",
             "target_project": "proj-integration",
+            "code_root": "/mnt/code",
+            "max_files": "50",
+            "workers": "4",
+            "planning_workers": "3",
+            "timeout": "120",
+            "max_retries": "5",
+            "initial_backoff": "10",
+            "max_backoff": "120",
+            "backoff_jitter": "0.2",
+            "verbose": "true",
         })
 
         jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")

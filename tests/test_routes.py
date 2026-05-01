@@ -51,6 +51,12 @@ class _MockJobRequest:
     project_id: Optional[str] = None
     provider_base_url: Optional[str] = None
     language: str = "auto"
+    max_retries: Optional[int] = None
+    initial_backoff: Optional[float] = None
+    max_backoff: Optional[float] = None
+    backoff_jitter: Optional[float] = None
+    notebook_from_cache: bool = False
+    disable_project_filtering: bool = False
 
 
 @dataclass

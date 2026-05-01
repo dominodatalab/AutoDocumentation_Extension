@@ -50,6 +50,12 @@ class JobRequest:
     project_id: Optional[str] = None
     provider_base_url: Optional[str] = None
     language: str = "auto"
+    max_retries: Optional[int] = None
+    initial_backoff: Optional[float] = None
+    max_backoff: Optional[float] = None
+    backoff_jitter: Optional[float] = None
+    notebook_from_cache: bool = False
+    disable_project_filtering: bool = False
 
 
 @dataclass
@@ -242,14 +248,38 @@ async def test_parse_request_language_allowed_and_invalid():
 # _build_job_command
 # ---------------------------------------------------------------------------
 
+_DS = "/domino/datasets/autodoc"
+
+_ADV = dict(
+    max_files=50,
+    workers=4,
+    planning_workers=3,
+    timeout=120.0,
+    max_retries=5,
+    initial_backoff=10.0,
+    max_backoff=120.0,
+    backoff_jitter=0.2,
+    notebook_from_cache=False,
+    disable_project_filtering=False,
+)
+
+
 class TestBuildJobCommand:
     def test_minimal_command(self):
         je = _import_job_engine()
-        req = JobRequest(provider="anthropic")
-        cmd = je._build_job_command(req, "/path/spec.yaml")
+        req = JobRequest(
+            provider="anthropic",
+            code_root="/mnt/code",
+            notebook=True,
+            verbose=True,
+            **_ADV,
+        )
+        cmd = je._build_job_command(req, "/path/spec.yaml", _DS)
         assert cmd[0] == "python"
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
+        assert "--dataset-path" in cmd
+        assert _DS in cmd
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
@@ -258,6 +288,23 @@ class TestBuildJobCommand:
         assert cmd[i + 1] == "auto"
         cr = cmd.index("--code-root")
         assert cmd[cr + 1] == "/mnt/code"
+        assert "--max-files" in cmd
+        assert "--max-retries" in cmd
+        assert cmd[cmd.index("--max-retries") + 1] == "5"
+        assert "--backoff-jitter" in cmd
+
+    def test_notebook_unchecked_omits_flag(self):
+        je = _import_job_engine()
+        req = JobRequest(
+            provider="anthropic",
+            code_root="/mnt/code",
+            notebook=False,
+            verbose=False,
+            **_ADV,
+        )
+        cmd = je._build_job_command(req, "/spec.yaml", _DS)
+        assert "--notebook" not in cmd
+        assert "--verbose" not in cmd
 
     def test_provider_base_url_in_command_for_either_provider(self):
         je = _import_job_engine()
@@ -266,8 +313,13 @@ class TestBuildJobCommand:
                 provider="anthropic",
                 provider_base_url="https://proxy/v1",
                 project_id="p",
+                code_root="/c",
+                notebook=False,
+                verbose=False,
+                **_ADV,
             ),
             "/spec.yaml",
+            _DS,
         )
         assert "--provider-base-url" in cmd_anth
         assert "https://proxy/v1" in cmd_anth
@@ -276,8 +328,13 @@ class TestBuildJobCommand:
                 provider="openai",
                 provider_base_url="https://proxy/v1",
                 project_id="p",
+                code_root="/c",
+                notebook=False,
+                verbose=False,
+                **_ADV,
             ),
             "/spec.yaml",
+            _DS,
         )
         assert "--provider-base-url" in cmd_open
         assert "https://proxy/v1" in cmd_open
@@ -288,12 +345,16 @@ class TestBuildJobCommand:
             provider="openai", model="gpt-4", code_root="/code",
             max_files=10, workers=4, planning_workers=2,
             timeout=30.0, experiment_names="exp1,exp2", model_names="model1",
-            latest_only=True, verbose=True,
+            latest_only=True, verbose=True, notebook=True,
+            max_retries=5,
+            initial_backoff=10.0,
+            max_backoff=120.0,
+            backoff_jitter=0.2,
+            disable_project_filtering=True,
         )
-        cmd = je._build_job_command(req, "/spec.yaml")
+        cmd = je._build_job_command(req, "/spec.yaml", _DS)
         assert "--model" in cmd and "gpt-4" in cmd
         assert "--code-root" in cmd
-        # --output is no longer passed (CLI ignores it; output goes via DatasetStore)
         assert "--output" not in cmd
         assert "--max-files" in cmd and "10" in cmd
         assert "--generation-workers" in cmd
@@ -302,20 +363,55 @@ class TestBuildJobCommand:
         assert "--filtered-experiments" in cmd
         assert "--filtered-models" in cmd
         assert "--latest-only" in cmd
+        assert "--disable-project-filtering" in cmd
 
-    def test_no_spec_path(self):
+    def test_build_requires_spec_and_dataset_paths(self):
         je = _import_job_engine()
-        req = JobRequest(provider="anthropic")
-        cmd = je._build_job_command(req, None)
-        assert "--spec" not in cmd
+        req = JobRequest(
+            provider="anthropic",
+            code_root="/c",
+            notebook=False,
+            verbose=False,
+            **_ADV,
+        )
+        with pytest.raises(ValueError, match="spec_path"):
+            je._build_job_command(req, None, _DS)
+        with pytest.raises(ValueError, match="dataset_path"):
+            je._build_job_command(req, "/spec.yaml", "")
+
+    def test_build_requires_generation_settings(self):
+        je = _import_job_engine()
+        req = JobRequest(
+            provider="anthropic",
+            code_root="/c",
+            notebook=False,
+            verbose=False,
+            max_files=50,
+            workers=4,
+            planning_workers=3,
+            timeout=None,
+            max_retries=5,
+            initial_backoff=10.0,
+            max_backoff=120.0,
+            backoff_jitter=0.2,
+        )
+        with pytest.raises(ValueError, match="internal"):
+            je._build_job_command(req, "/spec.yaml", _DS)
 
     def test_command_str_joins_parts(self):
         je = _import_job_engine()
-        req = JobRequest(provider="anthropic")
-        cmd_str = je._build_job_command_str(req, "/spec.yaml")
+        req = JobRequest(
+            provider="anthropic",
+            code_root="/mnt/code",
+            notebook=False,
+            verbose=False,
+            **_ADV,
+        )
+        cmd_str = je._build_job_command_str(req, "/spec.yaml", _DS)
         assert isinstance(cmd_str, str)
         assert "python" in cmd_str
-        assert "--spec /spec.yaml" in cmd_str
+        assert "--spec" in cmd_str
+        assert "/spec.yaml" in cmd_str
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +434,13 @@ class TestSubmitDominoJob:
             "domino_run_id": "run-abc",
         }
 
-        req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
+        req = JobRequest(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            **_ADV,
+        )
         result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.id == "job-1"
         client.submit_job.assert_called_once()
@@ -355,7 +457,13 @@ class TestSubmitDominoJob:
             "domino_run_id": None,
         }
 
-        req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
+        req = JobRequest(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            **_ADV,
+        )
         result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.status == "queued"
         _mock_studio.domino_client.submit_job.assert_not_called()
@@ -381,7 +489,13 @@ class TestSubmitDominoJob:
             "domino_run_id": None,
         }
 
-        req = JobRequest(spec_path="/spec.yaml", provider="anthropic", project_id="proj-123")
+        req = JobRequest(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            **_ADV,
+        )
         result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.status == "failed"
 
@@ -410,7 +524,10 @@ class TestSubmitDominoJob:
         ):
             req = JobRequest(
                 spec_path="dataset://my-dataset/spec.yaml",
-                provider="anthropic", project_id="proj-123",
+                provider="anthropic",
+                project_id="proj-123",
+                code_root="/mnt/code",
+                **_ADV,
             )
             await je._submit_domino_job(req, "test_user", "ds-test", "snap-test")
         call_args = store.create_job.call_args
@@ -430,7 +547,10 @@ class TestSubmitDominoJob:
         ):
             req = JobRequest(
                 spec_path="dataset://autodoc/specs/doc_spec.yaml",
-                provider="anthropic", project_id="proj-123",
+                provider="anthropic",
+                project_id="proj-123",
+                code_root="/mnt/code",
+                **_ADV,
             )
             with pytest.raises(ValueError, match="no longer exists"):
                 await je._submit_domino_job(req, "test_user", "ds-test", "snap-test")
@@ -452,7 +572,10 @@ class TestSubmitDominoJob:
 
         req = JobRequest(
             spec_path="/mnt/data/autodoc/specs/doc_spec.yaml",
-            provider="anthropic", project_id="proj-123",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            **_ADV,
         )
         await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         client.submit_job.assert_called_once()

@@ -23,6 +23,40 @@ from .ui_components import (
 )
 
 
+def _validate_job_inputs(req: JobRequest, dataset_path: str, spec_path: Optional[str]) -> None:
+    if not spec_path or not str(spec_path).strip():
+        raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
+    if not (dataset_path or "").strip():
+        raise ValueError("Dataset mount path is required. Ensure a dataset is selected.")
+    if not (req.code_root or "").strip():
+        raise ValueError("Code root is required. Choose a code root path before generating documentation.")
+    if not (req.provider or "").strip():
+        raise ValueError("Provider is required.")
+    if req.max_files is None:
+        raise ValueError("Max files is required. Set it under Advanced settings.")
+    if req.workers is None:
+        raise ValueError("Generation workers is required. Set it under Advanced settings.")
+    if req.planning_workers is None:
+        raise ValueError("Planning workers is required. Set it under Advanced settings.")
+    if req.timeout is None:
+        raise ValueError("Timeout is required. Set it under Advanced settings.")
+    if req.max_retries is None:
+        raise ValueError("Max retries is required. Set it under Advanced settings.")
+    if req.initial_backoff is None:
+        raise ValueError("Initial backoff is required. Set it under Advanced settings.")
+    if req.max_backoff is None:
+        raise ValueError("Max backoff is required. Set it under Advanced settings.")
+    if req.backoff_jitter is None:
+        raise ValueError("Backoff jitter is required. Set it under Advanced settings.")
+
+
+def _checkbox_truthy(raw: Any) -> bool:
+    if raw is None:
+        return False
+    s = str(raw).strip().lower()
+    return s in ("on", "true", "1", "yes")
+
+
 # ---------------------------------------------------------------------------
 # Request parsing
 # ---------------------------------------------------------------------------
@@ -65,14 +99,20 @@ async def _parse_request(req: Request) -> JobRequest:
         notebook_path=form.get("notebook_path") or None,
         experiment_names=form.get("experiment_names") or None,
         model_names=form.get("model_names") or None,
-        latest_only=form.get("latest_only") in ("on", "true", "1", "yes"),
-        verbose=True,
+        latest_only=_checkbox_truthy(form.get("latest_only")),
+        verbose=(form.get("verbose") or "true").strip().lower() in ("true", "on", "1", "yes"),
         branch=form.get("branch") or None,
         hardware_tier=form.get("hardware_tier") or None,
         spec_filename=spec_filename,
         project_id=project_id,
         provider_base_url=_pbu,
         language=_language,
+        max_retries=_sanitize_optional_int(form.get("max_retries")),
+        initial_backoff=_sanitize_optional_float(form.get("initial_backoff")),
+        max_backoff=_sanitize_optional_float(form.get("max_backoff")),
+        backoff_jitter=_sanitize_optional_float(form.get("backoff_jitter")),
+        notebook_from_cache=_checkbox_truthy(form.get("notebook_from_cache")),
+        disable_project_filtering=_checkbox_truthy(form.get("disable_project_filtering")),
     )
 
 
@@ -81,37 +121,76 @@ async def _parse_request(req: Request) -> JobRequest:
 # ---------------------------------------------------------------------------
 
 def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: str = "") -> list[str]:
-    command = ["python", "/mnt/code/auto_model_docs/main.py"]
-    if spec_path:
-        command += ["--spec", spec_path]
-    if dataset_path:
-        command += ["--dataset-path", dataset_path]
-    if req.provider:
-        command += ["--provider", req.provider]
+    if not spec_path or not str(spec_path).strip():
+        raise ValueError("internal: spec_path is required to build the job command")
+    if not (dataset_path or "").strip():
+        raise ValueError("internal: dataset_path is required to build the job command")
+    if (
+        req.max_files is None
+        or req.workers is None
+        or req.planning_workers is None
+        or req.timeout is None
+        or req.max_retries is None
+        or req.initial_backoff is None
+        or req.max_backoff is None
+        or req.backoff_jitter is None
+    ):
+        raise ValueError(
+            "internal: generation and retry settings must be set (from Advanced settings)."
+        )
+
+    code_root_arg = (req.code_root or "").strip()
+
+    command = [
+        "python",
+        "/mnt/code/auto_model_docs/main.py",
+        "--spec",
+        spec_path,
+        "--dataset-path",
+        dataset_path.strip(),
+        "--code-root",
+        code_root_arg,
+        "--provider",
+        req.provider.strip().lower(),
+        "--language",
+        req.language,
+        "--max-files",
+        str(req.max_files),
+        "--generation-workers",
+        str(req.workers),
+        "--planning-workers",
+        str(req.planning_workers),
+        "--timeout",
+        str(req.timeout),
+        "--max-retries",
+        str(req.max_retries),
+        "--initial-backoff",
+        str(req.initial_backoff),
+        "--max-backoff",
+        str(req.max_backoff),
+        "--backoff-jitter",
+        str(req.backoff_jitter),
+    ]
     if req.model:
         command += ["--model", req.model]
-    code_root_arg = (req.code_root or "").strip() or "/mnt/code"
-    command += ["--code-root", code_root_arg]
-    if req.max_files:
-        command += ["--max-files", str(req.max_files)]
-    if req.workers:
-        command += ["--generation-workers", str(req.workers)]
-    if req.planning_workers:
-        command += ["--planning-workers", str(req.planning_workers)]
-    if req.timeout:
-        command += ["--timeout", str(req.timeout)]
     if req.provider_base_url:
         command += ["--provider-base-url", req.provider_base_url]
     if req.experiment_names:
         command += ["--filtered-experiments", req.experiment_names]
     if req.model_names:
         command += ["--filtered-models", req.model_names]
+    if req.notebook_path:
+        command += ["--notebook-path", req.notebook_path]
     if req.latest_only:
         command += ["--latest-only"]
-    command += ["--notebook"]
+    if req.disable_project_filtering:
+        command += ["--disable-project-filtering"]
+    if req.notebook:
+        command += ["--notebook"]
+    if req.notebook_from_cache:
+        command += ["--notebook-from-cache"]
     if req.verbose:
         command += ["--verbose"]
-    command += ["--language", req.language]
     return command
 
 
@@ -159,6 +238,8 @@ async def _submit_domino_job(
 
     if not spec_path:
         raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
+
+    _validate_job_inputs(req, dataset_path, spec_path)
 
     if req.spec_path and req.spec_path.startswith("dataset://") and snapshot_id:
         ds_relative = req.spec_path[len("dataset://"):].split("/", 1)

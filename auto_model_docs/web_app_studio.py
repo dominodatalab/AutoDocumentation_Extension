@@ -520,6 +520,40 @@ async def index(req: Request):
                 ),
                 cls="advanced-grid",
             ),
+            Div("LLM retries", cls="filter-section-title"),
+            Div(
+                Div(
+                    Label("Max retries", for_="field-max_retries"),
+                    Input(name="max_retries", id="field-max_retries", type="number", value="5"),
+                    cls="field",
+                ),
+                Div(
+                    Label("Initial backoff (s)", for_="field-initial_backoff"),
+                    Input(name="initial_backoff", id="field-initial_backoff", type="number", value="10"),
+                    cls="field",
+                ),
+                Div(
+                    Label("Max backoff (s)", for_="field-max_backoff"),
+                    Input(name="max_backoff", id="field-max_backoff", type="number", value="120"),
+                    cls="field",
+                ),
+                Div(
+                    Label("Backoff jitter", for_="field-backoff_jitter"),
+                    Input(name="backoff_jitter", id="field-backoff_jitter", type="number", value="0.2"),
+                    cls="field",
+                ),
+                cls="advanced-grid",
+            ),
+        ),
+        Div(
+            Label("Verbose logging", for_="field-verbose"),
+            Select(
+                Option("Off", value="false"),
+                Option("On", value="true", selected=True),
+                name="verbose",
+                id="field-verbose",
+            ),
+            cls="field",
         ),
         Div(
             Label("Provider", for_="field-provider"),
@@ -567,6 +601,39 @@ async def index(req: Request):
             cls="field",
             id="model-name-field",
             style="display: none;",
+        ),
+        Div(
+            Div(
+                Label("Notebook path (optional)", for_="field-notebook_path"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Relative path under the output docs folder; leave blank for default notebook name.",
+                ),
+                cls="label-row",
+            ),
+            Input(name="notebook_path", id="field-notebook_path", type="text", value="", placeholder=""),
+            cls="field",
+        ),
+        Label(
+            Input(type="checkbox", name="disable_project_filtering", id="field-disable_project_filtering"),
+            Span("Disable Domino project filter for MLflow"),
+            Span(
+                "\u24d8",
+                cls="info-tooltip",
+                data_tooltip="When checked, MLflow scanning includes experiments not tagged with this Domino project.",
+            ),
+            cls="checkbox-field",
+        ),
+        Label(
+            Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
+            Span("Notebook from cache only"),
+            Span(
+                "\u24d8",
+                cls="info-tooltip",
+                data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+            ),
+            cls="checkbox-field",
         ),
         Label(
             Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
