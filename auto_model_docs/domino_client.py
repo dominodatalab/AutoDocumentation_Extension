@@ -223,9 +223,7 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
         if not loc or loc in seen:
             continue
         seen.add(loc)
-        name = str(repo.get("repoName") or "").strip()
-        label = f"{loc} ({name})" if name else loc
-        options.append({"value": loc, "label": label})
+        options.append({"value": loc, "label": loc})
     return {
         "isGitBasedProject": is_git,
         "defaultRoot": manual,

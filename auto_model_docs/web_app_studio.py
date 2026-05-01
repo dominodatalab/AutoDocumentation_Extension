@@ -544,11 +544,7 @@ async def index(req: Request):
                 cls="advanced-grid",
             ),
         ),
-        Label(
-            Input(type="checkbox", name="verbose", id="field-verbose", value="false", checked=False),
-            Span("Verbose logging"),
-            cls="checkbox-field",
-        ),
+
         Div(
             Label("Provider", for_="field-provider"),
             Select(
@@ -625,6 +621,11 @@ async def index(req: Request):
                 cls="info-tooltip",
                 data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
             ),
+            cls="checkbox-field",
+        ),
+        Label(
+            Input(type="checkbox", name="verbose", id="field-verbose", value="false", checked=False),
+            Span("Verbose logging"),
             cls="checkbox-field",
         ),
     ]
