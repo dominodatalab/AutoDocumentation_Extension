@@ -556,10 +556,11 @@ async def index(req: Request):
     ]
 
     run_card_children.append(
-        Div(
-            Div("Advanced settings", cls="advanced-inline-title"),
+        Details(
+            Summary("Advanced settings", cls="advanced-section-summary"),
             Div(*advanced_settings_body, cls="advanced-content"),
-            cls="advanced-section-inline",
+            cls="advanced-section",
+            open=False,
         )
     )
 

@@ -816,22 +816,6 @@ input[type="file"] {
     color: var(--primary);
     background: var(--surface-container);
 }
-.advanced-section-inline {
-    margin-top: 0.75rem;
-    background: var(--surface-container-lowest);
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-}
-.advanced-inline-title {
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: var(--on-surface);
-    padding: 0.65rem 1rem;
-    background: var(--surface-container-low);
-    border-bottom: 1px solid var(--outline-variant);
-}
 .advanced-summary-desc {
     font-weight: 400;
     font-size: 11px;
