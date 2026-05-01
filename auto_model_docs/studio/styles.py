@@ -840,6 +840,15 @@ input[type="file"] {
     max-width: 100%;
     box-sizing: border-box;
 }
+.advanced-checkbox-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
+}
+.advanced-checkbox-row .checkbox-field {
+    margin-bottom: 0;
+}
 
 /* Filter section */
 .filter-section {

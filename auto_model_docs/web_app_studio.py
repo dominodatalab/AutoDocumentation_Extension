@@ -487,7 +487,7 @@ async def index(req: Request):
             Div(
                 Div(
                     Label("Max files", for_="field-max_files"),
-                    Input(name="max_files", id="field-max_files", type="number", value="50"),
+                    Input(name="max_files", id="field-max_files", type="number", value="50", min="1", step="1"),
                     cls="field",
                 ),
                 Div(
@@ -496,7 +496,7 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Parallel LLM calls in the planning phase."),
                         cls="label-row",
                     ),
-                    Input(name="planning_workers", id="field-planning_workers", type="number", value="3"),
+                    Input(name="planning_workers", id="field-planning_workers", type="number", value="3", min="1", step="1"),
                     cls="field",
                 ),
                 Div(
@@ -505,7 +505,7 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Sections generated in parallel."),
                         cls="label-row",
                     ),
-                    Input(name="workers", id="field-workers", type="number", value="4"),
+                    Input(name="workers", id="field-workers", type="number", value="4", min="1", step="1"),
                     cls="field",
                 ),
                 Div(
@@ -514,7 +514,7 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Seconds before a single LLM call times out."),
                         cls="label-row",
                     ),
-                    Input(name="timeout", id="field-timeout", type="number", value="120"),
+                    Input(name="timeout", id="field-timeout", type="number", value="120", min="1", step="1"),
                     cls="field",
                 ),
                 cls="advanced-grid",
@@ -523,22 +523,22 @@ async def index(req: Request):
             Div(
                 Div(
                     Label("Max retries", for_="field-max_retries"),
-                    Input(name="max_retries", id="field-max_retries", type="number", value="5"),
+                    Input(name="max_retries", id="field-max_retries", type="number", value="5", min="0", step="1"),
                     cls="field",
                 ),
                 Div(
-                    Label("Initial backoff (s)", for_="field-initial_backoff"),
-                    Input(name="initial_backoff", id="field-initial_backoff", type="number", value="10"),
+                    Label("Initial backoff (sec)", for_="field-initial_backoff"),
+                    Input(name="initial_backoff", id="field-initial_backoff", type="number", value="10", min="0", step="1"),
                     cls="field",
                 ),
                 Div(
-                    Label("Max backoff (s)", for_="field-max_backoff"),
-                    Input(name="max_backoff", id="field-max_backoff", type="number", value="120"),
+                    Label("Max backoff (sec)", for_="field-max_backoff"),
+                    Input(name="max_backoff", id="field-max_backoff", type="number", value="120", min="0", step="1"),
                     cls="field",
                 ),
                 Div(
                     Label("Backoff jitter", for_="field-backoff_jitter"),
-                    Input(name="backoff_jitter", id="field-backoff_jitter", type="number", value="0.2"),
+                    Input(name="backoff_jitter", id="field-backoff_jitter", type="number", value="0.2", min="0", step="any"),
                     cls="field",
                 ),
                 cls="advanced-grid",
@@ -613,20 +613,23 @@ async def index(req: Request):
             cls="field",
             id="notebook-path-field-wrap",
         ),
-        Label(
-            Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
-            Span("Notebook from cache only"),
-            Span(
-                "\u24d8",
-                cls="info-tooltip",
-                data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+        Div(
+            Label(
+                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
+                Span("Notebook from cache only"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+                ),
+                cls="checkbox-field",
             ),
-            cls="checkbox-field",
-        ),
-        Label(
-            Input(type="checkbox", name="verbose", id="field-verbose", value="false", checked=False),
-            Span("Verbose logging"),
-            cls="checkbox-field",
+            Label(
+                Input(type="checkbox", name="verbose", id="field-verbose", value="true", checked=False),
+                Span("Verbose logging"),
+                cls="checkbox-field",
+            ),
+            cls="advanced-checkbox-row",
         ),
     ]
 
