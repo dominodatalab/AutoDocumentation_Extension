@@ -79,7 +79,7 @@ class TestJobRequest:
             "branch", "hardware_tier", "spec_filename",
             "project_id", "provider_base_url", "language",
             "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
-            "notebook_from_cache", "disable_project_filtering",
+            "notebook_from_cache",
         }
         assert expected.issubset(field_names)
 

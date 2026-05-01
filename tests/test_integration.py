@@ -192,7 +192,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         max_backoff: Optional[float] = None
         backoff_jitter: Optional[float] = None
         notebook_from_cache: bool = False
-        disable_project_filtering: bool = False
 
     @dataclass
     class DominoJobRecord:

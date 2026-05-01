@@ -369,32 +369,6 @@ async def index(req: Request):
 
     run_card_children.append(
         Div(
-            Label(
-                Input(type="checkbox", name="disable_project_filtering", id="field-disable_project_filtering"),
-                Span("Disable Domino project filter for MLflow"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="When checked, MLflow scanning includes experiments not tagged with this Domino project.",
-                ),
-                cls="checkbox-field",
-            ),
-            Label(
-                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
-                Span("Notebook from cache only"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
-                ),
-                cls="checkbox-field",
-            ),
-            cls="run-visible-options",
-        )
-    )
-
-    run_card_children.append(
-        Div(
             Label("Code root path", for_="code-root-prefix"),
             Div(
                 Select(
@@ -570,15 +544,10 @@ async def index(req: Request):
                 cls="advanced-grid",
             ),
         ),
-        Div(
-            Label("Verbose logging", for_="field-verbose"),
-            Select(
-                Option("Off", value="false"),
-                Option("On", value="true", selected=True),
-                name="verbose",
-                id="field-verbose",
-            ),
-            cls="field",
+        Label(
+            Input(type="checkbox", name="verbose", id="field-verbose", value="false", checked=False),
+            Span("Verbose logging"),
+            cls="checkbox-field",
         ),
         Div(
             Label("Provider", for_="field-provider"),
@@ -627,6 +596,13 @@ async def index(req: Request):
             id="model-name-field",
             style="display: none;",
         ),
+        Label(
+            Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
+            Span("Generate notebook"),
+            Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
+            cls="checkbox-field",
+            id="app-mode-note",
+        ),
         Div(
             Div(
                 Label("Notebook path (optional)", for_="field-notebook_path"),
@@ -639,13 +615,17 @@ async def index(req: Request):
             ),
             Input(name="notebook_path", id="field-notebook_path", type="text", value="", placeholder=""),
             cls="field",
+            id="notebook-path-field-wrap",
         ),
         Label(
-            Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
-            Span("Generate notebook"),
-            Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
+            Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
+            Span("Notebook from cache only"),
+            Span(
+                "\u24d8",
+                cls="info-tooltip",
+                data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+            ),
             cls="checkbox-field",
-            id="app-mode-note",
         ),
     ]
 

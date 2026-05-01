@@ -372,7 +372,6 @@ def _make_job_request(**overrides) -> Any:
         max_backoff=120.0,
         backoff_jitter=0.2,
         notebook_from_cache=False,
-        disable_project_filtering=False,
     )
     defaults.update(overrides)
     return _JR(**defaults)

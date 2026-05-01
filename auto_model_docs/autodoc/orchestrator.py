@@ -68,7 +68,6 @@ class Orchestrator:
         experiment_names: Optional[List[str]] = None,
         model_names: Optional[List[str]] = None,
         latest_only: bool = False,
-        disable_project_filtering: bool = False,
         dataset_mount_path: str = "",
         language: str = "auto",
     ):
@@ -90,7 +89,6 @@ class Orchestrator:
             experiment_names: List of experiment names to include.
             model_names: List of specific model names to include.
             latest_only: Only include the latest version of each model.
-            disable_project_filtering: Disable automatic Domino project filtering.
         """
         self.llm = llm
         self.code_root = code_root
@@ -143,7 +141,6 @@ class Orchestrator:
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            disable_project_filtering=disable_project_filtering,
         )
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)

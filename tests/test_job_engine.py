@@ -55,7 +55,6 @@ class JobRequest:
     max_backoff: Optional[float] = None
     backoff_jitter: Optional[float] = None
     notebook_from_cache: bool = False
-    disable_project_filtering: bool = False
 
 
 @dataclass
@@ -198,6 +197,31 @@ async def test_parse_request_provider_base_url_preserved():
 
 
 @pytest.mark.asyncio
+async def test_parse_request_verbose_checkbox():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.form = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "verbose": "true",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.verbose is True
+
+    req.form = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+        }
+    )
+    jr2 = await je._parse_request(req)
+    assert jr2.verbose is False
+
+
+@pytest.mark.asyncio
 async def test_parse_request_language_defaults_to_auto_when_missing():
     je = _import_job_engine()
     from unittest.mock import MagicMock
@@ -294,7 +318,6 @@ _ADV = dict(
     max_backoff=120.0,
     backoff_jitter=0.2,
     notebook_from_cache=False,
-    disable_project_filtering=False,
 )
 
 
@@ -384,7 +407,6 @@ class TestBuildJobCommand:
             initial_backoff=10.0,
             max_backoff=120.0,
             backoff_jitter=0.2,
-            disable_project_filtering=True,
         )
         cmd = je._build_job_command(req, "/spec.yaml", _DS)
         assert "--model" in cmd and "gpt-4" in cmd
@@ -397,7 +419,6 @@ class TestBuildJobCommand:
         assert "--filtered-experiments" in cmd
         assert "--filtered-models" in cmd
         assert "--latest-only" in cmd
-        assert "--disable-project-filtering" in cmd
 
     def test_build_requires_spec_and_dataset_paths(self):
         je = _import_job_engine()
@@ -477,7 +498,7 @@ class TestSubmitDominoJob:
         )
         result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
         assert result.id == "job-1"
-        client.submit_job.assert_called_once()
+        store.update_job.assert_called_with("ds-1", "snap-1", "job-1", status="submitted", domino_run_id="run-abc", job_url="https://domino/jobs/run-abc")
 
     @pytest.mark.asyncio
     async def test_queued_when_over_limit(self, _mock_studio):
@@ -612,7 +633,7 @@ class TestSubmitDominoJob:
             **_ADV,
         )
         await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
-        client.submit_job.assert_called_once()
+        store.update_job.assert_called_with("ds-1", "snap-1", "job-5", status="submitted", domino_run_id="run-abc", job_url="https://domino/jobs/run-abc")
 
 
 # ---------------------------------------------------------------------------

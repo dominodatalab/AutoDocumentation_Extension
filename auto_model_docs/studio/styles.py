@@ -865,6 +865,9 @@ input[type="file"] {
     padding-left: 1.625rem;
     margin-top: -0.5rem;
 }
+.notebook-path-disabled {
+    opacity: 0.5;
+}
 
 /* ── API key source radio ─────────────────────────────────────────── */
 .api-key-source {

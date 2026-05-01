@@ -153,11 +153,6 @@ console = Console()
     help="Only include the latest version of each model",
 )
 @click.option(
-    "--disable-project-filtering",
-    is_flag=True,
-    help="Disable automatic Domino project filtering (scan all projects)",
-)
-@click.option(
     "--language",
     default="auto",
     type=click.Choice(["auto", "python", "r", "sas", "matlab"], case_sensitive=False),
@@ -190,7 +185,6 @@ def main(
     filtered_experiments: str | None,
     filtered_models: str | None,
     latest_only: bool,
-    disable_project_filtering: bool,
     language: str,
     dataset_path: str,
 ) -> None:
@@ -303,9 +297,6 @@ def main(
             console.print(f"[dim]Max backoff:[/] {settings.llm_max_backoff}")
             console.print(f"[dim]Backoff jitter:[/] {settings.llm_backoff_jitter}")
             console.print(f"[dim]Timeout:[/] {timeout}s")
-            
-            # Show filtering options
-            console.print(f"[dim]Project filtering:[/] {'disabled' if disable_project_filtering else 'enabled'}")
             if experiment_names:
                 console.print(f"[dim]Experiments:[/] {', '.join(experiment_names)}")
             if model_names:
@@ -361,7 +352,6 @@ def main(
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            disable_project_filtering=disable_project_filtering,
             dataset_mount_path=dataset_path,
             language=language,
         )

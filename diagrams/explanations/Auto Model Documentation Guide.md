@@ -249,8 +249,6 @@ Filter which MLflow models and experiments are documented:
 | `--experiments` | Comma-separated list of experiment names/patterns. Supports wildcards. |
 | `--models` | Comma-separated list of model names/patterns. Supports wildcards. |
 | `--latest-only` | Only include the latest version of each model. |
-| `--disable-project-filtering` | Disable automatic Domino project filtering (scan all projects). |
-
 ### **4.4 Advanced Options** {#44-advanced-options}
 
 | Argument | Description | Default |

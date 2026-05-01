@@ -56,7 +56,6 @@ class _MockJobRequest:
     max_backoff: Optional[float] = None
     backoff_jitter: Optional[float] = None
     notebook_from_cache: bool = False
-    disable_project_filtering: bool = False
 
 
 @dataclass

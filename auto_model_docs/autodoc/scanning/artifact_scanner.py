@@ -29,7 +29,6 @@ class ArtifactScanner:
         experiment_names: Optional[List[str]] = None,
         model_names: Optional[List[str]] = None,
         latest_only: bool = False,
-        disable_project_filtering: bool = False,
     ):
         """Initialize the artifact scanner.
 
@@ -39,14 +38,12 @@ class ArtifactScanner:
             experiment_names: List of experiment names to include.
             model_names: List of specific model names to include.
             latest_only: Only include the latest version of each model.
-            disable_project_filtering: Disable automatic Domino project filtering.
         """
         self.tracking_uri = tracking_uri
         self.experiment_name = experiment_name  # Keep for backward compatibility
         self.experiment_names = experiment_names or []
         self.model_names = model_names or []
         self.latest_only = latest_only
-        self.disable_project_filtering = disable_project_filtering
         self._client = None
 
     def _get_client(self):
@@ -105,13 +102,10 @@ class ArtifactScanner:
         try:
             report_progress(0.05)
 
-            # Get current Domino project info
-            domino_project_id = None
-            if not self.disable_project_filtering:
-                domino_project_id = os.environ.get("DOMINO_PROJECT_ID")
-                if domino_project_id:
-                    project_metadata["domino_project_id"] = domino_project_id
-                    project_metadata["domino_project_name"] = os.environ.get("DOMINO_PROJECT_NAME")
+            domino_project_id = os.environ.get("DOMINO_PROJECT_ID")
+            if domino_project_id:
+                project_metadata["domino_project_id"] = domino_project_id
+                project_metadata["domino_project_name"] = os.environ.get("DOMINO_PROJECT_NAME")
 
             report_progress(0.1)
 
@@ -135,7 +129,7 @@ class ArtifactScanner:
             project_metadata["tracking_uri"] = self.tracking_uri
             project_metadata["models_found"] = len(models)
             project_metadata["filtering_applied"] = {
-                "project_filtering": not self.disable_project_filtering and domino_project_id is not None,
+                "project_filtering": domino_project_id is not None,
                 "experiment_filtering": bool(self.experiment_names),
                 "model_filtering": bool(self.model_names),
                 "latest_only": self.latest_only,
@@ -217,8 +211,7 @@ class ArtifactScanner:
                     excluded_count += 1
                     continue
                     
-                # Apply Domino project filtering
-                if domino_project_id and not self.disable_project_filtering:
+                if domino_project_id:
                     project_tag = exp.tags.get("mlflow.domino.project_id")
                     if project_tag != domino_project_id:
                         excluded_count += 1

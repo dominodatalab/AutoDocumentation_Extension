@@ -497,6 +497,19 @@ MAIN_DOM_JS = r"""
             toggleOpenAIFields();
         }
 
+        (function() {
+            var nbCb = document.getElementById('field-notebook');
+            var pathInput = document.getElementById('field-notebook_path');
+            var pathWrap = document.getElementById('notebook-path-field-wrap');
+            function syncNotebookPathEnabled() {
+                var on = nbCb && nbCb.checked;
+                if (pathInput) pathInput.disabled = !on;
+                if (pathWrap) pathWrap.classList.toggle('notebook-path-disabled', !on);
+            }
+            if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
+            syncNotebookPathEnabled();
+        })();
+
         // ── Spec validation helper ────────────────────────────────────
         window._specValid = true;
         function validateSpecContent(file) {

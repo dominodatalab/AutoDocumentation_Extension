@@ -99,7 +99,7 @@ async def _parse_request(req: Request) -> JobRequest:
         experiment_names=form.get("experiment_names") or None,
         model_names=form.get("model_names") or None,
         latest_only=_checkbox_truthy(form.get("latest_only")),
-        verbose=(form.get("verbose") or "true").strip().lower() in ("true", "on", "1", "yes"),
+        verbose=_checkbox_truthy(form.get("verbose")),
         branch=form.get("branch") or None,
         hardware_tier=form.get("hardware_tier") or None,
         spec_filename=spec_filename,
@@ -111,7 +111,6 @@ async def _parse_request(req: Request) -> JobRequest:
         max_backoff=_sanitize_optional_float(form.get("max_backoff")),
         backoff_jitter=_sanitize_optional_float(form.get("backoff_jitter")),
         notebook_from_cache=_checkbox_truthy(form.get("notebook_from_cache")),
-        disable_project_filtering=_checkbox_truthy(form.get("disable_project_filtering")),
     )
 
 
@@ -182,8 +181,6 @@ def _build_job_command(req: JobRequest, spec_path: Optional[str], dataset_path: 
         command += ["--notebook-path", req.notebook_path]
     if req.latest_only:
         command += ["--latest-only"]
-    if req.disable_project_filtering:
-        command += ["--disable-project-filtering"]
     if req.notebook:
         command += ["--notebook"]
     if req.notebook_from_cache:
@@ -202,6 +199,23 @@ def _build_job_command_str(req: JobRequest, spec_path: Optional[str], dataset_pa
 # ---------------------------------------------------------------------------
 # Domino job submission
 # ---------------------------------------------------------------------------
+
+def launch_domino_job_run(
+    command_str: str,
+    *,
+    branch: Optional[str] = None,
+    tier_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+) -> tuple[str, str]:
+    run_id = domino_client.submit_job(
+        command_str,
+        branch=branch,
+        tier_id=tier_id,
+        project_id=project_id,
+    )
+    job_url = domino_client.build_job_url(run_id, project_id=project_id)
+    return run_id, job_url
+
 
 async def _submit_domino_job(
     req: JobRequest, owner_id: str, dataset_id: str, snapshot_id: str,
@@ -268,13 +282,12 @@ async def _submit_domino_job(
         return _db_record_to_dataclass(row)
 
     try:
-        run_id = domino_client.submit_job(
+        run_id, job_url = launch_domino_job_run(
             command_str,
             branch=req.branch,
             tier_id=req.hardware_tier,
             project_id=req.project_id,
         )
-        job_url = domino_client.build_job_url(run_id, project_id=req.project_id)
         domino_job_store.update_job(
             dataset_id, snapshot_id, job_id,
             status="submitted",
