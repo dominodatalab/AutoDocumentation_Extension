@@ -43,6 +43,8 @@ class JobRequest:
     verbose: bool
     branch: str
     hardware_tier: str
+    environment_id: str
+    environment_revision_id: str
     project_id: str
     provider_base_url: str
     language: str
@@ -70,6 +72,8 @@ _JR_DEFAULTS = {
     "verbose": False,
     "branch": "",
     "hardware_tier": "",
+    "environment_id": "",
+    "environment_revision_id": "",
     "project_id": "",
     "provider_base_url": "",
     "language": "auto",
@@ -323,6 +327,25 @@ async def test_parse_request_project_id_only_from_query():
     req.query_params = {"project_id": "snake-query"}
     jr2 = await je._parse_request(req)
     assert jr2.project_id == "snake-query"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_environment_fields():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.form = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "environment_id": "env123",
+            "environment_revision_id": "rev456",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.environment_id == "env123"
+    assert jr.environment_revision_id == "rev456"
 
 
 @pytest.mark.asyncio

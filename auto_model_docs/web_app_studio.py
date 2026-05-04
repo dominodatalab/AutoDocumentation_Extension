@@ -230,6 +230,55 @@ async def index(req: Request):
     if not tier_options:
         tier_options = [Option("(default)", value="")]
 
+    env_rows: list = []
+    try:
+        env_rows = domino_client.list_self_environments() or []
+    except Exception:
+        env_rows = []
+    env_var_id = (os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip()
+    env_var_rev = (os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip()
+    env_ids = {str(e.get("id", "")) for e in env_rows if isinstance(e, dict)}
+    default_env_id = ""
+    if env_rows:
+        if env_var_id and env_var_id in env_ids:
+            default_env_id = env_var_id
+        else:
+            default_env_id = str(env_rows[0].get("id", ""))
+    env_options = []
+    for e in env_rows:
+        if not isinstance(e, dict):
+            continue
+        eid = str(e.get("id", ""))
+        if not eid:
+            continue
+        label = (e.get("name") or eid).strip()
+        env_options.append(Option(label, value=eid, selected=(eid == default_env_id)))
+    if not env_options:
+        env_options = [Option("(none)", value="", selected=True)]
+
+    rev_rows: list = []
+    if default_env_id:
+        try:
+            rev_rows = domino_client.list_environment_revisions(default_env_id) or []
+        except Exception:
+            rev_rows = []
+    rev_ids = {str(r.get("id", "")) for r in rev_rows}
+    default_rev_id = ""
+    if rev_rows:
+        if env_var_rev and env_var_rev in rev_ids:
+            default_rev_id = env_var_rev
+        else:
+            default_rev_id = str(rev_rows[0].get("id", ""))
+    rev_options = []
+    for r in rev_rows:
+        rid = str(r.get("id", ""))
+        if not rid:
+            continue
+        lab = r.get("option_label") or rid
+        rev_options.append(Option(lab, value=rid, selected=(rid == default_rev_id)))
+    if not rev_options:
+        rev_options = [Option("(none)", value="", selected=True)]
+
     # ── Build the 3-column layout ────────────────────────────────────────
 
     # LEFT COLUMN: What to document
@@ -489,6 +538,46 @@ async def index(req: Request):
                 cls="hw-tier-select",
             ),
             cls="field",
+        )
+    )
+    run_card_children.append(
+        Div(
+            Div(
+                Div(
+                    Label("Environment", for_="field-environment_id"),
+                    Span(
+                        "\u24d8",
+                        cls="info-tooltip",
+                        data_tooltip="Compute environment for the Domino job.",
+                    ),
+                    cls="label-row",
+                ),
+                Select(
+                    *env_options,
+                    name="environment_id",
+                    id="field-environment_id",
+                    cls="environment-select",
+                    onchange="reloadEnvironmentRevisions(this)",
+                ),
+                cls="field",
+            ),
+            Div(
+                Div(
+                    Label("Revision", for_="field-environment_revision_id"),
+                    cls="label-row",
+                ),
+                Div(
+                    Select(
+                        *rev_options,
+                        name="environment_revision_id",
+                        id="field-environment_revision_id",
+                        cls="env-revision-select",
+                    ),
+                    id="environment-revision-slot",
+                ),
+                cls="field",
+            ),
+            cls="env-revision-row",
         )
     )
 

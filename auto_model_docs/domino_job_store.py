@@ -19,6 +19,18 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+
+def _json_safe_optional_str(val: Any) -> Optional[str]:
+    if not isinstance(val, str):
+        return None
+    return val
+
+
+def _json_safe_required_str(val: Any) -> str:
+    if isinstance(val, str):
+        return val
+    return str(val) if val is not None else ""
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -74,23 +86,27 @@ def create_job(
     command: Optional[str] = None,
     job_id: Optional[str] = None,
     project_id: Optional[str] = None,
+    environment_id: Optional[str] = None,
+    environment_revision_id: Optional[str] = None,
 ) -> str:
     jid = job_id or str(uuid4())
     jobs = _read_index(dataset_id, snapshot_id)
     jobs.append({
-        "id": jid,
-        "owner_id": owner_id,
+        "id": _json_safe_required_str(jid),
+        "owner_id": _json_safe_required_str(owner_id),
         "domino_run_id": None,
-        "branch": branch,
-        "hardware_tier": tier,
+        "branch": _json_safe_optional_str(branch),
+        "hardware_tier": _json_safe_optional_str(tier),
         "status": "queued",
         "domino_status": None,
         "job_url": None,
-        "spec_path": spec_path,
-        "command": command,
+        "spec_path": _json_safe_optional_str(spec_path),
+        "command": _json_safe_optional_str(command),
         "submitted_at": _now_iso(),
         "completed_at": None,
-        "project_id": project_id,
+        "project_id": _json_safe_optional_str(project_id),
+        "environment_id": _json_safe_optional_str(environment_id),
+        "environment_revision_id": _json_safe_optional_str(environment_revision_id),
     })
     _write_index(dataset_id, snapshot_id, jobs)
     return jid

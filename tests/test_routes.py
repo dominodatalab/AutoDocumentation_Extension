@@ -45,6 +45,8 @@ class _MockJobRequest:
     verbose: bool = True
     branch: str = ""
     hardware_tier: str = ""
+    environment_id: str = ""
+    environment_revision_id: str = ""
     api_key_source: str = "domino_env"
     project_id: str = ""
     provider_base_url: str = ""
@@ -318,6 +320,24 @@ class TestApiRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/api/hardware-tiers"](req)
         client.list_hardware_tiers.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_environment_revisions_returns_select(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        client.list_environment_revisions.return_value = [
+            {
+                "id": "r1",
+                "number": 2,
+                "option_label": "#2: May 1, 2026",
+            },
+        ]
+        req = _make_request(
+            query_params={"projectId": "proj-123", "environmentId": "env-1"},
+        )
+        await routes["/api/environment-revisions"](req)
+        client.list_environment_revisions.assert_called_once_with("env-1")
 
     @pytest.mark.asyncio
     async def test_datasets_returns_json(self, _mock_studio_modules):

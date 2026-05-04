@@ -129,6 +129,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_info.main_repo_id = "repo-123"
     mock_client.resolve_project.return_value = mock_info
     mock_client.set_ui_host = MagicMock()
+    mock_client.list_self_environments.return_value = []
+    mock_client.list_environment_revisions.return_value = []
 
     mock_datasets = MagicMock()
     mock_datasets.list_datasets.return_value = [
@@ -181,6 +183,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         verbose: bool = True
         branch: str = ""
         hardware_tier: str = ""
+        environment_id: str = ""
+        environment_revision_id: str = ""
         api_key_source: str = "domino_env"
         project_id: str = ""
         provider_base_url: str = ""

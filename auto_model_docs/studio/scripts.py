@@ -173,6 +173,24 @@ MAIN_DOM_JS = r"""
             return params.get('projectId') || params.get('project_id') || '';
         }
 
+        window.reloadEnvironmentRevisions = function(sel) {
+            var envId = sel && sel.value ? sel.value : '';
+            var slot = document.getElementById('environment-revision-slot');
+            if (!slot) return;
+            if (!envId) {
+                slot.innerHTML = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">'
+                    + '<option value="" selected disabled>(select environment first)</option></select>';
+                return;
+            }
+            var pid = resolvedProjectId();
+            if (!pid) return;
+            var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
+                + '&environmentId=' + encodeURIComponent(envId);
+            fetch(url).then(_checkResp).then(function(r) { return r.text(); })
+                .then(function(html) { slot.innerHTML = html; })
+                .catch(function() {});
+        };
+
         function queryApiDatasets() {
             var pid = resolvedProjectId();
             return pid ? ('?projectId=' + encodeURIComponent(pid)) : '';

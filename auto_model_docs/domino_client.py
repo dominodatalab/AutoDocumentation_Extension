@@ -13,6 +13,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -454,6 +455,108 @@ def get_project_default_tier() -> Optional[str]:
     return os.environ.get("DOMINO_HARDWARE_TIER_ID") or None
 
 
+def _format_domino_datetime(raw: Any) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, (int, float)):
+        try:
+            ts = float(raw) / 1000.0 if raw > 1e12 else float(raw)
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            return dt.strftime("%B %d, %Y")
+        except Exception:
+            return ""
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.isdigit():
+            return _format_domino_datetime(int(s))
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).strftime("%B %d, %Y")
+        except Exception:
+            return s[:16]
+    if isinstance(raw, dict):
+        v = raw.get("$date")
+        if isinstance(v, (int, float)):
+            return _format_domino_datetime(v)
+        if isinstance(v, str):
+            return _format_domino_datetime(v)
+    return ""
+
+
+def _revision_option_label(rev: dict[str, Any]) -> str:
+    num = rev.get("number")
+    created = rev.get("created")
+    date_s = _format_domino_datetime(created)
+    prefix = f"#{num}" if num is not None else "#?"
+    if date_s:
+        return f"{prefix}: {date_s}"
+    return prefix
+
+
+def list_self_environments() -> list[dict[str, Any]]:
+    try:
+        data = _domino_request("GET", "/v4/environments/self")
+        if isinstance(data, list):
+            raw = data
+        elif isinstance(data, dict):
+            raw = data.get("environments", data.get("data", []))
+        else:
+            raw = []
+        out: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            eid = item.get("id")
+            if eid is None:
+                continue
+            name = (item.get("name") or str(eid)).strip()
+            out.append({"id": str(eid), "name": name})
+        return out
+    except Exception as exc:
+        logger.warning("Failed to list self environments: %s", exc)
+        return []
+
+
+def list_environment_revisions(environment_id: Optional[str] = None) -> list[dict[str, Any]]:
+    eid = (environment_id or "").strip()
+    if not eid:
+        return []
+    try:
+        data = _domino_request(
+            "GET",
+            f"/v4/environments/{eid}/page/0/pageSize/1000/revisions",
+        )
+        if isinstance(data, dict):
+            raw_list = data.get("revisions", data.get("data", []))
+        elif isinstance(data, list):
+            raw_list = data
+        else:
+            raw_list = []
+        revs: list[dict[str, Any]] = []
+        for r in raw_list:
+            if not isinstance(r, dict):
+                continue
+            rid = r.get("id")
+            if rid is None:
+                continue
+            rid_s = str(rid)
+            row = {
+                "id": rid_s,
+                "number": r.get("number"),
+                "created": r.get("created"),
+                "active": r.get("active"),
+                "option_label": _revision_option_label(r),
+            }
+            revs.append(row)
+        revs.sort(key=lambda x: (-(x.get("number") or 0), x.get("id") or ""))
+        return revs
+    except Exception as exc:
+        logger.warning("Failed to list environment revisions: %s", exc)
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Job submission
 # ---------------------------------------------------------------------------
@@ -463,6 +566,8 @@ def submit_job(
     branch: Optional[str],
     tier_id: Optional[str] = None,
     project_id: Optional[str] = None,
+    environment_id: Optional[str] = None,
+    environment_revision_id: Optional[str] = None,
 ) -> str:
     """Submit a Domino job via the v1 jobs API and return the job ID.
 
@@ -487,6 +592,14 @@ def submit_job(
     if branch:
         payload["mainRepoGitRef"] = {"type": "branches", "value": branch}
 
+    eid = (environment_id or "").strip()
+    rid = (environment_revision_id or "").strip()
+    if eid:
+        payload["environmentId"] = eid
+        if rid:
+            payload["environmentRevisionSpec"] = {"revisionId": rid}
+        else:
+            payload["environmentRevisionSpec"] = "ActiveRevision"
 
     try:
         data = _domino_request("POST", "/v4/jobs/start", json=payload)

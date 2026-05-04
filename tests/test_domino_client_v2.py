@@ -1,6 +1,7 @@
 """Tests for domino_client.py — current REST-based API (no SDK dependency).
 
-Covers: list_hardware_tiers, get_project_default_tier,
+Covers: list_hardware_tiers, list_self_environments, list_environment_revisions,
+get_project_default_tier,
 get_job_status, stop_job, set_ui_host, build_job_url,
 resolve_project, submit_job with current signatures.
 """
@@ -127,6 +128,64 @@ class TestListHardwareTiers:
     def test_api_error_returns_empty(self, mock_req):
         mock_req.side_effect = RuntimeError("API down")
         assert dc.list_hardware_tiers(project_id="proj-123") == []
+
+
+# ---------------------------------------------------------------------------
+# list_self_environments
+# ---------------------------------------------------------------------------
+
+class TestListSelfEnvironments:
+    @patch.object(dc, "_domino_request")
+    def test_parses_array(self, mock_req):
+        mock_req.return_value = [
+            {"id": "e1", "name": "Env A"},
+        ]
+        envs = dc.list_self_environments()
+        assert len(envs) == 1
+        assert envs[0]["id"] == "e1"
+        assert envs[0]["name"] == "Env A"
+        mock_req.assert_called_once_with("GET", "/v4/environments/self")
+
+    @patch.object(dc, "_domino_request")
+    def test_parses_wrapped(self, mock_req):
+        mock_req.return_value = {"environments": [{"id": "e2", "name": "B"}]}
+        envs = dc.list_self_environments()
+        assert envs[0]["id"] == "e2"
+
+    @patch.object(dc, "_domino_request")
+    def test_error_returns_empty(self, mock_req):
+        mock_req.side_effect = OSError("net")
+        assert dc.list_self_environments() == []
+
+
+# ---------------------------------------------------------------------------
+# list_environment_revisions
+# ---------------------------------------------------------------------------
+
+class TestListEnvironmentRevisions:
+    @patch.object(dc, "_domino_request")
+    def test_parses_revisions(self, mock_req):
+        mock_req.return_value = {
+            "revisions": [
+                {"id": "rid1", "number": 1, "created": 1713600000000},
+                {"id": "rid2", "number": 2, "created": 1713700000000},
+            ],
+        }
+        revs = dc.list_environment_revisions("env123")
+        mock_req.assert_called_once_with(
+            "GET",
+            "/v4/environments/env123/page/0/pageSize/1000/revisions",
+        )
+        assert len(revs) == 2
+        assert revs[0]["id"] == "rid2"
+        assert revs[0]["number"] == 2
+        assert "option_label" in revs[0]
+
+    @patch.object(dc, "_domino_request")
+    def test_empty_id_returns_empty(self, mock_req):
+        assert dc.list_environment_revisions("") == []
+        assert dc.list_environment_revisions(None) == []
+        mock_req.assert_not_called()
 
     def test_no_project_id_returns_empty(self):
         assert dc.list_hardware_tiers(project_id=None) == []

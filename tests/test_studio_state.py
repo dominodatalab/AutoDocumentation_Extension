@@ -58,9 +58,23 @@ def _get_state_module():
 @pytest.fixture
 def state_module():
     """Provide a fresh studio.state module."""
+    saved = {
+        "domino_client": sys.modules.get("domino_client"),
+        "domino_job_store": sys.modules.get("domino_job_store"),
+        "spec_store": sys.modules.get("spec_store"),
+        "auth_context": sys.modules.get("auth_context"),
+        "domino_datasets": sys.modules.get("domino_datasets"),
+        "studio.state": sys.modules.get("studio.state"),
+        "studio": sys.modules.get("studio"),
+    }
     mod = _get_state_module()
     mod._STARTUP_WARNINGS = []
     yield mod
+    for key, val in saved.items():
+        if val is None:
+            sys.modules.pop(key, None)
+        else:
+            sys.modules[key] = val
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +91,7 @@ class TestJobRequest:
             "planning_workers", "timeout", "notebook", "notebook_path",
             "filtered_experiment_names", "filtered_model_names", "latest_only", "verbose",
             "branch", "hardware_tier",
+            "environment_id", "environment_revision_id",
             "project_id", "provider_base_url", "language",
             "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
             "notebook_from_cache",
@@ -101,6 +116,8 @@ class TestJobRequest:
             verbose=False,
             branch="",
             hardware_tier="",
+            environment_id="",
+            environment_revision_id="",
             project_id="",
             provider_base_url="",
             language="auto",

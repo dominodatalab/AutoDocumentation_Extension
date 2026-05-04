@@ -322,6 +322,20 @@ class TestSubmitJob:
         assert "mainRepoGitRef" not in payload
         assert "overrideHardwareTierId" not in payload
 
+    def test_submit_includes_environment_and_revision(self):
+        with patch.object(dc, "_domino_request") as mock_req:
+            mock_req.return_value = {"id": "run-env"}
+            submit_job(
+                command=["echo", "hi"],
+                branch=None,
+                project_id="proj-123",
+                environment_id="envid00112233445566778899aa",
+                environment_revision_id="revid00112233445566778899aa",
+            )
+        payload = mock_req.call_args.kwargs["json"]
+        assert payload["environmentId"] == "envid00112233445566778899aa"
+        assert payload["environmentRevisionSpec"] == {"revisionId": "revid00112233445566778899aa"}
+
 
 # ===================================================================
 # _build_job_command_str() tests
@@ -362,6 +376,8 @@ def _make_job_request(**overrides) -> Any:
         verbose=True,
         branch="main",
         hardware_tier="small",
+        environment_id="",
+        environment_revision_id="",
         project_id="",
         provider_base_url="",
         language="auto",

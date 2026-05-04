@@ -67,6 +67,13 @@ def _form_str(form: Any, key: str) -> str:
     return str(v).strip()
 
 
+def _optional_domino_id(raw: Any) -> Optional[str]:
+    if not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    return s or None
+
+
 def _form_int(form: Any, key: str, default: int) -> int:
     v = _sanitize_optional_int(form.get(key))
     return default if v is None else v
@@ -112,6 +119,8 @@ async def _parse_request(req: Request) -> JobRequest:
         verbose=_checkbox_truthy(form.get("verbose")),
         branch=_form_str(form, "branch"),
         hardware_tier=_form_str(form, "hardware_tier"),
+        environment_id=_form_str(form, "environment_id"),
+        environment_revision_id=_form_str(form, "environment_revision_id"),
         project_id=project_id,
         provider_base_url=_form_str(form, "provider_base_url"),
         language=_language,
@@ -217,12 +226,16 @@ def launch_domino_job_run(
     branch: Optional[str] = None,
     tier_id: Optional[str] = None,
     project_id: Optional[str] = None,
+    environment_id: Optional[str] = None,
+    environment_revision_id: Optional[str] = None,
 ) -> tuple[str, str]:
     run_id = domino_client.submit_job(
         command_str,
         branch=branch,
         tier_id=tier_id,
         project_id=project_id,
+        environment_id=environment_id or None,
+        environment_revision_id=environment_revision_id or None,
     )
     job_url = domino_client.build_job_url(run_id, project_id=project_id)
     return run_id, job_url
@@ -272,6 +285,8 @@ async def _submit_domino_job(
         spec_path=spec_path,
         command=command_str,
         project_id=req.project_id,
+        environment_id=_optional_domino_id(req.environment_id),
+        environment_revision_id=_optional_domino_id(req.environment_revision_id),
     )
 
     active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
@@ -285,6 +300,8 @@ async def _submit_domino_job(
             branch=req.branch or None,
             tier_id=req.hardware_tier or None,
             project_id=req.project_id,
+            environment_id=_optional_domino_id(req.environment_id),
+            environment_revision_id=_optional_domino_id(req.environment_revision_id),
         )
         domino_job_store.update_job(
             dataset_id, snapshot_id, job_id,
@@ -350,6 +367,8 @@ def _promote_queued_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -
             branch=oldest.get("branch"),
             tier_id=oldest.get("hardware_tier"),
             project_id=oldest.get("project_id"),
+            environment_id=oldest.get("environment_id"),
+            environment_revision_id=oldest.get("environment_revision_id"),
         )
         job_url = domino_client.build_job_url(run_id, project_id=oldest.get("project_id"))
         domino_job_store.update_job(

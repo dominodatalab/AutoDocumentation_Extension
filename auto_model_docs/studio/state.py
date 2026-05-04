@@ -122,6 +122,8 @@ class JobRequest:
     verbose: bool
     branch: str
     hardware_tier: str
+    environment_id: str
+    environment_revision_id: str
     project_id: str
     provider_base_url: str
     language: str

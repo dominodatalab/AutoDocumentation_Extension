@@ -211,6 +211,17 @@ a:hover { color: var(--primary-container); }
     letter-spacing: -0.01em;
 }
 
+.env-revision-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+.env-revision-row > .field {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
 /* ── 3-Column Grid ────────────────────────────────────────────────── */
 .studio-grid {
     display: grid;
