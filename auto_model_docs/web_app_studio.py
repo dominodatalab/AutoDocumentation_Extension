@@ -277,9 +277,10 @@ async def index(req: Request):
                     id="field-spec_path",
                     type="text",
                     value="",
-                    placeholder="None",
+                    placeholder="Select a file, upload, or type a path",
                     autocomplete="off",
                     spellcheck="false",
+                    cls="spec-path-input",
                 ),
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
@@ -311,13 +312,13 @@ async def index(req: Request):
             Div(
                 Div(
                     Div(
-                        Label("Model names", for_="field-model_names"),
+                        Label("Model names", for_="field-filtered_model_names"),
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
                         cls="label-row",
                     ),
                     Input(
-                        name="model_names",
-                        id="field-model_names",
+                        name="filtered_model_names",
+                        id="field-filtered_model_names",
                         type="text",
                         placeholder="model1, churn*, fraud-*",
                     ),
@@ -325,13 +326,13 @@ async def index(req: Request):
                 ),
                 Div(
                     Div(
-                        Label("Experiment names", for_="field-experiment_names"),
+                        Label("Experiment names", for_="field-filtered_experiment_names"),
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
                         cls="label-row",
                     ),
                     Input(
-                        name="experiment_names",
-                        id="field-experiment_names",
+                        name="filtered_experiment_names",
+                        id="field-filtered_experiment_names",
                         type="text",
                         placeholder="exp1, exp2, my-experiment*",
                     ),
@@ -379,7 +380,7 @@ async def index(req: Request):
 
     run_card_children.append(
         Div(
-            Label("Code root path", for_="code-root-prefix"),
+            Label("Source code root path", for_="code-root-prefix"),
             Div(
                 Select(
                     Option("Loading...", value="", selected=True, disabled=True),

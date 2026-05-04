@@ -72,23 +72,43 @@ class TestJobRequest:
         jr = state_module.JobRequest
         field_names = {f.name for f in fields(jr)}
         expected = {
-            "spec_path", "spec_content", "provider", "model",
+            "spec_path", "provider", "model",
             "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
-            "experiment_names", "model_names", "latest_only", "verbose",
-            "branch", "hardware_tier", "spec_filename",
+            "filtered_experiment_names", "filtered_model_names", "latest_only", "verbose",
+            "branch", "hardware_tier",
             "project_id", "provider_base_url", "language",
             "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
             "notebook_from_cache",
         }
         assert expected.issubset(field_names)
 
-    def test_language_defaults_to_auto(self, state_module):
+    def test_job_request_accepts_explicit_language(self, state_module):
         jr = state_module.JobRequest(
-            spec_path=None, spec_content=None, provider="anthropic", model=None,
-            code_root=None, max_files=None, workers=None, planning_workers=None,
-            timeout=None, notebook=False, notebook_path=None,
-            experiment_names=None, model_names=None, latest_only=False, verbose=False,
+            spec_path="",
+            provider="anthropic",
+            model="",
+            code_root="",
+            max_files=50,
+            workers=4,
+            planning_workers=4,
+            timeout=120.0,
+            notebook=False,
+            notebook_path="",
+            filtered_experiment_names="",
+            filtered_model_names="",
+            latest_only=False,
+            verbose=False,
+            branch="",
+            hardware_tier="",
+            project_id="",
+            provider_base_url="",
+            language="auto",
+            max_retries=5,
+            initial_backoff=10.0,
+            max_backoff=120.0,
+            backoff_jitter=0.2,
+            notebook_from_cache=False,
         )
         assert jr.language == "auto"
 

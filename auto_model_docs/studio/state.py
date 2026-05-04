@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util as _imputil
 import logging
 import os
+import sys
 import ctypes as _ctypes
 from collections import deque
 from dataclasses import dataclass
@@ -105,32 +106,30 @@ domino_datasets = _import_sibling("domino_datasets")
 
 @dataclass
 class JobRequest:
-    spec_path: Optional[str]
-    spec_content: Optional[str]
+    spec_path: str
     provider: str
-    model: Optional[str]
-    code_root: Optional[str]
-    max_files: Optional[int]
-    workers: Optional[int]
-    planning_workers: Optional[int]
-    timeout: Optional[float]
+    model: str
+    code_root: str
+    max_files: int
+    workers: int
+    planning_workers: int
+    timeout: float
     notebook: bool
-    notebook_path: Optional[str]
-    experiment_names: Optional[str]  # Comma-separated list
-    model_names: Optional[str]  # Comma-separated list
+    notebook_path: str
+    filtered_experiment_names: str
+    filtered_model_names: str
     latest_only: bool
-    verbose: bool  # Enable verbose logging
-    branch: Optional[str] = None
-    hardware_tier: Optional[str] = None
-    spec_filename: Optional[str] = None  # original uploaded filename
-    project_id: Optional[str] = None     # target Domino project (from ?projectId=)
-    provider_base_url: Optional[str] = None
-    language: str = "auto"
-    max_retries: Optional[int] = None
-    initial_backoff: Optional[float] = None
-    max_backoff: Optional[float] = None
-    backoff_jitter: Optional[float] = None
-    notebook_from_cache: bool = False
+    verbose: bool
+    branch: str
+    hardware_tier: str
+    project_id: str
+    provider_base_url: str
+    language: str
+    max_retries: int
+    initial_backoff: float
+    max_backoff: float
+    backoff_jitter: float
+    notebook_from_cache: bool
 
 
 @dataclass

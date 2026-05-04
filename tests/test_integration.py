@@ -163,34 +163,32 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     @dataclass
     class JobRequest:
-        spec_path: Optional[str] = None
-        spec_content: Optional[str] = None
+        spec_path: str = ""
         provider: str = "anthropic"
-        model: Optional[str] = None
+        model: str = ""
         api_key: Optional[str] = None
         base_url: Optional[str] = None
-        code_root: Optional[str] = None
-        max_files: Optional[int] = None
-        workers: Optional[int] = None
-        planning_workers: Optional[int] = None
-        timeout: Optional[float] = None
+        code_root: str = ""
+        max_files: int = 50
+        workers: int = 4
+        planning_workers: int = 4
+        timeout: float = 120.0
         notebook: bool = False
-        notebook_path: Optional[str] = None
-        experiment_names: Optional[str] = None
-        model_names: Optional[str] = None
+        notebook_path: str = ""
+        filtered_experiment_names: str = ""
+        filtered_model_names: str = ""
         latest_only: bool = False
         verbose: bool = True
-        branch: Optional[str] = None
-        hardware_tier: Optional[str] = None
+        branch: str = ""
+        hardware_tier: str = ""
         api_key_source: str = "domino_env"
-        spec_filename: Optional[str] = None
-        project_id: Optional[str] = None
-        provider_base_url: Optional[str] = None
+        project_id: str = ""
+        provider_base_url: str = ""
         language: str = "auto"
-        max_retries: Optional[int] = None
-        initial_backoff: Optional[float] = None
-        max_backoff: Optional[float] = None
-        backoff_jitter: Optional[float] = None
+        max_retries: int = 5
+        initial_backoff: float = 10.0
+        max_backoff: float = 120.0
+        backoff_jitter: float = 0.2
         notebook_from_cache: bool = False
 
     @dataclass

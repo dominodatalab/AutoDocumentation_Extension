@@ -440,7 +440,6 @@ MAIN_DOM_JS = r"""
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
-                        var dsName = _specCurrentDatasetName || 'dataset';
                         var savedPath = result.path;
                         selectSpecFile(savedPath);
                         return browseFiles(_specCurrentPath).then(function() {
