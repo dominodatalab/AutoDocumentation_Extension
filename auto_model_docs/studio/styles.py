@@ -215,11 +215,20 @@ a:hover { color: var(--primary-container); }
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
-    align-items: flex-end;
+    align-items: flex-start;
+    margin-bottom: 1rem;
 }
 .env-revision-row > .field {
     flex: 1 1 200px;
     min-width: 0;
+    margin-bottom: 0;
+}
+.env-revision-row > .field > .label-row {
+    min-height: 1.5rem;
+    align-items: center;
+}
+#environment-revision-slot {
+    display: contents;
 }
 
 /* ── 3-Column Grid ────────────────────────────────────────────────── */
@@ -529,6 +538,11 @@ input[type="file"] {
 .info-tooltip:focus::after {
     opacity: 1;
     visibility: visible;
+}
+.env-revision-label-spacer {
+    visibility: hidden;
+    pointer-events: none;
+    user-select: none;
 }
 
 /* Inline upload row */

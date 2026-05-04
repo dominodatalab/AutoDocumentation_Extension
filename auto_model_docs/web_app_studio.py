@@ -564,6 +564,11 @@ async def index(req: Request):
             Div(
                 Div(
                     Label("Revision", for_="field-environment_revision_id"),
+                    Span(
+                        "\u24d8",
+                        cls="info-tooltip env-revision-label-spacer",
+                        aria_hidden="true",
+                    ),
                     cls="label-row",
                 ),
                 Div(
