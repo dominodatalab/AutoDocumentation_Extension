@@ -1517,9 +1517,10 @@ select.hw-tier-select option {
 
 .spec-selected-indicator {
     display: flex;
+    flex-direction: column;
+    align-items: stretch;
     padding: 8px 0;
     font-size: 0.8125rem;
-    align-items: center;
     gap: 6px;
 }
 

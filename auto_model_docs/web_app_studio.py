@@ -260,7 +260,7 @@ async def index(req: Request):
                 cls="spec-file-list",
             ),
             Div(
-                Span("Selected: ", cls="spec-selected-label"),
+                Span("Selected:", cls="spec-selected-label"),
                 Input(
                     name="spec_path",
                     id="field-spec_path",
@@ -608,12 +608,25 @@ async def index(req: Request):
             id="model-name-field",
             style="display: none;",
         ),
-        Label(
-            Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
-            Span("Generate notebook"),
-            Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
-            cls="checkbox-field",
-            id="app-mode-note",
+        Div(
+            Label(
+                Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
+                Span("Generate notebook"),
+                Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
+                cls="checkbox-field",
+                id="app-mode-note",
+            ),
+            Label(
+                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
+                Span("Notebook from cache only"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+                ),
+                cls="checkbox-field",
+            ),
+            cls="advanced-checkbox-row",
         ),
         Div(
             Div(
@@ -629,23 +642,10 @@ async def index(req: Request):
             cls="field",
             id="notebook-path-field-wrap",
         ),
-        Div(
-            Label(
-                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
-                Span("Notebook from cache only"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
-                ),
-                cls="checkbox-field",
-            ),
-            Label(
-                Input(type="checkbox", name="verbose", id="field-verbose", value="true", checked=False),
-                Span("Verbose logging"),
-                cls="checkbox-field",
-            ),
-            cls="advanced-checkbox-row",
+        Label(
+            Input(type="checkbox", name="verbose", id="field-verbose", value="true", checked=False),
+            Span("Verbose logging"),
+            cls="checkbox-field",
         ),
     ]
 
