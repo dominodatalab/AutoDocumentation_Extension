@@ -266,7 +266,6 @@ async def index(req: Request):
                     id="field-spec_path",
                     type="text",
                     value="",
-                    cls="spec-path-input",
                     placeholder="None",
                     autocomplete="off",
                     spellcheck="false",
