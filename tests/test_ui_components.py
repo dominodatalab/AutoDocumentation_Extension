@@ -387,6 +387,18 @@ class TestStudioPageInsightBanner:
         assert src.index('id="main-form"') < src.index("studio-footer-meta")
 
 
+class TestInfoTooltipLayer:
+    def test_floating_tooltip_layer_escapes_overflow(self):
+        root = Path(__file__).resolve().parent.parent
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "#studio-info-tooltip" in styles
+        assert "position: fixed" in styles
+        assert "#studio-info-tooltip.visible" in styles
+        assert "studio-info-tooltip" in scripts
+        assert "closest('.info-tooltip')" in scripts
+
+
 class TestSpecFileBrowserUi:
     def test_spec_list_fixed_height_and_parent_nav_in_scripts(self):
         root = Path(__file__).resolve().parent.parent

@@ -41,6 +41,61 @@ MAIN_DOM_JS = r"""
 
     document.addEventListener('DOMContentLoaded', function() {
 
+        (function() {
+            var tip = document.createElement('div');
+            tip.id = 'studio-info-tooltip';
+            tip.setAttribute('role', 'tooltip');
+            document.body.appendChild(tip);
+            var active = null;
+            function hide() {
+                tip.classList.remove('visible');
+                tip.textContent = '';
+                active = null;
+            }
+            function position() {
+                if (!active || !tip.classList.contains('visible')) return;
+                var r = active.getBoundingClientRect();
+                var gap = 6;
+                tip.style.visibility = 'hidden';
+                tip.style.display = 'block';
+                var tw = tip.offsetWidth;
+                var th = tip.offsetHeight;
+                var left = r.left + r.width / 2 - tw / 2;
+                var top = r.top - th - gap;
+                if (top < 8) top = r.bottom + gap;
+                left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+                top = Math.max(8, Math.min(top, window.innerHeight - th - 8));
+                tip.style.left = left + 'px';
+                tip.style.top = top + 'px';
+                tip.style.visibility = '';
+            }
+            function show(el) {
+                if (!el || !el.getAttribute) return;
+                if (!el.classList.contains('info-tooltip')) return;
+                if (el.classList.contains('env-revision-label-spacer')) return;
+                var text = el.getAttribute('data-tooltip');
+                if (!text) return;
+                active = el;
+                tip.textContent = text;
+                tip.classList.add('visible');
+                position();
+            }
+            document.addEventListener('mouseover', function(e) {
+                var el = e.target && e.target.closest ? e.target.closest('.info-tooltip') : null;
+                if (!el) return;
+                show(el);
+            }, true);
+            document.addEventListener('mouseout', function(e) {
+                var el = e.target && e.target.closest ? e.target.closest('.info-tooltip') : null;
+                if (!el) return;
+                var rel = e.relatedTarget;
+                if (rel && el.contains(rel)) return;
+                hide();
+            }, true);
+            window.addEventListener('scroll', hide, true);
+            window.addEventListener('resize', hide);
+        })();
+
         // ── Ensure projectId is on the page URL (reload if we only have hash / postMessage) ──
         (function() {
             function setProjectId(pid) {

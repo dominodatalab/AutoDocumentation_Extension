@@ -507,13 +507,11 @@ input[type="file"] {
     font-size: 12px;
     line-height: 1;
 }
-.info-tooltip::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 100%;
-    margin-bottom: 0.35rem;
+#studio-info-tooltip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 10050;
     padding: 0.5rem 0.75rem;
     background: var(--on-surface);
     color: var(--surface-container-lowest);
@@ -521,21 +519,20 @@ input[type="file"] {
     font-weight: 400;
     white-space: normal;
     min-width: 200px;
-    max-width: 320px;
+    max-width: min(320px, calc(100vw - 16px));
     width: max-content;
     border-radius: var(--radius-sm);
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.15s ease, visibility 0.15s ease;
-    z-index: 1000;
     box-shadow: var(--shadow-md);
     font-family: var(--font-body);
     text-transform: none;
     letter-spacing: normal;
+    box-sizing: border-box;
 }
-.info-tooltip:hover::after,
-.info-tooltip:focus::after {
+#studio-info-tooltip.visible {
     opacity: 1;
     visibility: visible;
 }

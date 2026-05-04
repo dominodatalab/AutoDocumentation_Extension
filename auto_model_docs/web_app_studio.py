@@ -865,7 +865,7 @@ async def index(req: Request):
                     H4("Auto Model Docs Studio"),
                     P(
                         "Upload a YAML spec file to define which sections to include in your model documentation. "
-                        "The system will parse endpoints and data models automatically.",
+                        "The system will parse the code and identify endpoints and data models automatically.",
                     ),
                     cls="insight-card",
                 ),
