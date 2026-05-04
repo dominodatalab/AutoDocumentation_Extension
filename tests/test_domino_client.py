@@ -213,12 +213,9 @@ class TestGetProjectContext:
         assert pname == "my-model"
         assert powner == "alice"
 
-    def test_without_project_id_returns_nones(self):
-        """When no project_id, should return (None, None, None)."""
-        pid, pname, powner = get_project_context(project_id=None)
-        assert pid is None
-        assert pname is None
-        assert powner is None
+    def test_empty_project_id_raises(self):
+        with pytest.raises(ValueError, match="project_id is required"):
+            get_project_context("")
 
 
 class TestBrowseCodeAndCodeRootOptions:
@@ -289,6 +286,8 @@ class TestSubmitJob:
                 branch="main",
                 tier_id="small",
                 project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
             )
 
         assert run_id == "run-abc-123"
@@ -297,25 +296,42 @@ class TestSubmitJob:
         """Branch should be passed as mainRepoGitRef in the payload."""
         with patch.object(dc, "_domino_request") as mock_req:
             mock_req.return_value = {"id": "run-xyz"}
-            submit_job(command=["python", "main.py"], branch="feature/x", project_id="proj-123")
+            submit_job(
+                command=["python", "main.py"],
+                branch="feature/x",
+                tier_id="",
+                project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
+            )
 
         payload = mock_req.call_args.kwargs["json"]
         assert payload["mainRepoGitRef"] == {"type": "branches", "value": "feature/x"}
 
-    def test_no_project_id_raises_runtime_error(self):
-        """When project_id is None, submit_job should raise."""
-        with pytest.raises(RuntimeError, match="No project ID"):
+    def test_no_project_id_raises_value_error(self):
+        """When project_id is empty, submit_job should raise."""
+        with pytest.raises(ValueError, match="project_id is required"):
             submit_job(
                 command=["python", "main.py"],
                 branch="main",
-                project_id=None,
+                tier_id="",
+                project_id="",
+                environment_id="",
+                environment_revision_id="",
             )
 
     def test_submit_no_branch_no_tier(self):
         """submit_job with no branch or tier should still succeed."""
         with patch.object(dc, "_domino_request") as mock_req:
             mock_req.return_value = {"id": "run-simple"}
-            run_id = submit_job(command=["echo", "hello"], branch=None, project_id="proj-123")
+            run_id = submit_job(
+                command=["echo", "hello"],
+                branch=None,
+                tier_id="",
+                project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
+            )
 
         assert run_id == "run-simple"
         payload = mock_req.call_args.kwargs["json"]
@@ -328,6 +344,7 @@ class TestSubmitJob:
             submit_job(
                 command=["echo", "hi"],
                 branch=None,
+                tier_id="",
                 project_id="proj-123",
                 environment_id="envid00112233445566778899aa",
                 environment_revision_id="revid00112233445566778899aa",

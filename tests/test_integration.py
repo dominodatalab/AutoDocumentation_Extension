@@ -543,6 +543,7 @@ class TestJobRoutesIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
 
@@ -558,6 +559,7 @@ class TestJobRoutesIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
         store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-stop-test")
@@ -614,6 +616,7 @@ class TestAuthorizationIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
         store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-denied")
@@ -689,6 +692,7 @@ class TestCrossCuttingIntegration:
             jid = store.create_job(
                 "ds-integration", "snap-integration",
                 "integration_user", "main", "small", "/spec.yaml",
+                "", "",
                 project_id="proj-integration",
             )
             store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
@@ -721,6 +725,7 @@ class TestCrossCuttingIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
 

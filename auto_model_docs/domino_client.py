@@ -1,10 +1,7 @@
 """Domino API client using direct REST calls (no SDK dependency).
 
-Supports an optional ``project_id`` override so the app can target a
-different project than the one it is running in.  When *project_id* is
-``None`` every helper falls back to the environment variables set by
-the Domino platform (``DOMINO_PROJECT_ID``, ``DOMINO_PROJECT_OWNER``,
-``DOMINO_PROJECT_NAME``).
+Callers pass an explicit ``project_id`` where the API needs a project.
+There is no env-var fallback for project context in this module.
 """
 
 from __future__ import annotations
@@ -178,20 +175,15 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
         return None
 
 
-def get_project_context(
-    project_id: Optional[str] = None,
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
-    """Resolve (project_id, project_name, project_owner).
-
-    Requires *project_id* — does not fall back to the app project.
-    """
-    if not project_id:
-        return None, None, None
-    info = resolve_project(project_id)
+def get_project_context(project_id: str) -> tuple[str, Optional[str], Optional[str]]:
+    """Resolve (project_id, project_name, project_owner)."""
+    pid = project_id.strip()
+    if not pid:
+        raise ValueError("project_id is required")
+    info = resolve_project(pid)
     if info:
         return info.id, info.name, info.owner_username
-    # Resolution failed — return the ID but no name/owner
-    return project_id, None, None
+    return pid, None, None
 
 
 def browse_code(
@@ -519,8 +511,8 @@ def list_self_environments() -> list[dict[str, Any]]:
         return []
 
 
-def list_environment_revisions(environment_id: Optional[str] = None) -> list[dict[str, Any]]:
-    eid = (environment_id or "").strip()
+def list_environment_revisions(environment_id: str) -> list[dict[str, Any]]:
+    eid = environment_id.strip()
     if not eid:
         return []
     try:
@@ -564,19 +556,13 @@ def list_environment_revisions(environment_id: Optional[str] = None) -> list[dic
 def submit_job(
     command: str | list[str],
     branch: Optional[str],
-    tier_id: Optional[str] = None,
-    project_id: Optional[str] = None,
-    environment_id: Optional[str] = None,
-    environment_revision_id: Optional[str] = None,
+    tier_id: str,
+    project_id: str,
+    environment_id: str,
+    environment_revision_id: str,
 ) -> str:
-    """Submit a Domino job via the v1 jobs API and return the job ID.
-
-    When *project_id* is provided the job is started in that project.
-    Otherwise uses the env-var project.
-    """
+    """Submit a Domino job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
-    if not pid:
-        raise RuntimeError("No project ID available to submit a job.")
 
     title = f"AutoDoc: {pname or pid}" + (f" ({branch})" if branch else "")
 
@@ -587,13 +573,14 @@ def submit_job(
         "commandToRun": command_str,
         "title": title,
     }
-    if tier_id:
-        payload["overrideHardwareTierId"] = tier_id
+    tid = tier_id.strip()
+    if tid:
+        payload["overrideHardwareTierId"] = tid
     if branch:
         payload["mainRepoGitRef"] = {"type": "branches", "value": branch}
 
-    eid = (environment_id or "").strip()
-    rid = (environment_revision_id or "").strip()
+    eid = environment_id.strip()
+    rid = environment_revision_id.strip()
     if eid:
         payload["environmentId"] = eid
         if rid:
@@ -716,11 +703,8 @@ def set_ui_host(request_host: str, scheme: str = "https") -> None:
     _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
 
 
-def build_job_url(run_id: str, project_id: Optional[str] = None) -> str | None:
-    """Return the Domino UI URL for a job.
-
-    When *project_id* is given, resolves owner/name from the API cache.
-    """
+def build_job_url(run_id: str, project_id: str) -> str | None:
+    """Return the Domino UI URL for a job."""
     if not _ui_host:
         return None
 

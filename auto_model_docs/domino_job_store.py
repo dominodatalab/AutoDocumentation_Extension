@@ -83,11 +83,11 @@ def create_job(
     branch: Optional[str],
     tier: Optional[str],
     spec_path: Optional[str],
+    environment_id: str,
+    environment_revision_id: str,
     command: Optional[str] = None,
     job_id: Optional[str] = None,
     project_id: Optional[str] = None,
-    environment_id: Optional[str] = None,
-    environment_revision_id: Optional[str] = None,
 ) -> str:
     jid = job_id or str(uuid4())
     jobs = _read_index(dataset_id, snapshot_id)
