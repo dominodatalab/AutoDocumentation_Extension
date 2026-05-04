@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any, Optional
 
 from starlette.requests import Request
+
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
+from default_consts import ALLOWED_LANGUAGES, DEFAULT_LANGUAGE, DEFAULT_PROVIDER
 
 from .state import (
     JobRequest,
@@ -78,11 +86,10 @@ async def _parse_request(req: Request) -> JobRequest:
     if not project_id:
         raise RuntimeError("No target project ID available. The app requires ?projectId= on the request URL.")
 
-    _prov = (form.get("provider") or "anthropic").strip().lower()
+    _prov = (form.get("provider") or DEFAULT_PROVIDER).strip().lower()
     _pbu = (form.get("provider_base_url") or "").strip() or None
-    _lang_raw = (form.get("language") or "auto").strip().lower()
-    _allowed_lang = {"auto", "python", "r", "sas", "matlab"}
-    _language = _lang_raw if _lang_raw in _allowed_lang else "auto"
+    _lang_raw = (form.get("language") or DEFAULT_LANGUAGE).strip().lower()
+    _language = _lang_raw if _lang_raw in ALLOWED_LANGUAGES else DEFAULT_LANGUAGE
 
     return JobRequest(
         spec_path=form.get("spec_path") or None,

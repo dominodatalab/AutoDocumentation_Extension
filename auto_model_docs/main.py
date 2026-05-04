@@ -22,6 +22,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from autodoc.core.config import Settings
 from autodoc.core.models import DocumentSpec
+from default_consts import (
+    DEFAULT_GENERATION_WORKERS,
+    DEFAULT_LANGUAGE,
+    DEFAULT_MAX_FILES,
+    DEFAULT_PLANNING_WORKERS,
+    DEFAULT_PROVIDER,
+    DEFAULT_TIMEOUT,
+)
 from autodoc.llm import LLMClient
 from autodoc.orchestrator import Orchestrator
 from autodoc.scanning import ContentSanitizer
@@ -48,7 +56,7 @@ console = Console()
 @click.option(
     "--provider",
     "-p",
-    default="openai",
+    default=DEFAULT_PROVIDER,
     type=click.Choice(["anthropic", "openai"]),
     help="LLM provider to use",
 )
@@ -96,7 +104,7 @@ console = Console()
 )
 @click.option(
     "--max-files",
-    default=50,
+    default=DEFAULT_MAX_FILES,
     type=int,
     help="Maximum number of files to scan",
 )
@@ -104,13 +112,13 @@ console = Console()
     "--generation-workers",
     "-w",
     "workers",
-    default=4,
+    default=DEFAULT_GENERATION_WORKERS,
     type=int,
     help="Number of parallel workers for content generation",
 )
 @click.option(
     "--planning-workers",
-    default=4,
+    default=DEFAULT_PLANNING_WORKERS,
     type=int,
     help="Number of parallel workers for section planning",
 )
@@ -131,7 +139,7 @@ console = Console()
 )
 @click.option(
     "--timeout",
-    default=120.0,
+    default=DEFAULT_TIMEOUT,
     type=float,
     help="Timeout for individual LLM API calls in seconds (default: 120)",
 )
@@ -154,7 +162,7 @@ console = Console()
 )
 @click.option(
     "--language",
-    default="auto",
+    default=DEFAULT_LANGUAGE,
     type=click.Choice(["auto", "python", "r", "sas", "matlab"], case_sensitive=False),
     help="Programming language for scanning, or auto to detect from repository files",
 )
@@ -211,6 +219,10 @@ def main(
             "Set it to your Domino project ID before running.",
             style="red",
         )
+        sys.exit(1)
+
+    if not str(code_root).strip():
+        console.print("\n[bold red]Error:[/] --code-root must be a non-empty path.", style="red")
         sys.exit(1)
 
     try:

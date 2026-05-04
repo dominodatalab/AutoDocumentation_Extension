@@ -17,6 +17,17 @@ from domino_auth import configure_auth, user_auth
 
 configure_auth(user_auth)
 
+from default_consts import (
+    DEFAULT_GENERATION_WORKERS,
+    DEFAULT_LLM_BACKOFF_JITTER,
+    DEFAULT_LLM_INITIAL_BACKOFF,
+    DEFAULT_LLM_MAX_BACKOFF,
+    DEFAULT_LLM_MAX_RETRIES,
+    DEFAULT_MAX_FILES,
+    DEFAULT_PLANNING_WORKERS,
+    DEFAULT_TIMEOUT,
+)
+
 from studio.state import (
     _STARTUP_WARNINGS,
     _get_default_spec_path,
@@ -486,7 +497,14 @@ async def index(req: Request):
             Div(
                 Div(
                     Label("Max files", for_="field-max_files"),
-                    Input(name="max_files", id="field-max_files", type="number", value="50", min="1", step="1"),
+                    Input(
+                        name="max_files",
+                        id="field-max_files",
+                        type="number",
+                        value=str(DEFAULT_MAX_FILES),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -495,7 +513,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Parallel LLM calls in the planning phase."),
                         cls="label-row",
                     ),
-                    Input(name="planning_workers", id="field-planning_workers", type="number", value="3", min="1", step="1"),
+                    Input(
+                        name="planning_workers",
+                        id="field-planning_workers",
+                        type="number",
+                        value=str(DEFAULT_PLANNING_WORKERS),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -504,7 +529,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Sections generated in parallel."),
                         cls="label-row",
                     ),
-                    Input(name="workers", id="field-workers", type="number", value="4", min="1", step="1"),
+                    Input(
+                        name="workers",
+                        id="field-workers",
+                        type="number",
+                        value=str(DEFAULT_GENERATION_WORKERS),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -513,7 +545,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Seconds before a single LLM call times out."),
                         cls="label-row",
                     ),
-                    Input(name="timeout", id="field-timeout", type="number", value="120", min="1", step="1"),
+                    Input(
+                        name="timeout",
+                        id="field-timeout",
+                        type="number",
+                        value=str(int(DEFAULT_TIMEOUT)),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 cls="advanced-grid",
@@ -526,7 +565,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Number of retries on LLM API calls."),
                         cls="label-row",
                     ),
-                    Input(name="max_retries", id="field-max_retries", type="number", value="5", min="0", step="1"),
+                    Input(
+                        name="max_retries",
+                        id="field-max_retries",
+                        type="number",
+                        value=str(DEFAULT_LLM_MAX_RETRIES),
+                        min="0",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -535,7 +581,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Delay before the first retry; grows with each attempt."),
                         cls="label-row",
                     ),
-                    Input(name="initial_backoff", id="field-initial_backoff", type="number", value="10", min="0", step="1"),
+                    Input(
+                        name="initial_backoff",
+                        id="field-initial_backoff",
+                        type="number",
+                        value=str(int(DEFAULT_LLM_INITIAL_BACKOFF)),
+                        min="0",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -544,7 +597,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Cap on delay between retries."),
                         cls="label-row",
                     ),
-                    Input(name="max_backoff", id="field-max_backoff", type="number", value="120", min="0", step="1"),
+                    Input(
+                        name="max_backoff",
+                        id="field-max_backoff",
+                        type="number",
+                        value=str(int(DEFAULT_LLM_MAX_BACKOFF)),
+                        min="0",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -553,7 +613,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Random extra delay so retries do not align."),
                         cls="label-row",
                     ),
-                    Input(name="backoff_jitter", id="field-backoff_jitter", type="number", value="0.2", min="0", step="0.1"),
+                    Input(
+                        name="backoff_jitter",
+                        id="field-backoff_jitter",
+                        type="number",
+                        value=str(DEFAULT_LLM_BACKOFF_JITTER),
+                        min="0",
+                        step="0.1",
+                    ),
                     cls="field",
                 ),
                 cls="advanced-grid",
@@ -598,7 +665,7 @@ async def index(req: Request):
                 Span(
                     "\u24d8",
                     cls="info-tooltip",
-                    data_tooltip="Leave blank to use provider default (see placeholder for example id).",
+                    data_tooltip="Provider model name.",
                 ),
                 cls="label-row",
             ),
