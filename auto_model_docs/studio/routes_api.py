@@ -68,6 +68,34 @@ def register_api_routes(rt):
 
     rt("/api/hardware-tiers")(api_hardware_tiers)
 
+    async def api_environment_revisions(req: Request):
+        env_id = (req.query_params.get("environmentId") or "").strip()
+        if not env_id:
+            return Select(
+                Option("(select environment first)", value="", selected=True, disabled=True),
+                name="environment_revision_id",
+                id="field-environment_revision_id",
+                cls="env-revision-select",
+            )
+        revs = domino_client.list_environment_revisions(env_id)
+        options = []
+        for i, r in enumerate(revs):
+            rid = r.get("id", "")
+            label = r.get("option_label") or rid
+            options.append(Option(label, value=rid, selected=(i == 0)))
+        if not options:
+            options = [
+                Option("(no revisions)", value="", selected=True, disabled=True),
+            ]
+        return Select(
+            *options,
+            name="environment_revision_id",
+            id="field-environment_revision_id",
+            cls="env-revision-select",
+        )
+
+    rt("/api/environment-revisions")(api_environment_revisions)
+
     def api_detect_language(req: Request):
         from autodoc.core.models import detect_language as _detect_lang, LANGUAGE_PROFILES
 

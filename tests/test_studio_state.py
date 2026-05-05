@@ -58,9 +58,23 @@ def _get_state_module():
 @pytest.fixture
 def state_module():
     """Provide a fresh studio.state module."""
+    saved = {
+        "domino_client": sys.modules.get("domino_client"),
+        "domino_job_store": sys.modules.get("domino_job_store"),
+        "spec_store": sys.modules.get("spec_store"),
+        "auth_context": sys.modules.get("auth_context"),
+        "domino_datasets": sys.modules.get("domino_datasets"),
+        "studio.state": sys.modules.get("studio.state"),
+        "studio": sys.modules.get("studio"),
+    }
     mod = _get_state_module()
     mod._STARTUP_WARNINGS = []
     yield mod
+    for key, val in saved.items():
+        if val is None:
+            sys.modules.pop(key, None)
+        else:
+            sys.modules[key] = val
 
 
 # ---------------------------------------------------------------------------
@@ -72,14 +86,48 @@ class TestJobRequest:
         jr = state_module.JobRequest
         field_names = {f.name for f in fields(jr)}
         expected = {
-            "spec_path", "spec_content", "provider", "model",
+            "spec_path", "provider", "model",
             "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
-            "experiment_names", "model_names", "latest_only", "verbose",
-            "branch", "hardware_tier", "spec_filename",
-            "project_id", "provider_base_url",
+            "filtered_experiment_names", "filtered_model_names", "latest_only", "verbose",
+            "branch", "hardware_tier",
+            "environment_id", "environment_revision_id",
+            "project_id", "provider_base_url", "language",
+            "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
+            "notebook_from_cache",
         }
         assert expected.issubset(field_names)
+
+    def test_job_request_accepts_explicit_language(self, state_module):
+        jr = state_module.JobRequest(
+            spec_path="",
+            provider="anthropic",
+            model="",
+            code_root="",
+            max_files=50,
+            workers=4,
+            planning_workers=4,
+            timeout=120.0,
+            notebook=False,
+            notebook_path="",
+            filtered_experiment_names="",
+            filtered_model_names="",
+            latest_only=False,
+            verbose=False,
+            branch="",
+            hardware_tier="",
+            environment_id="",
+            environment_revision_id="",
+            project_id="",
+            provider_base_url="",
+            language="auto",
+            max_retries=5,
+            initial_backoff=10.0,
+            max_backoff=120.0,
+            backoff_jitter=0.2,
+            notebook_from_cache=False,
+        )
+        assert jr.language == "auto"
 
 
 class TestDominoJobRecord:

@@ -41,6 +41,61 @@ MAIN_DOM_JS = r"""
 
     document.addEventListener('DOMContentLoaded', function() {
 
+        (function() {
+            var tip = document.createElement('div');
+            tip.id = 'studio-info-tooltip';
+            tip.setAttribute('role', 'tooltip');
+            document.body.appendChild(tip);
+            var active = null;
+            function hide() {
+                tip.classList.remove('visible');
+                tip.textContent = '';
+                active = null;
+            }
+            function position() {
+                if (!active || !tip.classList.contains('visible')) return;
+                var r = active.getBoundingClientRect();
+                var gap = 6;
+                tip.style.visibility = 'hidden';
+                tip.style.display = 'block';
+                var tw = tip.offsetWidth;
+                var th = tip.offsetHeight;
+                var left = r.left + r.width / 2 - tw / 2;
+                var top = r.top - th - gap;
+                if (top < 8) top = r.bottom + gap;
+                left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+                top = Math.max(8, Math.min(top, window.innerHeight - th - 8));
+                tip.style.left = left + 'px';
+                tip.style.top = top + 'px';
+                tip.style.visibility = '';
+            }
+            function show(el) {
+                if (!el || !el.getAttribute) return;
+                if (!el.classList.contains('info-tooltip')) return;
+                if (el.classList.contains('env-revision-label-spacer')) return;
+                var text = el.getAttribute('data-tooltip');
+                if (!text) return;
+                active = el;
+                tip.textContent = text;
+                tip.classList.add('visible');
+                position();
+            }
+            document.addEventListener('mouseover', function(e) {
+                var el = e.target && e.target.closest ? e.target.closest('.info-tooltip') : null;
+                if (!el) return;
+                show(el);
+            }, true);
+            document.addEventListener('mouseout', function(e) {
+                var el = e.target && e.target.closest ? e.target.closest('.info-tooltip') : null;
+                if (!el) return;
+                var rel = e.relatedTarget;
+                if (rel && el.contains(rel)) return;
+                hide();
+            }, true);
+            window.addEventListener('scroll', hide, true);
+            window.addEventListener('resize', hide);
+        })();
+
         // ── Ensure projectId is on the page URL (reload if we only have hash / postMessage) ──
         (function() {
             function setProjectId(pid) {
@@ -91,6 +146,7 @@ MAIN_DOM_JS = r"""
         var langCount = document.getElementById('lang-detected-count');
         var langInput = document.getElementById('field-detected-language');
         var langSelect = document.getElementById('lang-override-select');
+        var langFieldMain = document.getElementById('field-language');
 
         function detectLanguage(codeRoot) {
             var url = _adUrl('api/detect-language');
@@ -117,10 +173,19 @@ MAIN_DOM_JS = r"""
         }
 
         window.handleLanguageOverride = function(lang) {
-            if (langInput) langInput.value = lang;
+            if (langInput) langInput.value = lang === 'auto' ? 'python' : lang;
+            if (langFieldMain) langFieldMain.value = lang;
             var cr = document.getElementById('field-code_root');
             detectLanguage(cr ? cr.value : undefined);
         };
+
+        if (langFieldMain) {
+            langFieldMain.addEventListener('change', function() {
+                var v = this.value || 'auto';
+                if (langInput) langInput.value = v === 'auto' ? 'python' : v;
+                if (langSelect) langSelect.value = v;
+            });
+        }
 
         function detectLanguageFromCodeRoot() {
             var cr = document.getElementById('field-code_root');
@@ -162,6 +227,24 @@ MAIN_DOM_JS = r"""
             var params = new URLSearchParams(window.location.search);
             return params.get('projectId') || params.get('project_id') || '';
         }
+
+        window.reloadEnvironmentRevisions = function(sel) {
+            var envId = sel && sel.value ? sel.value : '';
+            var slot = document.getElementById('environment-revision-slot');
+            if (!slot) return;
+            if (!envId) {
+                slot.innerHTML = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">'
+                    + '<option value="" selected disabled>(select environment first)</option></select>';
+                return;
+            }
+            var pid = resolvedProjectId();
+            if (!pid) return;
+            var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
+                + '&environmentId=' + encodeURIComponent(envId);
+            fetch(url).then(_checkResp).then(function(r) { return r.text(); })
+                .then(function(html) { slot.innerHTML = html; })
+                .catch(function() {});
+        };
 
         function queryApiDatasets() {
             var pid = resolvedProjectId();
@@ -430,7 +513,6 @@ MAIN_DOM_JS = r"""
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
-                        var dsName = _specCurrentDatasetName || 'dataset';
                         var savedPath = result.path;
                         selectSpecFile(savedPath);
                         return browseFiles(_specCurrentPath).then(function() {
@@ -463,8 +545,8 @@ MAIN_DOM_JS = r"""
         }
 
         // ── Toggle base URL and model name fields based on provider selection
-        var OPENAI_DEFAULT_MODEL = 'kimi-k2-0905-preview';
-        var ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+        var OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
+        var ANTHROPIC_DEFAULT_MODEL = 'claude-haiku-4-5';
         function toggleOpenAIFields() {
             const isOpenAI = providerSelect && providerSelect.value === 'openai';
             var pbuInput = document.getElementById('field-provider_base_url');
@@ -478,17 +560,7 @@ MAIN_DOM_JS = r"""
             }
             var modelInput = document.getElementById('field-model');
             if (modelInput) {
-                if (isOpenAI) {
-                    if (!modelInput.value || modelInput.value === ANTHROPIC_DEFAULT_MODEL) {
-                        modelInput.value = OPENAI_DEFAULT_MODEL;
-                    }
-                    modelInput.placeholder = OPENAI_DEFAULT_MODEL;
-                } else {
-                    if (!modelInput.value || modelInput.value === OPENAI_DEFAULT_MODEL) {
-                        modelInput.value = ANTHROPIC_DEFAULT_MODEL;
-                    }
-                    modelInput.placeholder = ANTHROPIC_DEFAULT_MODEL;
-                }
+                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
             }
         }
 
@@ -496,6 +568,19 @@ MAIN_DOM_JS = r"""
             providerSelect.addEventListener('change', toggleOpenAIFields);
             toggleOpenAIFields();
         }
+
+        (function() {
+            var nbCb = document.getElementById('field-notebook');
+            var pathInput = document.getElementById('field-notebook_path');
+            var pathWrap = document.getElementById('notebook-path-field-wrap');
+            function syncNotebookPathEnabled() {
+                var on = nbCb && nbCb.checked;
+                if (pathInput) pathInput.disabled = !on;
+                if (pathWrap) pathWrap.classList.toggle('notebook-path-disabled', !on);
+            }
+            if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
+            syncNotebookPathEnabled();
+        })();
 
         // ── Spec validation helper ────────────────────────────────────
         window._specValid = true;

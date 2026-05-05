@@ -2,7 +2,7 @@
 
 Tests the full request -> route handler -> response path with:
 - Real HTTP via httpx AsyncClient + Starlette app
-- Monkeypatched DatasetManager (in-memory) for job_store and spec_store I/O
+- Monkeypatched DatasetManager (in-memory) for spec_store and other dataset I/O
 - Real auth_context ContextVar propagation through middleware
 - Mocked Domino API client (no live API calls)
 
@@ -57,7 +57,7 @@ def _load_module(name: str, filename: str) -> ModuleType:
 def _build_test_app(tmp_path: Path, monkeypatch):
     """Construct a Starlette app wired with real route handlers.
 
-    Uses in-memory DatasetStore mock for job_store and spec_store,
+    Uses in-memory DatasetManager mock for spec_store (and paths that read specs),
     mocked domino_client, and real auth_context propagation.
     """
     import domino_job_store as store
@@ -129,6 +129,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_info.main_repo_id = "repo-123"
     mock_client.resolve_project.return_value = mock_info
     mock_client.set_ui_host = MagicMock()
+    mock_client.list_self_environments.return_value = []
+    mock_client.list_environment_revisions.return_value = []
 
     mock_datasets = MagicMock()
     mock_datasets.list_datasets.return_value = [
@@ -163,29 +165,35 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     @dataclass
     class JobRequest:
-        spec_path: Optional[str] = None
-        spec_content: Optional[str] = None
+        spec_path: str = ""
         provider: str = "anthropic"
-        model: Optional[str] = None
+        model: str = ""
         api_key: Optional[str] = None
         base_url: Optional[str] = None
-        code_root: Optional[str] = None
-        max_files: Optional[int] = None
-        workers: Optional[int] = None
-        planning_workers: Optional[int] = None
-        timeout: Optional[float] = None
+        code_root: str = ""
+        max_files: int = 50
+        workers: int = 4
+        planning_workers: int = 4
+        timeout: float = 120.0
         notebook: bool = False
-        notebook_path: Optional[str] = None
-        experiment_names: Optional[str] = None
-        model_names: Optional[str] = None
+        notebook_path: str = ""
+        filtered_experiment_names: str = ""
+        filtered_model_names: str = ""
         latest_only: bool = False
         verbose: bool = True
-        branch: Optional[str] = None
-        hardware_tier: Optional[str] = None
+        branch: str = ""
+        hardware_tier: str = ""
+        environment_id: str = ""
+        environment_revision_id: str = ""
         api_key_source: str = "domino_env"
-        spec_filename: Optional[str] = None
-        project_id: Optional[str] = None
-        provider_base_url: Optional[str] = None
+        project_id: str = ""
+        provider_base_url: str = ""
+        language: str = "auto"
+        max_retries: int = 5
+        initial_backoff: float = 10.0
+        max_backoff: float = 120.0
+        backoff_jitter: float = 0.2
+        notebook_from_cache: bool = False
 
     @dataclass
     class DominoJobRecord:
@@ -516,11 +524,13 @@ class TestJobRoutesIntegration:
         """Submit via HTTP, verify record appears in job index."""
         store = integration_env["store"]
 
-        resp = client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        resp = client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+            },
+        )
         assert resp.status_code == 200
 
         jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
@@ -533,6 +543,7 @@ class TestJobRoutesIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
 
@@ -548,6 +559,7 @@ class TestJobRoutesIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
         store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-stop-test")
@@ -563,11 +575,13 @@ class TestJobRoutesIntegration:
 
     def test_job_history_returns_submitted_jobs(self, client, integration_env):
         """Jobs created via /run appear in /job-history."""
-        client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+            },
+        )
 
         resp = client.get("/job-history")
         assert resp.status_code == 200
@@ -588,11 +602,13 @@ class TestAuthorizationIntegration:
 
     def test_run_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_start")
-        resp = client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        resp = client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+            },
+        )
         assert resp.status_code == 403
 
     def test_stop_job_denied_returns_403(self, client, integration_env):
@@ -600,6 +616,7 @@ class TestAuthorizationIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
         store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-denied")
@@ -675,16 +692,28 @@ class TestCrossCuttingIntegration:
             jid = store.create_job(
                 "ds-integration", "snap-integration",
                 "integration_user", "main", "small", "/spec.yaml",
+                "", "",
                 project_id="proj-integration",
             )
             store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
 
-        # Submit a 3rd via HTTP
-        client.post("/run", data={
-            "spec_path": "dataset://autodoc-specs/spec.yaml",
-            "provider": "anthropic",
-            "target_project": "proj-integration",
-        })
+        client.post(
+            "/run?projectId=proj-integration",
+            data={
+                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "provider": "anthropic",
+                "code_root": "/mnt/code",
+                "max_files": "50",
+                "workers": "4",
+                "planning_workers": "3",
+                "timeout": "120",
+                "max_retries": "5",
+                "initial_backoff": "10",
+                "max_backoff": "120",
+                "backoff_jitter": "0.2",
+                "verbose": "true",
+            },
+        )
 
         jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
         newest = jobs[0]
@@ -696,6 +725,7 @@ class TestCrossCuttingIntegration:
         job_id = store.create_job(
             "ds-integration", "snap-integration",
             "integration_user", "main", "small", "/spec.yaml",
+            "", "",
             project_id="proj-integration",
         )
 

@@ -163,6 +163,25 @@ class TestLanguageDetection:
         assert orch.language_profile is R_PROFILE
         assert orch.detected_file_count == 12
 
+    @patch("autodoc.orchestrator.ArtifactScanner")
+    @patch("autodoc.orchestrator.CodeScanner")
+    @patch("autodoc.orchestrator.DocumentBuilder")
+    @patch("autodoc.orchestrator.SectionPlanner")
+    @patch("autodoc.orchestrator.ContentGenerator")
+    @patch("autodoc.orchestrator.detect_language")
+    def test_explicit_language_skips_detection(
+        self, mock_detect, mock_gen, mock_planner, mock_builder, mock_cs, mock_as
+    ):
+        orch = Orchestrator(
+            llm=_make_mock_llm(),
+            sanitizer=_make_mock_sanitizer(),
+            code_root=Path("/tmp/r_explicit"),
+            language="r",
+        )
+        assert orch.language_profile is R_PROFILE
+        assert orch.detected_file_count == 0
+        mock_detect.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Sanitizer creation with language-specific patterns

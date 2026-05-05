@@ -17,11 +17,21 @@ from domino_auth import configure_auth, user_auth
 
 configure_auth(user_auth)
 
+from default_consts import (
+    DEFAULT_GENERATION_WORKERS,
+    DEFAULT_LLM_BACKOFF_JITTER,
+    DEFAULT_LLM_INITIAL_BACKOFF,
+    DEFAULT_LLM_MAX_BACKOFF,
+    DEFAULT_LLM_MAX_RETRIES,
+    DEFAULT_MAX_FILES,
+    DEFAULT_PLANNING_WORKERS,
+    DEFAULT_TIMEOUT,
+)
+
 from studio.state import (
     _STARTUP_WARNINGS,
     _get_default_spec_path,
     domino_client,
-    domino_job_store,
     log_buffer,
     logger,
 )
@@ -35,6 +45,8 @@ from studio.ui_components import (
 from studio.routes_api import register_api_routes
 from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
+
+from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
 
 from temporary_versioning import get_deploy_version_label
 
@@ -196,8 +208,6 @@ async def index(req: Request):
         owner_id = auth_context.get_viewing_user().id
     except Exception:
         owner_id = ""
-    _current_model = "kimi-k2-0905-preview"
-
     branch_options = []
     tier_options = []
     if project_id:
@@ -218,6 +228,55 @@ async def index(req: Request):
         tier_options = []
     if not tier_options:
         tier_options = [Option("(default)", value="")]
+
+    env_rows: list = []
+    try:
+        env_rows = domino_client.list_self_environments() or []
+    except Exception:
+        env_rows = []
+    env_var_id = (os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip()
+    env_var_rev = (os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip()
+    env_ids = {str(e.get("id", "")) for e in env_rows if isinstance(e, dict)}
+    default_env_id = ""
+    if env_rows:
+        if env_var_id and env_var_id in env_ids:
+            default_env_id = env_var_id
+        else:
+            default_env_id = str(env_rows[0].get("id", ""))
+    env_options = []
+    for e in env_rows:
+        if not isinstance(e, dict):
+            continue
+        eid = str(e.get("id", ""))
+        if not eid:
+            continue
+        label = (e.get("name") or eid).strip()
+        env_options.append(Option(label, value=eid, selected=(eid == default_env_id)))
+    if not env_options:
+        env_options = [Option("(none)", value="", selected=True)]
+
+    rev_rows: list = []
+    if default_env_id:
+        try:
+            rev_rows = domino_client.list_environment_revisions(default_env_id) or []
+        except Exception:
+            rev_rows = []
+    rev_ids = {str(r.get("id", "")) for r in rev_rows}
+    default_rev_id = ""
+    if rev_rows:
+        if env_var_rev and env_var_rev in rev_ids:
+            default_rev_id = env_var_rev
+        else:
+            default_rev_id = str(rev_rows[0].get("id", ""))
+    rev_options = []
+    for r in rev_rows:
+        rid = str(r.get("id", ""))
+        if not rid:
+            continue
+        lab = r.get("option_label") or rid
+        rev_options.append(Option(lab, value=rid, selected=(rid == default_rev_id)))
+    if not rev_options:
+        rev_options = [Option("(none)", value="", selected=True)]
 
     # ── Build the 3-column layout ────────────────────────────────────────
 
@@ -260,16 +319,16 @@ async def index(req: Request):
                 cls="spec-file-list",
             ),
             Div(
-                Span("Selected: ", cls="spec-selected-label"),
+                Span("Selected:", cls="spec-selected-label"),
                 Input(
                     name="spec_path",
                     id="field-spec_path",
                     type="text",
                     value="",
-                    cls="spec-path-input",
-                    placeholder="None",
+                    placeholder="Select a file, upload, or type a path",
                     autocomplete="off",
                     spellcheck="false",
+                    cls="spec-path-input",
                 ),
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
@@ -301,13 +360,13 @@ async def index(req: Request):
             Div(
                 Div(
                     Div(
-                        Label("Model names", for_="field-model_names"),
+                        Label("Model names", for_="field-filtered_model_names"),
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
                         cls="label-row",
                     ),
                     Input(
-                        name="model_names",
-                        id="field-model_names",
+                        name="filtered_model_names",
+                        id="field-filtered_model_names",
                         type="text",
                         placeholder="model1, churn*, fraud-*",
                     ),
@@ -315,13 +374,13 @@ async def index(req: Request):
                 ),
                 Div(
                     Div(
-                        Label("Experiment names", for_="field-experiment_names"),
+                        Label("Experiment names", for_="field-filtered_experiment_names"),
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
                         cls="label-row",
                     ),
                     Input(
-                        name="experiment_names",
-                        id="field-experiment_names",
+                        name="filtered_experiment_names",
+                        id="field-filtered_experiment_names",
                         type="text",
                         placeholder="exp1, exp2, my-experiment*",
                     ),
@@ -335,7 +394,7 @@ async def index(req: Request):
                 cls="advanced-content",
             ),
             cls="advanced-section",
-            open=True,
+            open=False,
         )
     )
 
@@ -363,14 +422,13 @@ async def index(req: Request):
                 ),
                 cls="target-project-row",
             ),
-            Input(type="hidden", name="project_id", value=project_id or ""),
             cls="field target-project-callout",
         )
     )
 
     run_card_children.append(
         Div(
-            Label("Code root path", for_="code-root-prefix"),
+            Label("Source code root path", for_="code-root-prefix"),
             Div(
                 Select(
                     Option("Loading...", value="", selected=True, disabled=True),
@@ -416,6 +474,7 @@ async def index(req: Request):
                         "document.getElementById('lang-override-select').style.display === 'none' ? 'inline-block' : 'none';",
             ),
             Select(
+                Option("Auto-detect", value="auto", selected=True),
                 Option("Python", value="python"),
                 Option("R", value="r"),
                 Option("SAS", value="sas"),
@@ -445,6 +504,25 @@ async def index(req: Request):
             cls="field",
         )
     )
+    _lang_opts = [
+        Option("Auto-detect", value="auto", selected=True),
+        *[Option(LANGUAGE_PROFILES[k].display_name, value=k) for k in LANGUAGE_PRIORITY],
+    ]
+    run_card_children.append(
+        Div(
+            Div(
+                Label("Programming language", for_="field-language"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Same choices as the CLI --language flag. Auto-detect picks python, r, sas, or matlab from files under code root.",
+                ),
+                cls="label-row",
+            ),
+            Select(*_lang_opts, name="language", id="field-language"),
+            cls="field",
+        )
+    )
     run_card_children.append(
         Div(
             Div(
@@ -461,14 +539,66 @@ async def index(req: Request):
             cls="field",
         )
     )
+    run_card_children.append(
+        Div(
+            Div(
+                Div(
+                    Label("Environment", for_="field-environment_id"),
+                    Span(
+                        "\u24d8",
+                        cls="info-tooltip",
+                        data_tooltip="Compute environment for the Domino job.",
+                    ),
+                    cls="label-row",
+                ),
+                Select(
+                    *env_options,
+                    name="environment_id",
+                    id="field-environment_id",
+                    cls="environment-select",
+                    onchange="reloadEnvironmentRevisions(this)",
+                ),
+                cls="field",
+            ),
+            Div(
+                Div(
+                    Label("Revision", for_="field-environment_revision_id"),
+                    Span(
+                        "\u24d8",
+                        cls="info-tooltip env-revision-label-spacer",
+                        aria_hidden="true",
+                    ),
+                    cls="label-row",
+                ),
+                Div(
+                    Select(
+                        *rev_options,
+                        name="environment_revision_id",
+                        id="field-environment_revision_id",
+                        cls="env-revision-select",
+                    ),
+                    id="environment-revision-slot",
+                ),
+                cls="field",
+            ),
+            cls="env-revision-row",
+        )
+    )
 
     advanced_settings_body = [
         Div(
-            Div("Generation settings", cls="filter-section-title"),
+            Div("Generation settings", cls="advanced-subsection-title"),
             Div(
                 Div(
                     Label("Max files", for_="field-max_files"),
-                    Input(name="max_files", id="field-max_files", type="number", value="50"),
+                    Input(
+                        name="max_files",
+                        id="field-max_files",
+                        type="number",
+                        value=str(DEFAULT_MAX_FILES),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -477,7 +607,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Parallel LLM calls in the planning phase."),
                         cls="label-row",
                     ),
-                    Input(name="planning_workers", id="field-planning_workers", type="number", value="3"),
+                    Input(
+                        name="planning_workers",
+                        id="field-planning_workers",
+                        type="number",
+                        value=str(DEFAULT_PLANNING_WORKERS),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -486,7 +623,14 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Sections generated in parallel."),
                         cls="label-row",
                     ),
-                    Input(name="workers", id="field-workers", type="number", value="4"),
+                    Input(
+                        name="workers",
+                        id="field-workers",
+                        type="number",
+                        value=str(DEFAULT_GENERATION_WORKERS),
+                        min="1",
+                        step="1",
+                    ),
                     cls="field",
                 ),
                 Div(
@@ -495,12 +639,88 @@ async def index(req: Request):
                         Span("\u24d8", cls="info-tooltip", data_tooltip="Seconds before a single LLM call times out."),
                         cls="label-row",
                     ),
-                    Input(name="timeout", id="field-timeout", type="number", value="120"),
+                    Input(
+                        name="timeout",
+                        id="field-timeout",
+                        type="number",
+                        value=str(int(DEFAULT_TIMEOUT)),
+                        min="1",
+                        step="1",
+                    ),
+                    cls="field",
+                ),
+                cls="advanced-grid",
+            ),
+            Div("LLM API call settings", cls="advanced-subsection-title"),
+            Div(
+                Div(
+                    Div(
+                        Label("Max retries", for_="field-max_retries"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Number of retries on LLM API calls."),
+                        cls="label-row",
+                    ),
+                    Input(
+                        name="max_retries",
+                        id="field-max_retries",
+                        type="number",
+                        value=str(DEFAULT_LLM_MAX_RETRIES),
+                        min="0",
+                        step="1",
+                    ),
+                    cls="field",
+                ),
+                Div(
+                    Div(
+                        Label("Initial backoff (sec)", for_="field-initial_backoff"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Delay before the first retry; grows with each attempt."),
+                        cls="label-row",
+                    ),
+                    Input(
+                        name="initial_backoff",
+                        id="field-initial_backoff",
+                        type="number",
+                        value=str(int(DEFAULT_LLM_INITIAL_BACKOFF)),
+                        min="0",
+                        step="1",
+                    ),
+                    cls="field",
+                ),
+                Div(
+                    Div(
+                        Label("Max backoff (sec)", for_="field-max_backoff"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Cap on delay between retries."),
+                        cls="label-row",
+                    ),
+                    Input(
+                        name="max_backoff",
+                        id="field-max_backoff",
+                        type="number",
+                        value=str(int(DEFAULT_LLM_MAX_BACKOFF)),
+                        min="0",
+                        step="1",
+                    ),
+                    cls="field",
+                ),
+                Div(
+                    Div(
+                        Label("Backoff jitter", for_="field-backoff_jitter"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Random extra delay so retries do not align."),
+                        cls="label-row",
+                    ),
+                    Input(
+                        name="backoff_jitter",
+                        id="field-backoff_jitter",
+                        type="number",
+                        value=str(DEFAULT_LLM_BACKOFF_JITTER),
+                        min="0",
+                        step="0.1",
+                    ),
                     cls="field",
                 ),
                 cls="advanced-grid",
             ),
         ),
+
         Div(
             Label("Provider", for_="field-provider"),
             Select(
@@ -536,28 +756,65 @@ async def index(req: Request):
         Div(
             Div(
                 Label("Model", for_="field-model"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use default (kimi-k2-0905-preview)"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Provider model name.",
+                ),
                 cls="label-row",
             ),
-            Input(name="model", id="field-model", type="text", value=_current_model, placeholder="kimi-k2-0905-preview"),
+            Input(name="model", id="field-model", type="text", value="", placeholder=""),
             cls="field",
             id="model-name-field",
             style="display: none;",
         ),
+        Div(
+            Label(
+                Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
+                Span("Generate notebook"),
+                Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
+                cls="checkbox-field",
+                id="app-mode-note",
+            ),
+            Label(
+                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
+                Span("Notebook from cache only"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
+                ),
+                cls="checkbox-field",
+            ),
+            cls="advanced-checkbox-row",
+        ),
+        Div(
+            Div(
+                Label("Notebook path (optional)", for_="field-notebook_path"),
+                Span(
+                    "\u24d8",
+                    cls="info-tooltip",
+                    data_tooltip="Relative path under the output docs folder; leave blank for default notebook name.",
+                ),
+                cls="label-row",
+            ),
+            Input(name="notebook_path", id="field-notebook_path", type="text", value="", placeholder=""),
+            cls="field",
+            id="notebook-path-field-wrap",
+        ),
         Label(
-            Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
-            Span("Generate notebook"),
-            Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
+            Input(type="checkbox", name="verbose", id="field-verbose", value="true", checked=False),
+            Span("Verbose logging"),
             cls="checkbox-field",
-            id="app-mode-note",
         ),
     ]
 
     run_card_children.append(
-        Div(
-            Div("Advanced settings", cls="advanced-inline-title"),
+        Details(
+            Summary("Advanced settings", cls="advanced-section-summary"),
             Div(*advanced_settings_body, cls="advanced-content"),
-            cls="advanced-section-inline",
+            cls="advanced-section",
+            open=False,
         )
     )
 
@@ -607,7 +864,7 @@ async def index(req: Request):
                     H4("Auto Model Docs Studio"),
                     P(
                         "Upload a YAML spec file to define which sections to include in your model documentation. "
-                        "The system will parse endpoints and data models automatically.",
+                        "The system will parse the code and identify endpoints and data models automatically.",
                     ),
                     cls="insight-card",
                 ),

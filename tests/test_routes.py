@@ -28,28 +28,34 @@ for p in (_repo_root, _pkg_dir):
 
 @dataclass
 class _MockJobRequest:
-    spec_path: Optional[str] = None
-    spec_content: Optional[str] = None
+    spec_path: str = ""
     provider: str = "anthropic"
-    model: Optional[str] = None
+    model: str = ""
     api_key: Optional[str] = None
-    code_root: Optional[str] = None
-    max_files: Optional[int] = None
-    workers: Optional[int] = None
-    planning_workers: Optional[int] = None
-    timeout: Optional[float] = None
+    code_root: str = ""
+    max_files: int = 50
+    workers: int = 4
+    planning_workers: int = 4
+    timeout: float = 120.0
     notebook: bool = False
-    notebook_path: Optional[str] = None
-    experiment_names: Optional[str] = None
-    model_names: Optional[str] = None
+    notebook_path: str = ""
+    filtered_experiment_names: str = ""
+    filtered_model_names: str = ""
     latest_only: bool = False
     verbose: bool = True
-    branch: Optional[str] = None
-    hardware_tier: Optional[str] = None
+    branch: str = ""
+    hardware_tier: str = ""
+    environment_id: str = ""
+    environment_revision_id: str = ""
     api_key_source: str = "domino_env"
-    spec_filename: Optional[str] = None
-    project_id: Optional[str] = None
-    provider_base_url: Optional[str] = None
+    project_id: str = ""
+    provider_base_url: str = ""
+    language: str = "auto"
+    max_retries: int = 5
+    initial_backoff: float = 10.0
+    max_backoff: float = 120.0
+    backoff_jitter: float = 0.2
+    notebook_from_cache: bool = False
 
 
 @dataclass
@@ -314,6 +320,24 @@ class TestApiRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         await routes["/api/hardware-tiers"](req)
         client.list_hardware_tiers.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_environment_revisions_returns_select(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        client.list_environment_revisions.return_value = [
+            {
+                "id": "r1",
+                "number": 2,
+                "option_label": "#2: May 1, 2026",
+            },
+        ]
+        req = _make_request(
+            query_params={"projectId": "proj-123", "environmentId": "env-1"},
+        )
+        await routes["/api/environment-revisions"](req)
+        client.list_environment_revisions.assert_called_once_with("env-1")
 
     @pytest.mark.asyncio
     async def test_datasets_returns_json(self, _mock_studio_modules):

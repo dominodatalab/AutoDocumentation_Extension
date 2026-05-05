@@ -211,6 +211,26 @@ a:hover { color: var(--primary-container); }
     letter-spacing: -0.01em;
 }
 
+.env-revision-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+.env-revision-row > .field {
+    flex: 1 1 200px;
+    min-width: 0;
+    margin-bottom: 0;
+}
+.env-revision-row > .field > .label-row {
+    min-height: 1.5rem;
+    align-items: center;
+}
+#environment-revision-slot {
+    display: contents;
+}
+
 /* ── 3-Column Grid ────────────────────────────────────────────────── */
 .studio-grid {
     display: grid;
@@ -487,13 +507,11 @@ input[type="file"] {
     font-size: 12px;
     line-height: 1;
 }
-.info-tooltip::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 100%;
-    margin-bottom: 0.35rem;
+#studio-info-tooltip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 10050;
     padding: 0.5rem 0.75rem;
     background: var(--on-surface);
     color: var(--surface-container-lowest);
@@ -501,23 +519,27 @@ input[type="file"] {
     font-weight: 400;
     white-space: normal;
     min-width: 200px;
-    max-width: 320px;
+    max-width: min(320px, calc(100vw - 16px));
     width: max-content;
     border-radius: var(--radius-sm);
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.15s ease, visibility 0.15s ease;
-    z-index: 1000;
     box-shadow: var(--shadow-md);
     font-family: var(--font-body);
     text-transform: none;
     letter-spacing: normal;
+    box-sizing: border-box;
 }
-.info-tooltip:hover::after,
-.info-tooltip:focus::after {
+#studio-info-tooltip.visible {
     opacity: 1;
     visibility: visible;
+}
+.env-revision-label-spacer {
+    visibility: hidden;
+    pointer-events: none;
+    user-select: none;
 }
 
 /* Inline upload row */
@@ -816,22 +838,6 @@ input[type="file"] {
     color: var(--primary);
     background: var(--surface-container);
 }
-.advanced-section-inline {
-    margin-top: 0.75rem;
-    background: var(--surface-container-lowest);
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-}
-.advanced-inline-title {
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: var(--on-surface);
-    padding: 0.65rem 1rem;
-    background: var(--surface-container-low);
-    border-bottom: 1px solid var(--outline-variant);
-}
 .advanced-summary-desc {
     font-weight: 400;
     font-size: 11px;
@@ -855,6 +861,30 @@ input[type="file"] {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+}
+.advanced-checkbox-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
+}
+.advanced-checkbox-row .checkbox-field {
+    margin-bottom: 0;
+}
+.advanced-subsection-title {
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--on-surface);
+    margin: 0 0 0.625rem 0;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--outline-variant);
+    letter-spacing: normal;
+    text-transform: none;
+}
+.advanced-grid + .advanced-subsection-title {
+    margin-top: 1rem;
+    padding-top: 0.35rem;
 }
 
 /* Filter section */
@@ -880,6 +910,9 @@ input[type="file"] {
 .notebook-hint {
     padding-left: 1.625rem;
     margin-top: -0.5rem;
+}
+.notebook-path-disabled {
+    opacity: 0.5;
 }
 
 /* ── API key source radio ─────────────────────────────────────────── */
@@ -1506,9 +1539,10 @@ select.hw-tier-select option {
 
 .spec-selected-indicator {
     display: flex;
+    flex-direction: column;
+    align-items: stretch;
     padding: 8px 0;
     font-size: 0.8125rem;
-    align-items: center;
     gap: 6px;
 }
 
@@ -1516,26 +1550,9 @@ select.hw-tier-select option {
     color: var(--outline);
 }
 
-.spec-path-input {
-    flex: 1;
-    min-width: 0;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-sm);
-    padding: 6px 8px;
-    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--on-surface);
-    background: var(--surface-container-lowest);
+#field-spec_path {
     white-space: nowrap;
     overflow-x: auto;
-}
-.spec-path-input::placeholder {
-    font-weight: 500;
-    color: var(--outline);
 }
 
 .lang-detection-row {

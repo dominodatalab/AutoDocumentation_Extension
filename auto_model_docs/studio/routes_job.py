@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fasthtml.common import *
 from starlette.requests import Request
 
@@ -26,6 +28,12 @@ from .job_engine import (
     _submit_domino_job,
     sync_jobs_for,
 )
+
+
+def _domino_id_str(raw: Any) -> str:
+    if not isinstance(raw, str):
+        return ""
+    return raw.strip()
 
 
 def _current_owner_id() -> str:
@@ -54,6 +62,8 @@ def register_job_routes(rt):
                     ds_id, snap_id,
                     owner_id=owner_id, branch=job_request.branch,
                     tier=job_request.hardware_tier, spec_path=job_request.spec_path,
+                    environment_id=_domino_id_str(job_request.environment_id),
+                    environment_revision_id=_domino_id_str(job_request.environment_revision_id),
                     project_id=job_request.project_id,
                 )
                 domino_job_store.update_job(ds_id, snap_id, job_id, status="failed", domino_status=str(exc))
