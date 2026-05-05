@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import re
-from typing import Any, Dict, Iterable, List
+from collections import defaultdict
+from typing import Any, Dict, Iterable, List, Optional
 
 from autodoc.core.exceptions import GenerationError
 
@@ -15,6 +17,7 @@ from autodoc.core.models import (
     ContentType,
     GeneratedContent,
     GenerationContext,
+    GovernanceContext,
 )
 from autodoc.llm import LLMClient
 from autodoc.llm.prompts import (
@@ -29,10 +32,14 @@ from autodoc.llm.prompts import (
     build_list_prompt,
     build_narrative_prompt,
     build_table_prompt,
+    narrative_system_prompt,
 )
 from autodoc.generation.citations import (
     CITATION_MARKER_PATTERN,
     build_code_citation_id,
+    build_evidence_citation_id,
+    build_finding_citation_id,
+    build_governance_citation_id,
     build_mlflow_citation_id,
     build_mlflow_run_citation_id,
     build_mlflow_artifact_citation_id,
@@ -40,6 +47,9 @@ from autodoc.generation.citations import (
     extract_citation_ids,
     parse_citation_id,
 )
+
+_DEFAULT_GOV_TOKEN_BUDGET = 6000
+_ANSWER_TRUNCATE_CHARS = 400
 
 
 class ContentGenerator:
@@ -136,6 +146,7 @@ class ContentGenerator:
 
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = self._governance_block(context)
 
         prompt = build_narrative_prompt(
             section_name=context.section_name,
@@ -152,12 +163,13 @@ class ContentGenerator:
             artifact_data=artifact_data_str,
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         response = await self.llm.complete(
             prompt=prompt,
             temperature=0.7,
-            system=SYSTEM_NARRATIVE_WRITER,
+            system=narrative_system_prompt(governance_evidence),
         )
 
         text = response.content.strip()
@@ -222,6 +234,7 @@ class ContentGenerator:
 
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = self._governance_block(context)
 
         prompt = build_table_prompt(
             purpose=block.purpose,
@@ -234,6 +247,7 @@ class ContentGenerator:
             artifact_data=artifact_data_str,
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         result = await self.llm.complete_json(
@@ -345,6 +359,7 @@ class ContentGenerator:
 
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = self._governance_block(context)
 
         prompt = build_chart_prompt(
             purpose=block.purpose,
@@ -356,6 +371,7 @@ class ContentGenerator:
             artifact_data=artifact_data_str,
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         data = await self.llm.complete_json(
@@ -681,6 +697,7 @@ class ContentGenerator:
         """Generate a bulleted or numbered list."""
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = self._governance_block(context)
 
         prompt = build_list_prompt(
             purpose=block.purpose,
@@ -690,6 +707,7 @@ class ContentGenerator:
             features=", ".join(context.code_context.features[:10]),
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         result = await self.llm.complete_json(
@@ -710,6 +728,124 @@ class ContentGenerator:
                 "citation_details": citation_details,
             },
         )
+
+    def _governance_block(self, context: GenerationContext) -> str:
+        if context.governance_evidence:
+            return context.governance_evidence
+        return self._format_governance_evidence(context.governance_context)
+
+    def _estimate_tokens(self, text: str) -> int:
+        return max(1, len(text) // 4)
+
+    def _truncate_text(self, text: str, limit: int = _ANSWER_TRUNCATE_CHARS) -> str:
+        text = (text or "").strip()
+        if len(text) <= limit:
+            return text
+        return text[: limit - 3].rstrip() + "..."
+
+    def _format_governance_evidence(
+        self,
+        governance_context: Optional[GovernanceContext],
+        *,
+        token_budget: Optional[int] = None,
+    ) -> str:
+        if governance_context is None:
+            return ""
+
+        budget = token_budget
+        if budget is None:
+            raw = os.environ.get("AUTODOC_GOV_CONTEXT_TOKEN_BUDGET", "")
+            try:
+                budget = int(raw) if raw.strip() else _DEFAULT_GOV_TOKEN_BUDGET
+            except ValueError:
+                budget = _DEFAULT_GOV_TOKEN_BUDGET
+
+        gov = governance_context
+        lines = [
+            "## Governance Evidence (factual grounding from the Domino governance bundle — cite verbatim where relevant)",
+            "Use the citation IDs in [@brackets] when quoting these facts. These are the source of truth for",
+            "risk classification, intended use, validation status, approval state, and any raised issues.",
+            "",
+        ]
+
+        if gov.bundle_name:
+            lines.append(f"[@{build_governance_citation_id('bundle')}]: {gov.bundle_name}")
+        if gov.policy_name:
+            lines.append(f"[@{build_governance_citation_id('policy')}]: {gov.policy_name}")
+        if gov.stage:
+            lines.append(f"[@{build_governance_citation_id('stage')}]: {gov.stage}")
+        if gov.state:
+            lines.append(f"[@{build_governance_citation_id('state')}]: {gov.state}")
+        if gov.risk_tier:
+            lines.append(f"[@{build_governance_citation_id('risk_tier')}]: {gov.risk_tier}")
+        if gov.owner:
+            lines.append(f"[@{build_governance_citation_id('owner')}]: {gov.owner}")
+        if gov.governed_model_names:
+            mor = ", ".join(gov.governed_model_names)
+            lines.append(f"[@{build_governance_citation_id('model_of_record')}]: {mor}")
+        lines.append("")
+
+        evidence_items = list(gov.evidence or [])
+        for item in evidence_items:
+            item.answer = self._truncate_text(item.answer)
+
+        omitted = 0
+
+        def _render_evidence(items: list) -> list[str]:
+            grouped: dict[tuple[str, str], list] = defaultdict(list)
+            for item in items:
+                stage = item.stage or "General"
+                evset = item.evidence_set_name or "Evidence"
+                grouped[(stage, evset)].append(item)
+            out: list[str] = []
+            for stage, evset in sorted(grouped.keys()):
+                out.append(
+                    f"Evidence — {stage} / {evset} (latest answer per question):"
+                )
+                for item in grouped[(stage, evset)]:
+                    cid = item.citation_id or build_evidence_citation_id(item.question)
+                    q = item.question.strip()
+                    a = item.answer
+                    out.append(f"[@{cid}]: {q} — \"{a}\"")
+                out.append("")
+            return out
+
+        rendered = _render_evidence(evidence_items)
+        while (
+            evidence_items
+            and self._estimate_tokens("\n".join(lines + rendered)) > budget
+        ):
+            evidence_items.sort(key=lambda i: i.answered_at or "")
+            evidence_items.pop(0)
+            omitted += 1
+            rendered = _render_evidence(evidence_items)
+
+        lines.extend(rendered)
+        if omitted:
+            lines.append(f"({omitted} evidence items omitted to fit token budget)")
+            lines.append("")
+
+        if gov.findings:
+            open_only = all(f.status == "To do" for f in gov.findings)
+            header = "Findings (To do):" if open_only else "Findings:"
+            lines.append(header)
+            for finding in gov.findings:
+                cid = build_finding_citation_id(finding.finding_id)
+                desc = self._truncate_text(finding.description)
+                severity = f"[{finding.severity}]" if finding.severity else ""
+                status_tag = ""
+                if finding.status and finding.status != "To do":
+                    status_tag = f"[{finding.status.upper()}] "
+                body = finding.title
+                if desc:
+                    body = f"{body} — {desc}"
+                lines.append(f"[@{cid}]: {status_tag}{severity} {body}".strip())
+            lines.append("")
+
+        while lines and not lines[-1].strip():
+            lines.pop()
+
+        return "\n".join(lines)
 
     def _format_code_evidence(self, code_context) -> str:
         if not code_context.code_evidence:
@@ -1005,6 +1141,71 @@ class ContentGenerator:
             }
         return details
 
+    def _collect_governance_details(self, context: GenerationContext) -> dict:
+        details: dict[str, dict[str, Any]] = {}
+        gov = context.governance_context
+        if not gov:
+            return details
+
+        base = {
+            "bundle_id": gov.bundle_id,
+            "bundle_name": gov.bundle_name,
+            "policy_name": gov.policy_name,
+        }
+
+        bundle_facts = {
+            "bundle": gov.bundle_name,
+            "policy": gov.policy_name,
+            "stage": gov.stage,
+            "state": gov.state,
+            "risk_tier": gov.risk_tier,
+            "owner": gov.owner,
+            "model_of_record": ", ".join(gov.governed_model_names)
+            if gov.governed_model_names
+            else None,
+        }
+        for key, value in bundle_facts.items():
+            if value:
+                cid = build_governance_citation_id(key)
+                details[cid] = {
+                    **base,
+                    "type": "governance",
+                    "source_key": key,
+                    "evidence_text": str(value),
+                }
+
+        for item in gov.evidence or []:
+            cid = item.citation_id or build_evidence_citation_id(item.question)
+            details[cid] = {
+                **base,
+                "type": "evidence",
+                "source_key": cid.split(".", 1)[-1],
+                "evidence_text": f"{item.question} — {item.answer}",
+                "evidence_stage": item.stage,
+                "evidence_set_name": item.evidence_set_name,
+                "question": item.question,
+                "answer": item.answer,
+            }
+
+        for finding in gov.findings or []:
+            cid = build_finding_citation_id(finding.finding_id)
+            text = finding.title
+            if finding.description:
+                text = f"{finding.title} — {finding.description}"
+            details[cid] = {
+                **base,
+                "type": "finding",
+                "source_key": finding.finding_id,
+                "evidence_text": text,
+                "finding_title": finding.title,
+                "finding_description": finding.description,
+                "finding_severity": finding.severity,
+                "finding_status": finding.status,
+                "finding_artifact_label": finding.artifact_label,
+            }
+
+        return details
+
     def _collect_citations_for_text(self, text: str, context: GenerationContext):
         """Collect only citations explicitly placed by LLM with [@citation_id] markers."""
         details = {}
@@ -1012,6 +1213,7 @@ class ContentGenerator:
         # Build details lookup for all potential citations
         details.update(self._collect_mlflow_details(context))
         details.update(self._collect_code_details(context))
+        details.update(self._collect_governance_details(context))
 
         # Only extract citations that were explicitly placed in the text
         marker_ids = extract_citation_ids(text)

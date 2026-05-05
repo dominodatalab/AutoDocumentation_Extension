@@ -100,6 +100,7 @@ class SectionPlanner:
                 data_sources=data_sources,
                 metrics_info=metrics_info,
                 artifacts_info=artifacts_info,
+                governance_evidence=context.governance_evidence,
             )
 
             result = await self.llm.complete_json(

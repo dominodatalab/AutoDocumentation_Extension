@@ -5,11 +5,11 @@ from __future__ import annotations
 import importlib.util as _imputil
 import logging
 import os
+import sys
 import ctypes as _ctypes
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Deque, Optional
+from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -24,36 +24,8 @@ logging.basicConfig(
 for _mod_name in ("domino_datasets", "domino_client", "auth_context"):
     logging.getLogger(_mod_name).setLevel(logging.INFO)
 
-
-class _RingBufferLogHandler(logging.Handler):
-    """In-process ring buffer that keeps the last N formatted log records.
-
-    Attached to the root logger so /logs can expose recent app output for
-    troubleshooting without reading container stdout.
-    """
-
-    def __init__(self, capacity: int = 2000):
-        super().__init__()
-        self.buffer: Deque[str] = deque(maxlen=capacity)
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            self.buffer.append(self.format(record))
-        except Exception:
-            self.handleError(record)
-
-    def snapshot(self) -> list[str]:
-        return list(self.buffer)
-
-
-log_buffer = _RingBufferLogHandler(capacity=2000)
-log_buffer.setLevel(logging.DEBUG)
-log_buffer.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-))
-_root = logging.getLogger()
-if not any(isinstance(h, _RingBufferLogHandler) for h in _root.handlers):
-    _root.addHandler(log_buffer)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # ---------------------------------------------------------------------------
 # Sibling module imports  (domino_client, domino_job_store, etc.)
@@ -95,7 +67,6 @@ import auth_context  # type: ignore  # normal import; must not be re-loaded via 
 
 domino_client = _import_sibling("domino_client")
 domino_job_store = _import_sibling("domino_job_store")
-spec_store = _import_sibling("spec_store")
 domino_datasets = _import_sibling("domino_datasets")
 
 
@@ -105,26 +76,32 @@ domino_datasets = _import_sibling("domino_datasets")
 
 @dataclass
 class JobRequest:
-    spec_path: Optional[str]
-    spec_content: Optional[str]
+    spec_path: str
     provider: str
-    model: Optional[str]
-    code_root: Optional[str]
-    max_files: Optional[int]
-    workers: Optional[int]
-    planning_workers: Optional[int]
-    timeout: Optional[float]
+    model: str
+    code_root: str
+    max_files: int
+    workers: int
+    planning_workers: int
+    timeout: float
     notebook: bool
-    notebook_path: Optional[str]
-    experiment_names: Optional[str]  # Comma-separated list
-    model_names: Optional[str]  # Comma-separated list
+    notebook_path: str
+    filtered_experiment_names: str
+    filtered_model_names: str
     latest_only: bool
-    verbose: bool  # Enable verbose logging
-    branch: Optional[str] = None
-    hardware_tier: Optional[str] = None
-    spec_filename: Optional[str] = None  # original uploaded filename
-    project_id: Optional[str] = None     # target Domino project (from ?projectId=)
-    provider_base_url: Optional[str] = None
+    verbose: bool
+    hardware_tier: str
+    environment_id: str
+    environment_revision_id: str
+    project_id: str
+    provider_base_url: str
+    max_retries: int
+    initial_backoff: float
+    max_backoff: float
+    backoff_jitter: float
+    notebook_from_cache: bool
+    bundle_id: str = ""
+    governance_api_host: str = ""
 
 
 @dataclass
@@ -132,11 +109,11 @@ class DominoJobRecord:
     id: str                              # local UUID
     owner_id: str                        # Domino user id (from /v4/users/self)
     domino_run_id: Optional[str] = None
-    branch: Optional[str] = None
     hardware_tier: Optional[str] = None
     status: str = "queued"               # queued | submitted | running | succeeded | failed | cancelled
     domino_status: Optional[str] = None
     job_url: Optional[str] = None
+    dataset_id: Optional[str] = None
     spec_path: Optional[str] = None
     submitted_at: Optional[str] = None
     completed_at: Optional[str] = None
@@ -185,9 +162,11 @@ def _max_jobs() -> int:
 
 def _resolve_request_project_id(req) -> Optional[str]:
     for key in ("projectId", "project_id"):
-        pid = req.query_params.get(key)
-        if pid:
-            return pid
+        raw = req.query_params.get(key)
+        if raw:
+            s = str(raw).strip()
+            if s:
+                return s
     return None
 
 

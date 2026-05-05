@@ -208,5 +208,5 @@ class Settings(BaseSettings):
         if self.llm_model:
             return self.llm_model
         if self.llm_provider == "anthropic":
-            return "claude-sonnet-4-20250514"
-        return "kimi-k2-0905-preview"
+            return "claude-haiku-4-5"
+        return "gpt-5.4-mini"

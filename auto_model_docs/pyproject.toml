@@ -6,8 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "auto-model-docs"
 version = "0.1.0"
 description = "Automatically generate Word documents from ML codebases using LLM-powered analysis"
-readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "Data Science Team"}
@@ -16,7 +15,7 @@ keywords = ["ml", "documentation", "llm", "automation"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -27,6 +26,7 @@ dependencies = [
     "openai==2.26.0",
     "mlflow==3.2.0",
     "python-docx==1.2.0",
+    "mammoth>=1.6.0",
     "matplotlib==3.8.4",
     "pydantic==2.10.6",
     "pydantic-settings==2.13.1",
@@ -55,6 +55,8 @@ autodoc = "auto_model_docs.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.setuptools.package-data]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
