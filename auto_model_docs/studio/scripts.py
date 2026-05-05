@@ -24,7 +24,7 @@ MAIN_DOM_JS = r"""
         return _AD_APP_BASE + (rel.charAt(0) === '/' ? rel.slice(1) : rel);
     }
     // Rewrite any element with data-app-rel="path" to use the full prefix.
-    // Applies to <a href>, <form action>, and htmx hx-post/hx-get.
+    // Applies to <a href> and <form action>.
     function _adApplyPrefix(root) {
         var scope = root || document;
         scope.querySelectorAll('[data-app-rel]').forEach(function(el) {
@@ -33,13 +33,220 @@ MAIN_DOM_JS = r"""
             var full = _adUrl(rel);
             if (el.tagName === 'A') el.setAttribute('href', full);
             else if (el.tagName === 'FORM') el.setAttribute('action', full);
-            if (el.hasAttribute('hx-post')) el.setAttribute('hx-post', full);
-            if (el.hasAttribute('hx-get')) el.setAttribute('hx-get', full);
         });
     }
     document.addEventListener('DOMContentLoaded', function() { _adApplyPrefix(); });
 
     document.addEventListener('DOMContentLoaded', function() {
+
+        function _studioEscapeHtml(s) {
+            var t = document.createElement('textarea');
+            t.textContent = s == null ? '' : String(s);
+            return t.innerHTML;
+        }
+        var _studioErrorSlotOrder = ['computeEnv', 'generate'];
+        var _studioErrorSlots = {};
+        var _studioUploadBanner = null;
+        var _studioDisplayedErrorSlot = null;
+        var _studioErrorDismissTimer = null;
+        function _studioCancelErrorDismissTimer() {
+            if (_studioErrorDismissTimer) {
+                clearTimeout(_studioErrorDismissTimer);
+                _studioErrorDismissTimer = null;
+            }
+        }
+        function _studioDismissCurrentError() {
+            _studioCancelErrorDismissTimer();
+            if (_studioDisplayedErrorSlot) {
+                delete _studioErrorSlots[_studioDisplayedErrorSlot];
+                _studioDisplayedErrorSlot = null;
+            } else if (_studioUploadBanner) {
+                _studioUploadBanner = null;
+            }
+            _studioReflowErrorPanel();
+        }
+        function _studioSchedulePanelAutoDismiss() {
+            _studioCancelErrorDismissTimer();
+            var slotToClear = _studioDisplayedErrorSlot;
+            var clearUploadOnly = false;
+            var delayMs = 0;
+            if (slotToClear) {
+                delayMs = 60000;
+            } else if (_studioUploadBanner) {
+                clearUploadOnly = true;
+                delayMs = _studioUploadBanner.success ? 12000 : 60000;
+            }
+            if (!delayMs) return;
+            _studioErrorDismissTimer = setTimeout(function() {
+                _studioErrorDismissTimer = null;
+                if (slotToClear && _studioErrorSlots[slotToClear]) {
+                    delete _studioErrorSlots[slotToClear];
+                    if (_studioDisplayedErrorSlot === slotToClear) {
+                        _studioDisplayedErrorSlot = null;
+                    }
+                }
+                if (clearUploadOnly && _studioUploadBanner) {
+                    _studioUploadBanner = null;
+                }
+                _studioReflowErrorPanel();
+            }, delayMs);
+        }
+        function setStudioErrorSlot(key, block) {
+            if (!key) return;
+            if (!block) {
+                delete _studioErrorSlots[key];
+            } else {
+                var items = block.items || [];
+                if (typeof items === 'string') items = [items];
+                if (!items.length) {
+                    delete _studioErrorSlots[key];
+                } else {
+                    _studioUploadBanner = null;
+                    _studioErrorSlots[key] = { title: block.title || 'Error', items: items };
+                }
+            }
+            _studioReflowErrorPanel();
+        }
+        function setStudioUploadBanner(block) {
+            if (!block) {
+                _studioUploadBanner = null;
+            } else {
+                var uitems = block.items || [];
+                if (typeof uitems === 'string') uitems = [uitems];
+                if (!uitems.length) {
+                    _studioUploadBanner = null;
+                } else {
+                    _studioUploadBanner = { success: !!block.success, title: block.title || '', items: uitems };
+                }
+            }
+            _studioReflowErrorPanel();
+        }
+        function _studioReflowErrorPanel() {
+            var panel = document.getElementById('studio-errors-panel');
+            if (!panel) return;
+            _studioCancelErrorDismissTimer();
+            _studioDisplayedErrorSlot = null;
+            var html = '';
+            var ki;
+            for (ki = 0; ki < _studioErrorSlotOrder.length; ki++) {
+                var slotKey = _studioErrorSlotOrder[ki];
+                var b = _studioErrorSlots[slotKey];
+                if (!b) continue;
+                _studioDisplayedErrorSlot = slotKey;
+                var lis = '';
+                var ii;
+                for (ii = 0; ii < b.items.length; ii++) {
+                    lis += '<li>' + _studioEscapeHtml(b.items[ii]) + '</li>';
+                }
+                html = '<div class="spec-validation-error studio-error-toast" role="alert">'
+                    + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(b.title) + '</span>'
+                    + '<ul class="spec-validation-error-list">' + lis + '</ul>'
+                    + '<div class="studio-error-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>';
+                break;
+            }
+            if (!html && _studioUploadBanner) {
+                var ub = _studioUploadBanner;
+                var ulis = '';
+                var ui;
+                for (ui = 0; ui < ub.items.length; ui++) {
+                    ulis += '<li>' + _studioEscapeHtml(ub.items[ui]) + '</li>';
+                }
+                var uwrap = ub.success
+                    ? ('<div class="studio-success-toast studio-error-toast" role="status">'
+                        + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
+                        + '<ul class="spec-validation-error-list studio-success-toast-list">' + ulis + '</ul>'
+                        + '<div class="studio-error-dismiss-row studio-success-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>')
+                    : ('<div class="spec-validation-error studio-error-toast" role="alert">'
+                        + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
+                        + '<ul class="spec-validation-error-list">' + ulis + '</ul>'
+                        + '<div class="studio-error-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>');
+                html = uwrap;
+            }
+            panel.innerHTML = html;
+            if (html) {
+                panel.classList.add('studio-errors-panel--visible');
+                _studioSchedulePanelAutoDismiss();
+            } else {
+                panel.classList.remove('studio-errors-panel--visible');
+            }
+        }
+
+        (function() {
+            var ep = document.getElementById('studio-errors-panel');
+            if (!ep) return;
+            ep.addEventListener('click', function(e) {
+                if (e.target && e.target.closest && e.target.closest('.studio-error-dismiss')) {
+                    e.preventDefault();
+                    _studioDismissCurrentError();
+                }
+            });
+        })();
+
+        (function() {
+            var n = document.getElementById('studio-compute-env-json');
+            if (!n || !n.textContent) return;
+            try {
+                var arr = JSON.parse(n.textContent.trim());
+                if (Array.isArray(arr) && arr.length) {
+                    setStudioErrorSlot('computeEnv', { title: 'Unable to open the app', items: arr });
+                }
+            } catch (e) {}
+        })();
+
+        (function() {
+            var tip = document.createElement('div');
+            tip.id = 'studio-info-tooltip';
+            tip.setAttribute('role', 'tooltip');
+            document.body.appendChild(tip);
+            var active = null;
+            function hide() {
+                tip.classList.remove('visible');
+                tip.textContent = '';
+                active = null;
+            }
+            function position() {
+                if (!active || !tip.classList.contains('visible')) return;
+                var r = active.getBoundingClientRect();
+                var gap = 6;
+                tip.style.visibility = 'hidden';
+                tip.style.display = 'block';
+                var tw = tip.offsetWidth;
+                var th = tip.offsetHeight;
+                var left = r.left + r.width / 2 - tw / 2;
+                var top = r.top - th - gap;
+                if (top < 8) top = r.bottom + gap;
+                left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+                top = Math.max(8, Math.min(top, window.innerHeight - th - 8));
+                tip.style.left = left + 'px';
+                tip.style.top = top + 'px';
+                tip.style.visibility = '';
+            }
+            function show(el) {
+                if (!el || !el.getAttribute) return;
+                if (!el.classList.contains('info-tooltip')) return;
+                if (el.classList.contains('env-revision-label-spacer')) return;
+                var text = el.getAttribute('data-tooltip');
+                if (!text) return;
+                active = el;
+                tip.textContent = text;
+                tip.classList.add('visible');
+                position();
+            }
+            document.addEventListener('mouseover', function(e) {
+                var el = e.target && e.target.closest ? e.target.closest('.info-tooltip') : null;
+                if (!el) return;
+                show(el);
+            }, true);
+            document.addEventListener('mouseout', function(e) {
+                var el = e.target && e.target.closest ? e.target.closest('.info-tooltip') : null;
+                if (!el) return;
+                var rel = e.relatedTarget;
+                if (rel && el.contains(rel)) return;
+                hide();
+            }, true);
+            window.addEventListener('scroll', hide, true);
+            window.addEventListener('resize', hide);
+        })();
 
         // ── Ensure projectId is on the page URL (reload if we only have hash / postMessage) ──
         (function() {
@@ -53,16 +260,12 @@ MAIN_DOM_JS = r"""
                 } catch (e) { /* ignore */ }
             }
             var pid = null;
-            // 1. Own query string (direct / non-proxied access)
             pid = new URLSearchParams(window.location.search).get('projectId');
-            // 2. Own hash fragment (#projectId=xxx — survives proxies)
             if (!pid && window.location.hash) {
                 var h = window.location.hash.substring(1);
                 if (h.charAt(0) === '?') h = h.substring(1);
                 pid = new URLSearchParams(h).get('projectId');
             }
-            // 3. Parent frame (same-origin deployments where parent
-            //    and iframe share the same host)
             if (!pid && window.parent !== window) {
                 try {
                     var pLoc = window.parent.location;
@@ -72,69 +275,17 @@ MAIN_DOM_JS = r"""
                         if (ph.charAt(0) === '?') ph = ph.substring(1);
                         pid = new URLSearchParams(ph).get('projectId');
                     }
-                } catch(e) { /* cross-origin — ignore */ }
+                } catch(e) { /* cross-origin */ }
             }
             if (pid) {
                 setProjectId(pid);
             }
-            // 4. Listen for postMessage from Domino parent frame
             window.addEventListener('message', function(e) {
                 if (e.data && typeof e.data === 'object' && e.data.projectId) {
                     setProjectId(e.data.projectId);
                 }
             });
         })();
-
-        // ── Language detection ────────────────────────────────────────────
-        var langRow = document.getElementById('lang-detection-row');
-        var langName = document.getElementById('lang-detected-name');
-        var langCount = document.getElementById('lang-detected-count');
-        var langInput = document.getElementById('field-detected-language');
-        var langSelect = document.getElementById('lang-override-select');
-
-        function detectLanguage(codeRoot) {
-            var url = _adUrl('api/detect-language');
-            if (codeRoot) url += '?code_root=' + encodeURIComponent(codeRoot);
-            fetch(url)
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (langRow) langRow.style.display = '';
-                    if (data.language) {
-                        if (langName) langName.textContent = data.display_name;
-                        if (langCount) langCount.textContent = '(' + data.file_count + ' files)';
-                        if (langInput) langInput.value = data.language;
-                        if (langSelect) langSelect.value = data.language;
-                    } else {
-                        if (langName) langName.textContent = '';
-                        if (langCount) langCount.textContent = '';
-                        if (langRow) {
-                            langRow.innerHTML = '<span class="lang-empty-state">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
-                            langRow.style.display = '';
-                        }
-                    }
-                })
-                .catch(function() {});
-        }
-
-        window.handleLanguageOverride = function(lang) {
-            if (langInput) langInput.value = lang;
-            var cr = document.getElementById('field-code_root');
-            detectLanguage(cr ? cr.value : undefined);
-        };
-
-        function detectLanguageFromCodeRoot() {
-            var cr = document.getElementById('field-code_root');
-            var val = cr ? (cr.value || '').trim() : '';
-            if (!val) {
-                if (langRow) langRow.style.display = 'none';
-                if (langName) langName.textContent = '';
-                if (langCount) langCount.textContent = '';
-                return;
-            }
-            detectLanguage(val);
-        }
-
-        detectLanguageFromCodeRoot();
 
         const providerSelect    = document.getElementById('field-provider');
         const modelNameField    = document.getElementById('model-name-field');
@@ -145,8 +296,10 @@ MAIN_DOM_JS = r"""
         var specBreadcrumb = document.getElementById('spec-breadcrumb');
         var specSelectedIndicator = document.getElementById('spec-selected-indicator');
         var specMachineUpload = document.getElementById('spec-machine-upload');
-        var specUploadStatus = document.getElementById('spec-upload-status');
+        var specUploadTrigger = document.getElementById('spec-upload-trigger');
         var specPathField = document.getElementById('field-spec_path');
+
+        var _SPEC_BROWSER_EXCLUDE_DATASET_NAME = "__AUTODOC_DATASET_NAME__";
 
         // State
         var _specDatasets = [];
@@ -182,8 +335,6 @@ MAIN_DOM_JS = r"""
             var parts = [];
             var pid = resolvedProjectId();
             if (pid) parts.push('projectId=' + encodeURIComponent(pid));
-            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
-            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
             return parts.length ? ('?' + parts.join('&')) : '';
         }
 
@@ -203,31 +354,34 @@ MAIN_DOM_JS = r"""
                         specDatasetSelect.innerHTML = '<option value="">Error: ' + datasets.error + '</option>';
                         return;
                     }
-                    _specDatasets = datasets;
-                    console.log('[spec-browser] Loaded ' + datasets.length + ' datasets:', datasets.map(function(d) { return d.name; }));
-                    if (datasets.length === 0) {
+                    var ex = _SPEC_BROWSER_EXCLUDE_DATASET_NAME;
+                    var di;
+                    _specAutoDocSpecsId = '';
+                    for (di = 0; di < datasets.length; di++) {
+                        if (datasets[di].name === ex) {
+                            _specAutoDocSpecsId = datasets[di].id;
+                            break;
+                        }
+                    }
+                    var specUi = [];
+                    for (di = 0; di < datasets.length; di++) {
+                        if (datasets[di].name !== ex) specUi.push(datasets[di]);
+                    }
+                    _specDatasets = specUi;
+                    console.log('[spec-browser] Loaded ' + datasets.length + ' datasets (spec UI ' + specUi.length + '):', datasets.map(function(d) { return d.name; }));
+                    if (specUi.length === 0) {
                         specDatasetSelect.innerHTML = '<option value="">No datasets found</option>';
-                        console.warn('[spec-browser] No writable datasets returned');
+                        console.warn('[spec-browser] No writable datasets for spec browser after exclusions');
                         return;
                     }
                     var html = '';
-                    for (var i = 0; i < datasets.length; i++) {
-                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
-                            + datasets[i].name + '</option>';
+                    for (var i = 0; i < specUi.length; i++) {
+                        html += '<option value="' + specUi[i].id + '" data-name="' + specUi[i].name + '" data-snapshot="' + (specUi[i].rwSnapshotId || '') + '" data-path="' + (specUi[i].datasetPath || '') + '">'
+                            + specUi[i].name + '</option>';
                     }
                     specDatasetSelect.innerHTML = html;
 
-                    var j;
-                    for (j = 0; j < datasets.length; j++) {
-                        if (datasets[j].name === 'autodoc') {
-                            specDatasetSelect.value = datasets[j].id;
-                            _specAutoDocSpecsId = datasets[j].id;
-                            onDatasetChange();
-                            return;
-                        }
-                    }
                     specDatasetSelect.selectedIndex = 0;
-                    _specAutoDocSpecsId = datasets[0].id;
                     onDatasetChange();
                 })
                 .catch(function(err) {
@@ -246,8 +400,6 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
             if (specPathField) specPathField.value = '';
-            var svm = document.getElementById('spec-validation-msg');
-            if (svm) svm.remove();
             if (_specCurrentDatasetId) {
                 browseFiles('');
             } else {
@@ -287,6 +439,7 @@ MAIN_DOM_JS = r"""
                             specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
                         } else {
                             specFileList.innerHTML = '<span class="spec-file-empty">Unexpected response from server</span>';
+                            console.error('[spec-browser] Unexpected file listing response:', files);
                         }
                         return;
                     }
@@ -296,7 +449,7 @@ MAIN_DOM_JS = r"""
                         var pPath = specParentPath(path);
                         if (pPath !== null) {
                             var up = '<div class="spec-file-item spec-file-parent" data-path="' + pPath + '" data-dir="true" data-name=".." data-parent="true">'
-                                + '<span class="spec-file-icon">\ud83d\udcc1</span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
+                                + '<span class="fa-icon fa-folder-open spec-file-icon"></span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
                             specFileList.innerHTML = up + '<span class="spec-file-empty">' + emptyMsg + '</span>';
                             var upEl = specFileList.querySelector('.spec-file-parent');
                             if (upEl) upEl.addEventListener('click', onFileClick);
@@ -309,7 +462,7 @@ MAIN_DOM_JS = r"""
                     var parentPath = specParentPath(path);
                     if (parentPath !== null) {
                         html += '<div class="spec-file-item spec-file-parent" data-path="' + parentPath + '" data-dir="true" data-name=".." data-parent="true">'
-                            + '<span class="spec-file-icon">\ud83d\udcc1</span>'
+                            + '<span class="fa-icon fa-folder-open spec-file-icon"></span>'
                             + '<span class="spec-file-name">..</span>'
                             + '<span class="spec-file-size"></span></div>';
                     }
@@ -320,11 +473,11 @@ MAIN_DOM_JS = r"""
                     });
                     for (var i = 0; i < files.length; i++) {
                         var f = files[i];
-                        var icon = f.isDirectory ? '\ud83d\udcc1' : '\ud83d\udcc4';
+                        var iconClass = f.isDirectory ? 'fa-icon fa-folder-open spec-file-icon' : 'fa-icon fa-file-lines spec-file-icon';
                         var size = f.isDirectory ? '' : formatBytes(f.sizeInBytes || 0);
                         var fullPath = path ? path + '/' + f.fileName : f.fileName;
                         html += '<div class="spec-file-item" data-path="' + fullPath + '" data-dir="' + f.isDirectory + '" data-name="' + f.fileName + '">'
-                            + '<span class="spec-file-icon">' + icon + '</span>'
+                            + '<span class="' + iconClass + '"></span>'
                             + '<span class="spec-file-name">' + f.fileName + '</span>'
                             + '<span class="spec-file-size">' + size + '</span>'
                             + '</div>';
@@ -338,6 +491,7 @@ MAIN_DOM_JS = r"""
                 })
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
+                    console.error('[spec-browser] Failed to load files:', err);
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
                 })
                 .finally(function() {
@@ -404,19 +558,24 @@ MAIN_DOM_JS = r"""
         // Global for breadcrumb onclick
         window._specBrowse = function(path) { browseFiles(path); };
 
+        if (specUploadTrigger && specMachineUpload) {
+            specUploadTrigger.addEventListener('click', function(e) {
+                e.preventDefault();
+                specMachineUpload.click();
+            });
+        }
+
         // Upload from machine → autodoc dataset
         if (specMachineUpload) {
             specMachineUpload.addEventListener('change', function(e) {
                 var file = e.target.files[0];
                 if (!file) return;
                 console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
-                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
-                // Validate spec content before uploading
-                if (typeof validateSpecContent === 'function') validateSpecContent(file);
+                setStudioUploadBanner(null);
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
-                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                    setStudioUploadBanner({ success: false, title: 'Upload', items: ['Select a dataset first'] });
                     return;
                 }
                 var qs = queryApiDatasets();
@@ -425,12 +584,33 @@ MAIN_DOM_JS = r"""
                 fd.append('relativeDir', _specCurrentPath || '');
                 fd.append('file', file);
                 fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(result) {
+                    .then(function(r) {
+                        return r.json().catch(function() { return {}; }).then(function(j) {
+                            return { ok: r.ok, j: j };
+                        });
+                    })
+                    .then(function(o) {
+                        if (!o.ok) {
+                            var em;
+                            if (o.j && o.j.errors && o.j.errors.length) {
+                                var errItems = o.j.errors.map(function(x) { return String(x); });
+                                console.error('[spec-browser] Spec validation failed:', errItems);
+                                em = errItems.join(' ');
+                                setStudioUploadBanner({ success: false, title: 'Spec validation failed', items: errItems });
+                            } else {
+                                var em0 = (o.j && o.j.error) ? o.j.error : 'Upload failed';
+                                console.error('[spec-browser] Upload rejected:', o.j);
+                                em = em0;
+                                setStudioUploadBanner({ success: false, title: 'Upload failed', items: [em0] });
+                            }
+                            var ev = new Error(em);
+                            ev._uploadUiDone = true;
+                            throw ev;
+                        }
+                        var result = o.j;
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
-                        var dsName = _specCurrentDatasetName || 'dataset';
+                        setStudioUploadBanner({ success: true, title: 'Spec uploaded', items: ['Saved ' + result.fileName + ' to ' + (result.path || '')] });
                         var savedPath = result.path;
                         selectSpecFile(savedPath);
                         return browseFiles(_specCurrentPath).then(function() {
@@ -448,7 +628,8 @@ MAIN_DOM_JS = r"""
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                        if (err._uploadUiDone) return;
+                        setStudioUploadBanner({ success: false, title: 'Upload failed', items: [err.message] });
                     })
                     .finally(function() {
                         specMachineUpload.value = '';
@@ -456,15 +637,22 @@ MAIN_DOM_JS = r"""
             });
         }
 
-        // Wire dataset select change
+        // Wire dataset select change; refresh job history when dataset changes
         if (specDatasetSelect) {
-            specDatasetSelect.addEventListener('change', onDatasetChange);
+            specDatasetSelect.addEventListener('change', function() {
+                onDatasetChange();
+                fetchJobHistory();
+            });
             loadDatasets();
         }
 
+        if (resolvedProjectId()) {
+            fetchJobHistory();
+        }
+
         // ── Toggle base URL and model name fields based on provider selection
-        var OPENAI_DEFAULT_MODEL = 'kimi-k2-0905-preview';
-        var ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+        var OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
+        var ANTHROPIC_DEFAULT_MODEL = 'claude-haiku-4-5';
         function toggleOpenAIFields() {
             const isOpenAI = providerSelect && providerSelect.value === 'openai';
             var pbuInput = document.getElementById('field-provider_base_url');
@@ -478,16 +666,13 @@ MAIN_DOM_JS = r"""
             }
             var modelInput = document.getElementById('field-model');
             if (modelInput) {
-                if (isOpenAI) {
-                    if (!modelInput.value || modelInput.value === ANTHROPIC_DEFAULT_MODEL) {
-                        modelInput.value = OPENAI_DEFAULT_MODEL;
-                    }
-                    modelInput.placeholder = OPENAI_DEFAULT_MODEL;
-                } else {
-                    if (!modelInput.value || modelInput.value === OPENAI_DEFAULT_MODEL) {
-                        modelInput.value = ANTHROPIC_DEFAULT_MODEL;
-                    }
-                    modelInput.placeholder = ANTHROPIC_DEFAULT_MODEL;
+                var ph = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                modelInput.placeholder = ph;
+                var cur = (modelInput.value || '').trim();
+                if (!cur) {
+                    modelInput.value = ph;
+                } else if (cur === OPENAI_DEFAULT_MODEL || cur === ANTHROPIC_DEFAULT_MODEL) {
+                    modelInput.value = ph;
                 }
             }
         }
@@ -497,24 +682,35 @@ MAIN_DOM_JS = r"""
             toggleOpenAIFields();
         }
 
-        // ── Spec validation helper ────────────────────────────────────
-        window._specValid = true;
-        function validateSpecContent(file) {
-            var fd = new FormData();
-            fd.append('spec_upload', file);
-            var resultEl = document.getElementById('spec-validation-result');
-            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
-            fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
-                .then(_checkResp).then(function(r) { return r.text(); })
-                .then(function(html) {
-                    if (resultEl) resultEl.outerHTML = html;
-                    window._specValid = html.indexOf('validation failed') === -1;
-                })
-                .catch(function() {
-                    if (resultEl) resultEl.innerHTML = '';
-                    window._specValid = true;
+        (function() {
+            var overlay = document.getElementById('studio-advanced-modal');
+            var openBtn = document.getElementById('studio-advanced-open');
+            var closeBtn = document.getElementById('studio-advanced-close');
+            function openAdvancedModal() {
+                if (!overlay) return;
+                overlay.classList.add('studio-modal-overlay--open');
+                overlay.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('studio-modal-open');
+            }
+            function closeAdvancedModal() {
+                if (!overlay) return;
+                overlay.classList.remove('studio-modal-overlay--open');
+                overlay.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('studio-modal-open');
+            }
+            if (openBtn) openBtn.addEventListener('click', function(e) { e.preventDefault(); openAdvancedModal(); });
+            if (closeBtn) closeBtn.addEventListener('click', function(e) { e.preventDefault(); closeAdvancedModal(); });
+            if (overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) closeAdvancedModal();
                 });
-        }
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && overlay && overlay.classList.contains('studio-modal-overlay--open')) {
+                    closeAdvancedModal();
+                }
+            });
+        })();
 
         // ── Code root prefix select + suffix sync / browseCode options ─────
         (function() {
@@ -534,8 +730,10 @@ MAIN_DOM_JS = r"""
                 const sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
                 hidden.value = sub ? base + '/' + sub : base;
             }
-            function showCodeRootError() {
+            function showCodeRootError(detail) {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
+                var msg = detail ? String(detail) : 'Could not load source code roots for this project.';
+                console.error('[code-root]', msg);
                 prefix.innerHTML = '';
                 var opt = document.createElement('option');
                 opt.value = '';
@@ -547,7 +745,6 @@ MAIN_DOM_JS = r"""
                 prefix.classList.add('code-root-error');
                 if (hidden) hidden.value = '';
                 sync();
-                detectLanguageFromCodeRoot();
             }
             function showCodeRootLoading() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
@@ -566,16 +763,16 @@ MAIN_DOM_JS = r"""
             function loadCodeRootOptions() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
                 var pid = new URLSearchParams(window.location.search).get('projectId');
-                if (!pid) { showCodeRootError(); return; }
+                if (!pid) { showCodeRootError('Add projectId to the page URL.'); return; }
                 showCodeRootLoading();
                 var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
                 fetch(url)
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data && data.error) { showCodeRootError(); return; }
+                        if (data && data.error) { showCodeRootError(data.error); return; }
                         var opts = (data && data.options) || [];
                         var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
-                        if (!opts.length) { showCodeRootError(); return; }
+                        if (!opts.length) { showCodeRootError('No source code roots returned for this project.'); return; }
                         prefix.classList.remove('code-root-error');
                         prefix.classList.remove('code-root-loading');
                         prefix.innerHTML = '';
@@ -597,117 +794,226 @@ MAIN_DOM_JS = r"""
                         }
                         if (!found) prefix.selectedIndex = 0;
                         sync();
-                        detectLanguageFromCodeRoot();
                     })
-                    .catch(function() { showCodeRootError(); });
+                    .catch(function() { showCodeRootError('Request to load source code roots failed.'); });
             }
             if (suffix) {
                 suffix.addEventListener('input', sync);
-                var langTimer = null;
-                suffix.addEventListener('input', function() {
-                    clearTimeout(langTimer);
-                    langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
-                });
             }
             if (prefix && prefix.tagName === 'SELECT') {
                 prefix.addEventListener('change', function() {
                     sync();
-                    detectLanguageFromCodeRoot();
                 });
             }
             sync();
             loadCodeRootOptions();
         })();
 
-        // Block form submission when no spec is selected
-        document.body.addEventListener('htmx:confirm', function(e) {
-            var form = e.detail.elt;
-            if (form.id !== 'main-form') return;
-            var specPath = document.getElementById('field-spec_path');
-            var specUpload = document.getElementById('spec-machine-upload');
-            var hasSpec = (specPath && specPath.value.trim()) ||
-                          (specUpload && specUpload.files && specUpload.files.length > 0);
-            if (!hasSpec) {
-                e.preventDefault();
-                var msg = 'Please select or upload a spec file before generating documentation.';
-                var existing = document.getElementById('spec-validation-msg');
-                if (!existing) {
-                    var indicator = document.getElementById('spec-selected-indicator');
-                    if (indicator) {
-                        var el = document.createElement('div');
-                        el.id = 'spec-validation-msg';
-                        el.className = 'spec-validation-msg';
-                        el.textContent = msg;
-                        indicator.parentNode.insertBefore(el, indicator.nextSibling);
-                    } else {
-                        alert(msg);
-                    }
-                }
-            } else {
-                var existing = document.getElementById('spec-validation-msg');
-                if (existing) existing.remove();
-            }
-        });
+        // ── Job history rendering ─────────────────────────────────────
 
-        // Ensure every HTMX request carries projectId from the page URL so
-        // server handlers never fall back to process-global state that may
-        // belong to a different user.
-        document.body.addEventListener('htmx:configRequest', function(e) {
-            var pid = new URLSearchParams(window.location.search).get('projectId');
-            if (pid) {
-                var path = e.detail.path || '';
-                if (!/[?&]projectId=/.test(path)) {
-                    e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
-                        'projectId=' + encodeURIComponent(pid);
-                }
-            }
-            if (_specCurrentDatasetId) {
-                e.detail.parameters['datasetId'] = _specCurrentDatasetId;
-            }
-            if (_specCurrentSnapshotId) {
-                e.detail.parameters['snapshotId'] = _specCurrentSnapshotId;
-            }
-            if (_specCurrentDatasetPath) {
-                e.detail.parameters['datasetPath'] = _specCurrentDatasetPath;
-            }
-        });
+        function _esc(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
 
-        // Poll job history — pause while an HTMX request targets the history panel
-        var _htmxBusy = false;
-        document.body.addEventListener('htmx:beforeRequest', function(e) {
-            var tgt = e.detail && e.detail.target;
-            if (tgt && tgt.id === 'job-history-content') _htmxBusy = true;
-        });
-        document.body.addEventListener('htmx:afterRequest', function(e) {
-            var tgt = e.detail && e.detail.target;
-            if (tgt && tgt.id === 'job-history-content') _htmxBusy = false;
-        });
-        setInterval(function() {
-            if (_htmxBusy) return;
+        function _jobRow(j, documentUrl) {
+            var status = j.status || 'queued';
+            var statusKey = String(status).toLowerCase();
+            var statusCls = 'history-status history-status-' + statusKey;
+            var tier = j.hardware_tier || '—';
+            var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
+            var linkCell = j.job_url
+                ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener noreferrer">View →</a></td>'
+                : '<td>—</td>';
+            var docCell = (documentUrl && statusKey === 'succeeded')
+                ? '<td><a href="' + _esc(documentUrl) + '" target="_blank" rel="noopener noreferrer">View →</a></td>'
+                : '<td>—</td>';
+            return '<tr>'
+                + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
+                + '<td><span class="' + statusCls + '">' + _esc(statusKey.toUpperCase()) + '</span></td>'
+                + '<td>' + _esc(submitted) + '</td>'
+                + linkCell
+                + docCell
+                + '</tr>';
+        }
+
+        function _maxJobsWarning(jobs) {
+            var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
+            if (!hasQueued) return '';
+            return '<div class="inline-callout inline-callout-warning" role="alert">'
+                + '<span>⚠ </span>'
+                + '<span>Job queued — a slot is occupied. It will start automatically when one opens. '
+                + 'To free a slot, stop a running job or use </span>'
+                + '<span class="spec-selected-value">Cancel queued</span>'
+                + '<span> below.</span>'
+                + '</div>';
+        }
+
+        function _tableHtml(jobs, documentUrl) {
+            var header = '<thead><tr><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th><th>Document</th></tr></thead>';
+            var du = documentUrl || '';
+            var rows = jobs.map(function(j) { return _jobRow(j, du); }).join('');
+            return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
+        }
+
+        function renderJobHistory(jobs, documentUrl) {
             var el = document.getElementById('job-history-content');
             if (!el) return;
-            // Preserve <details> open state; auto-open when completed count changes
-            var wasOpen = false;
-            var prevCount = 0;
-            var details = el.querySelector('details');
-            if (details) {
-                wasOpen = details.open;
-                prevCount = details.querySelectorAll('tbody tr').length;
+
+            if (!jobs || !jobs.length) {
+                el.innerHTML = '<div class="spec-file-empty"><span class="fa-icon fa-file-lines spec-file-empty-icon"></span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
+                return;
             }
+
+            var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
+
+            var html = _maxJobsWarning(jobs);
+            html += '<div class="history-table-wrap">' + _tableHtml(jobs, documentUrl || '') + '</div>';
+
+            var actions = '<a class="primary" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
+            if (hasQueued) {
+                actions += ' <a class="primary" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
+            }
+            html += '<div class="history-actions">' + actions + '</div>';
+
+            el.innerHTML = html;
+
+            // Wire refresh button
+            var refreshBtn = el.querySelector('#job-history-refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    fetchJobHistory();
+                });
+            }
+
+            // Wire cancel queued button
+            var cancelBtn = el.querySelector('#job-cancel-queued-btn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
+                        .then(_checkResp).then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            renderJobHistory(data.jobs || [], data.document_url || '');
+                        })
+                        .catch(function(err) {
+                            console.error('[job-history] Cancel queued failed:', err);
+                        });
+                });
+            }
+        }
+
+        function fetchJobHistory() {
             fetch(_adUrl('job-history') + queryJobHistory())
-                .then(_checkResp).then(function(r) { return r.text(); })
-                .then(function(html) {
-                    if (!_htmxBusy) {
-                        el.innerHTML = html;
-                        var d = el.querySelector('details');
-                        if (d) {
-                            var newCount = d.querySelectorAll('tbody tr').length;
-                            if (wasOpen || newCount > prevCount) d.open = true;
-                        }
-                        if (window.htmx) htmx.process(el);
-                    }
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(data) {
+                    renderJobHistory(data.jobs || [], data.document_url || '');
                 })
-                .catch(function() {});
-        }, 10000);
+                .catch(function(err) {
+                    console.error('[job-history] Could not load job history:', err);
+                });
+        }
+
+        // Poll job history every 10 seconds
+        setInterval(fetchJobHistory, 10000);
+
+        function runJobJsonPayloadFromMainForm(resolvedSpecPath) {
+            function val(id) {
+                var el = document.getElementById(id);
+                return el ? String(el.value || '').trim() : '';
+            }
+            function chk(id) {
+                var el = document.getElementById(id);
+                return !!(el && el.checked);
+            }
+            return {
+                spec_path: resolvedSpecPath,
+                provider: val('field-provider'),
+                model: val('field-model'),
+                code_root: val('field-code_root'),
+                notebook: true,
+                notebook_path: '',
+                notebook_from_cache: false,
+                filtered_experiment_names: val('field-filtered_experiment_names'),
+                filtered_model_names: val('field-filtered_model_names'),
+                latest_only: chk('field-latest_only'),
+                hardware_tier: val('field-hardware_tier'),
+                provider_base_url: val('field-provider_base_url'),
+            };
+        }
+
+        // ── Form submission ───────────────────────────────────────────
+        var mainForm = document.getElementById('main-form');
+        if (mainForm) {
+            mainForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                var specPath = document.getElementById('field-spec_path');
+                var hasSpec = specPath && specPath.value.trim();
+                if (!hasSpec) {
+                    var msg = 'Please select or upload a spec file before generating documentation.';
+                    setStudioErrorSlot('generate', { title: 'Spec file required', items: [msg] });
+                    return;
+                }
+                setStudioErrorSlot('generate', null);
+
+                var rawSpec = (specPath && specPath.value || '').trim();
+                var resolvedSpec = rawSpec;
+                if (rawSpec.indexOf('dataset://') === 0 && _specCurrentDatasetPath) {
+                    var rest = rawSpec.slice('dataset://'.length);
+                    var si = rest.indexOf('/');
+                    var rel = si >= 0 ? rest.slice(si + 1) : '';
+                    var base = _specCurrentDatasetPath.replace(/\/+$/, '');
+                    resolvedSpec = rel ? (base + '/' + rel) : base;
+                }
+                var pid = resolvedProjectId();
+                var jsonPayload = runJobJsonPayloadFromMainForm(resolvedSpec);
+
+                var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+                var submitBtn = mainForm.querySelector('[type=submit]');
+                var runMsgEl = document.getElementById('generate-run-message');
+                function setRunMessage(text, isError) {
+                    if (!runMsgEl) return;
+                    runMsgEl.textContent = text || '';
+                    if (isError) {
+                        runMsgEl.classList.add('generate-run-message--error');
+                    } else {
+                        runMsgEl.classList.remove('generate-run-message--error');
+                    }
+                }
+                setRunMessage('', false);
+                if (submitBtn) submitBtn.disabled = true;
+
+                fetch(_adUrl('run') + qs, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(jsonPayload),
+                })
+                    .then(function(r) {
+                        return r.text().then(function(text) {
+                            var data = null;
+                            try {
+                                data = text ? JSON.parse(text) : null;
+                            } catch (e) {}
+                            if (!r.ok) {
+                                var err = (data && data.error) ? data.error : ('Request failed (' + r.status + ')');
+                                setRunMessage('', false);
+                                setStudioErrorSlot('generate', { title: 'Could not start job', items: [err] });
+                                throw new Error(err);
+                            }
+                            setRunMessage('', false);
+                            setStudioErrorSlot('generate', null);
+                            return data;
+                        });
+                    })
+                    .then(function() { fetchJobHistory(); })
+                    .catch(function() {})
+                    .finally(function() { if (submitBtn) submitBtn.disabled = false; });
+            });
+        }
     });
 """
+
+from dataset_manager import AUTODOC_DATASET_NAME
+
+MAIN_DOM_JS = MAIN_DOM_JS.replace("__AUTODOC_DATASET_NAME__", AUTODOC_DATASET_NAME)

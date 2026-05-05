@@ -112,7 +112,7 @@ auto_model_docs/
   domino_auth.py              # Shared Domino API host + auth (JWT-first)
   domino_client.py            # Domino API client (jobs, projects, hardware tiers)
   domino_datasets.py          # Domino Datasets API client (browse, upload)
-  domino_job_store.py         # SQLite job history
+  domino_job_store.py         # In-process Studio job queue / history
   spec_store.py               # Spec file persistence to target project dataset
   auth_context.py             # Per-request JWT forwarding via ContextVar
   main.py                     # CLI entry point

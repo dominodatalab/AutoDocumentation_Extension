@@ -1,17 +1,13 @@
 """Domino API host resolution and auth provider configuration.
 
-Two auth modes exist:
+- ``user_auth``: forwarded user JWT from the incoming HTTP request (Studio).
+- ``cli_auth``: API key from ``DOMINO_USER_API_KEY`` / ``DOMINO_API_KEY``.
+  Used by dataset helpers when the process configures it (e.g. some jobs).
+  The ``main.py`` CLI entry does not call ``configure_auth``; it does not
+  use Domino REST APIs.
 
-- ``user_auth``: forwarded user JWT from the incoming HTTP request.
-  Used on HTTP request paths (Studio routes). Raises if no token.
-- ``cli_auth``: API key from env (``DOMINO_USER_API_KEY`` /
-  ``DOMINO_API_KEY``). Used from the CLI / Domino job container.
-  Raises if no key.
-
-The process picks one mode at startup via ``configure_auth(provider)``.
-Shared modules (``domino_client``, ``domino_datasets``, ``dataset_store``)
-call ``current_auth()`` to get credentials without knowing which mode
-they are in.
+Configure once via ``configure_auth(provider)``. Modules such as
+``domino_client`` call ``current_auth()`` when making Domino API requests.
 """
 
 from __future__ import annotations
@@ -49,11 +45,7 @@ _auth_provider: Optional[AuthProvider] = None
 
 
 def configure_auth(provider: AuthProvider) -> None:
-    """Set the process-wide auth provider.
-
-    Call once at startup: ``user_auth`` for the Studio FastAPI app,
-    ``cli_auth`` for the CLI / Domino job container.
-    """
+    """Set the process-wide auth provider (e.g. ``user_auth`` for Studio)."""
     global _auth_provider
     _auth_provider = provider
 
@@ -119,10 +111,3 @@ def resolve_api_host() -> str:
     """
     host = os.environ.get("DOMINO_API_PROXY") or os.environ.get("DOMINO_API_HOST") or ""
     return host.rstrip("/")
-
-
-def resolve_project_id(project_id: Optional[str] = None) -> str:
-    """Return the given project ID. Does not fall back to the app project."""
-    if not project_id:
-        raise RuntimeError("No project ID available")
-    return project_id

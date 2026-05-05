@@ -45,7 +45,7 @@ Common optional variables:
 
 ```bash
 LLM_PROVIDER=anthropic              # or openai (default: anthropic)
-LLM_MODEL=claude-sonnet-4-20250514  # override the provider default
+LLM_MODEL=claude-haiku-4-5  # override the provider default
 MLFLOW_TRACKING_URI=http://localhost:5000
 CODE_ROOT=/path/to/your/ml/project  # default: /mnt/code or current dir
 ```

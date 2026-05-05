@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -212,12 +213,9 @@ class TestGetProjectContext:
         assert pname == "my-model"
         assert powner == "alice"
 
-    def test_without_project_id_returns_nones(self):
-        """When no project_id, should return (None, None, None)."""
-        pid, pname, powner = get_project_context(project_id=None)
-        assert pid is None
-        assert pname is None
-        assert powner is None
+    def test_empty_project_id_raises(self):
+        with pytest.raises(ValueError, match="project_id is required"):
+            get_project_context("")
 
 
 class TestBrowseCodeAndCodeRootOptions:
@@ -288,6 +286,8 @@ class TestSubmitJob:
                 branch="main",
                 tier_id="small",
                 project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
             )
 
         assert run_id == "run-abc-123"
@@ -296,30 +296,62 @@ class TestSubmitJob:
         """Branch should be passed as mainRepoGitRef in the payload."""
         with patch.object(dc, "_domino_request") as mock_req:
             mock_req.return_value = {"id": "run-xyz"}
-            submit_job(command=["python", "main.py"], branch="feature/x", project_id="proj-123")
+            submit_job(
+                command=["python", "main.py"],
+                branch="feature/x",
+                tier_id="",
+                project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
+            )
 
         payload = mock_req.call_args.kwargs["json"]
         assert payload["mainRepoGitRef"] == {"type": "branches", "value": "feature/x"}
 
-    def test_no_project_id_raises_runtime_error(self):
-        """When project_id is None, submit_job should raise."""
-        with pytest.raises(RuntimeError, match="No project ID"):
+    def test_no_project_id_raises_value_error(self):
+        """When project_id is empty, submit_job should raise."""
+        with pytest.raises(ValueError, match="project_id is required"):
             submit_job(
                 command=["python", "main.py"],
                 branch="main",
-                project_id=None,
+                tier_id="",
+                project_id="",
+                environment_id="",
+                environment_revision_id="",
             )
 
     def test_submit_no_branch_no_tier(self):
         """submit_job with no branch or tier should still succeed."""
         with patch.object(dc, "_domino_request") as mock_req:
             mock_req.return_value = {"id": "run-simple"}
-            run_id = submit_job(command=["echo", "hello"], branch=None, project_id="proj-123")
+            run_id = submit_job(
+                command=["echo", "hello"],
+                branch=None,
+                tier_id="",
+                project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
+            )
 
         assert run_id == "run-simple"
         payload = mock_req.call_args.kwargs["json"]
         assert "mainRepoGitRef" not in payload
         assert "overrideHardwareTierId" not in payload
+
+    def test_submit_includes_environment_and_revision(self):
+        with patch.object(dc, "_domino_request") as mock_req:
+            mock_req.return_value = {"id": "run-env"}
+            submit_job(
+                command=["echo", "hi"],
+                branch=None,
+                tier_id="",
+                project_id="proj-123",
+                environment_id="envid00112233445566778899aa",
+                environment_revision_id="revid00112233445566778899aa",
+            )
+        payload = mock_req.call_args.kwargs["json"]
+        assert payload["environmentId"] == "envid00112233445566778899aa"
+        assert payload["environmentRevisionSpec"] == {"revisionId": "revid00112233445566778899aa"}
 
 
 # ===================================================================
@@ -345,52 +377,63 @@ def _make_job_request(**overrides) -> Any:
         pytest.skip("studio package not importable")
 
     defaults = dict(
-        spec_path=None,
-        spec_content=None,
+        spec_path="",
         provider="anthropic",
-        model=None,
-        code_root=None,
-        max_files=None,
-        workers=None,
-        planning_workers=None,
-        timeout=None,
+        model="",
+        code_root="/mnt/code",
+        max_files=50,
+        workers=4,
+        planning_workers=3,
+        timeout=120.0,
         notebook=True,
-        notebook_path=None,
-        experiment_names=None,
-        model_names=None,
+        notebook_path="",
+        filtered_experiment_names="",
+        filtered_model_names="",
         latest_only=False,
-        verbose=False,
-        branch="main",
+        verbose=True,
         hardware_tier="small",
-        spec_filename=None,
-        project_id=None,
-        provider_base_url=None,
+        environment_id="",
+        environment_revision_id="",
+        project_id="",
+        provider_base_url="",
+        max_retries=5,
+        initial_backoff=10.0,
+        max_backoff=120.0,
+        backoff_jitter=0.2,
+        notebook_from_cache=False,
     )
     defaults.update(overrides)
     return _JR(**defaults)
+
+
+_ds = "/domino/datasets/local/autodoc"
 
 
 @skip_no_webapp
 class TestBuildJobCommandStr:
     """Tests for _build_job_command_str (in studio/job_engine.py)."""
 
-    def test_includes_notebook_flag(self):
-        """Domino jobs should always include --notebook."""
-        req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path=None)
+    def test_includes_notebook_flag_when_enabled(self):
+        req = _make_job_request(notebook=True)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml", _ds)
         assert "--notebook" in cmd
+
+    def test_omits_notebook_when_disabled(self):
+        req = _make_job_request(notebook=False)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml", _ds)
+        assert "--notebook" not in cmd
 
     def test_includes_spec_path(self):
         """Spec path should appear in the command."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path="/mnt/data/specs/my_spec.yaml")
+        cmd = _bld_cmd(req, "/mnt/data/specs/my_spec.yaml", _ds)
         assert "--spec" in cmd
         assert "/mnt/data/specs/my_spec.yaml" in cmd
 
     def test_no_artifacts_copy(self):
         """Command should not include any cp or artifacts step."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path=None)
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "cp" not in cmd
         assert "artifacts" not in cmd
 
@@ -399,7 +442,7 @@ class TestBuildJobCommandStr:
             provider="openai",
             provider_base_url="https://api.example/v1",
         )
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "--provider-base-url" in cmd
         assert "https://api.example/v1" in cmd
 
@@ -408,6 +451,14 @@ class TestBuildJobCommandStr:
             provider="anthropic",
             provider_base_url="https://api.anthropic.example",
         )
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
         assert "--provider-base-url" in cmd
         assert "https://api.anthropic.example" in cmd
+
+    def test_includes_language_default_in_command(self):
+        from default_consts import DEFAULT_LANGUAGE
+
+        req = _make_job_request()
+        cmd = _bld_cmd(req, "/spec.yaml", _ds)
+        parts = shlex.split(cmd)
+        assert parts[parts.index("--language") + 1] == DEFAULT_LANGUAGE

@@ -181,13 +181,11 @@ class TestGetModelName:
 
     def test_anthropic_default_model(self):
         s = _make_settings()
-        assert "claude" in s.get_model_name().lower()
+        assert s.get_model_name() == "claude-haiku-4-5"
 
     def test_openai_default_model(self):
         s = _make_settings(LLM_PROVIDER="openai")
-        model = s.get_model_name()
-        # Should return the kimi model default
-        assert "kimi" in model.lower()
+        assert s.get_model_name() == "gpt-5.4-mini"
 
     def test_custom_model_overrides_default(self):
         s = _make_settings(LLM_MODEL="my-custom-model-v2")

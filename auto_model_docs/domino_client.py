@@ -1,10 +1,7 @@
 """Domino API client using direct REST calls (no SDK dependency).
 
-Supports an optional ``project_id`` override so the app can target a
-different project than the one it is running in.  When *project_id* is
-``None`` every helper falls back to the environment variables set by
-the Domino platform (``DOMINO_PROJECT_ID``, ``DOMINO_PROJECT_OWNER``,
-``DOMINO_PROJECT_NAME``).
+Callers pass an explicit ``project_id`` where the API needs a project.
+There is no env-var fallback for project context in this module.
 """
 
 from __future__ import annotations
@@ -13,6 +10,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -177,20 +175,15 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
         return None
 
 
-def get_project_context(
-    project_id: Optional[str] = None,
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
-    """Resolve (project_id, project_name, project_owner).
-
-    Requires *project_id* — does not fall back to the app project.
-    """
-    if not project_id:
-        return None, None, None
-    info = resolve_project(project_id)
+def get_project_context(project_id: str) -> tuple[str, Optional[str], Optional[str]]:
+    """Resolve (project_id, project_name, project_owner)."""
+    pid = project_id.strip()
+    if not pid:
+        raise ValueError("project_id is required")
+    info = resolve_project(pid)
     if info:
         return info.id, info.name, info.owner_username
-    # Resolution failed — return the ID but no name/owner
-    return project_id, None, None
+    return pid, None, None
 
 
 def browse_code(
@@ -223,70 +216,12 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
         if not loc or loc in seen:
             continue
         seen.add(loc)
-        name = str(repo.get("repoName") or "").strip()
-        label = f"{loc} ({name})" if name else loc
-        options.append({"value": loc, "label": label})
+        options.append({"value": loc, "label": loc})
     return {
         "isGitBasedProject": is_git,
         "defaultRoot": manual,
         "options": options,
     }
-
-
-# ---------------------------------------------------------------------------
-# Branches
-# ---------------------------------------------------------------------------
-
-def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]:
-    """List branches in the target project via the Domino git API.
-
-    Requires the project to have been resolved first (to obtain the repo ID).
-    Returns a list of ``{"name": branch_name}`` dicts, or empty on failure.
-    """
-    info = _project_cache.get(project_id)
-    if not info or not info.main_repo_id:
-        info = resolve_project(project_id)
-    if not info or not info.main_repo_id:
-        return []
-
-    try:
-        data = _domino_request(
-            "GET",
-            f"/v4/projects/{project_id}/gitRepositories/{info.main_repo_id}/git/branches",
-            params={"count": 300, "searchPattern": search},
-        )
-        branches = []
-        # Unwrap nested pagination: {"data": {"items": [...], ...}}
-        payload = data
-        if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
-            payload = payload["data"]
-        if isinstance(payload, list):
-            items = payload
-        elif isinstance(payload, dict):
-            items = (
-                payload.get("items")
-                or payload.get("branches")
-                or payload.get("data")
-                or []
-            )
-            # Ensure we got a list, not another nested dict
-            if not isinstance(items, list):
-                items = []
-        else:
-            items = []
-        for item in items:
-            if isinstance(item, dict):
-                name = item.get("name") or item.get("value", "")
-            elif isinstance(item, str):
-                name = item
-            else:
-                continue
-            if name:
-                branches.append({"name": name})
-        return branches
-    except Exception as exc:
-        logger.warning("Failed to list branches via API: %s", exc)
-        return []
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +391,108 @@ def get_project_default_tier() -> Optional[str]:
     return os.environ.get("DOMINO_HARDWARE_TIER_ID") or None
 
 
+def _format_domino_datetime(raw: Any) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, (int, float)):
+        try:
+            ts = float(raw) / 1000.0 if raw > 1e12 else float(raw)
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            return dt.strftime("%B %d, %Y")
+        except Exception:
+            return ""
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.isdigit():
+            return _format_domino_datetime(int(s))
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).strftime("%B %d, %Y")
+        except Exception:
+            return s[:16]
+    if isinstance(raw, dict):
+        v = raw.get("$date")
+        if isinstance(v, (int, float)):
+            return _format_domino_datetime(v)
+        if isinstance(v, str):
+            return _format_domino_datetime(v)
+    return ""
+
+
+def _revision_option_label(rev: dict[str, Any]) -> str:
+    num = rev.get("number")
+    created = rev.get("created")
+    date_s = _format_domino_datetime(created)
+    prefix = f"#{num}" if num is not None else "#?"
+    if date_s:
+        return f"{prefix}: {date_s}"
+    return prefix
+
+
+def list_self_environments() -> list[dict[str, Any]]:
+    try:
+        data = _domino_request("GET", "/v4/environments/self")
+        if isinstance(data, list):
+            raw = data
+        elif isinstance(data, dict):
+            raw = data.get("environments", data.get("data", []))
+        else:
+            raw = []
+        out: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            eid = item.get("id")
+            if eid is None:
+                continue
+            name = (item.get("name") or str(eid)).strip()
+            out.append({"id": str(eid), "name": name})
+        return out
+    except Exception as exc:
+        logger.warning("Failed to list self environments: %s", exc)
+        return []
+
+
+def list_environment_revisions(environment_id: str) -> list[dict[str, Any]]:
+    eid = environment_id.strip()
+    if not eid:
+        return []
+    try:
+        data = _domino_request(
+            "GET",
+            f"/v4/environments/{eid}/page/0/pageSize/1000/revisions",
+        )
+        if isinstance(data, dict):
+            raw_list = data.get("revisions", data.get("data", []))
+        elif isinstance(data, list):
+            raw_list = data
+        else:
+            raw_list = []
+        revs: list[dict[str, Any]] = []
+        for r in raw_list:
+            if not isinstance(r, dict):
+                continue
+            rid = r.get("id")
+            if rid is None:
+                continue
+            rid_s = str(rid)
+            row = {
+                "id": rid_s,
+                "number": r.get("number"),
+                "created": r.get("created"),
+                "active": r.get("active"),
+                "option_label": _revision_option_label(r),
+            }
+            revs.append(row)
+        revs.sort(key=lambda x: (-(x.get("number") or 0), x.get("id") or ""))
+        return revs
+    except Exception as exc:
+        logger.warning("Failed to list environment revisions: %s", exc)
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Job submission
 # ---------------------------------------------------------------------------
@@ -463,17 +500,13 @@ def get_project_default_tier() -> Optional[str]:
 def submit_job(
     command: str | list[str],
     branch: Optional[str],
-    tier_id: Optional[str] = None,
-    project_id: Optional[str] = None,
+    tier_id: str,
+    project_id: str,
+    environment_id: str,
+    environment_revision_id: str,
 ) -> str:
-    """Submit a Domino job via the v1 jobs API and return the job ID.
-
-    When *project_id* is provided the job is started in that project.
-    Otherwise uses the env-var project.
-    """
+    """Submit a Domino job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
-    if not pid:
-        raise RuntimeError("No project ID available to submit a job.")
 
     title = f"AutoDoc: {pname or pid}" + (f" ({branch})" if branch else "")
 
@@ -484,11 +517,20 @@ def submit_job(
         "commandToRun": command_str,
         "title": title,
     }
-    if tier_id:
-        payload["overrideHardwareTierId"] = tier_id
+    tid = tier_id.strip()
+    if tid:
+        payload["overrideHardwareTierId"] = tid
     if branch:
         payload["mainRepoGitRef"] = {"type": "branches", "value": branch}
 
+    eid = environment_id.strip()
+    rid = environment_revision_id.strip()
+    if eid:
+        payload["environmentId"] = eid
+        if rid:
+            payload["environmentRevisionSpec"] = {"revisionId": rid}
+        else:
+            payload["environmentRevisionSpec"] = "ActiveRevision"
 
     try:
         data = _domino_request("POST", "/v4/jobs/start", json=payload)
@@ -605,11 +647,8 @@ def set_ui_host(request_host: str, scheme: str = "https") -> None:
     _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
 
 
-def build_job_url(run_id: str, project_id: Optional[str] = None) -> str | None:
-    """Return the Domino UI URL for a job.
-
-    When *project_id* is given, resolves owner/name from the API cache.
-    """
+def build_job_url(run_id: str, project_id: str) -> str | None:
+    """Return the Domino UI URL for a job."""
     if not _ui_host:
         return None
 
@@ -617,3 +656,22 @@ def build_job_url(run_id: str, project_id: Optional[str] = None) -> str | None:
     if not powner or not pname:
         return None
     return f"{_ui_host}/jobs/{powner}/{pname}/{run_id}/logs?status=all"
+
+
+def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str | None:
+    """Return the Domino UI URL for the autodoc dataset data browser (rw upload path)."""
+    from dataset_manager import AUTODOC_DATASET_NAME
+
+    if not _ui_host:
+        return None
+    ds = (dataset_id or "").strip()
+    if not ds:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+    seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
+    return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"

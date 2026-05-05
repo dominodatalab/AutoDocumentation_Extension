@@ -22,12 +22,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from autodoc.core.config import Settings
 from autodoc.core.models import DocumentSpec
+from default_consts import (
+    DEFAULT_GENERATION_WORKERS,
+    DEFAULT_LANGUAGE,
+    DEFAULT_MAX_FILES,
+    DEFAULT_PLANNING_WORKERS,
+    DEFAULT_PROVIDER,
+    DEFAULT_TIMEOUT,
+)
 from autodoc.llm import LLMClient
 from autodoc.orchestrator import Orchestrator
 from autodoc.scanning import ContentSanitizer
-from domino_auth import configure_auth, cli_auth
-
-configure_auth(cli_auth)
 
 
 console = Console()
@@ -44,13 +49,14 @@ console = Console()
 @click.option(
     "--code-root",
     "-c",
+    required=True,
     type=click.Path(exists=True),
-    help="Root directory of codebase to analyze (default: /mnt/code or ./)",
+    help="Root directory of codebase to analyze",
 )
 @click.option(
     "--provider",
     "-p",
-    default="openai",
+    default=DEFAULT_PROVIDER,
     type=click.Choice(["anthropic", "openai"]),
     help="LLM provider to use",
 )
@@ -98,7 +104,7 @@ console = Console()
 )
 @click.option(
     "--max-files",
-    default=50,
+    default=DEFAULT_MAX_FILES,
     type=int,
     help="Maximum number of files to scan",
 )
@@ -106,13 +112,13 @@ console = Console()
     "--generation-workers",
     "-w",
     "workers",
-    default=4,
+    default=DEFAULT_GENERATION_WORKERS,
     type=int,
     help="Number of parallel workers for content generation",
 )
 @click.option(
     "--planning-workers",
-    default=4,
+    default=DEFAULT_PLANNING_WORKERS,
     type=int,
     help="Number of parallel workers for section planning",
 )
@@ -133,19 +139,21 @@ console = Console()
 )
 @click.option(
     "--timeout",
-    default=120.0,
+    default=DEFAULT_TIMEOUT,
     type=float,
     help="Timeout for individual LLM API calls in seconds (default: 120)",
 )
 @click.option(
-    "--experiments",
+    "--filtered-experiments",
+    "filtered_experiments",
     type=str,
-    help="Comma-separated list of experiment names/patterns to include. Supports wildcards: * (any) and ? (single char). Example: customer_churn*,fraud_detection",
+    help="Comma-separated experiment names/patterns to include. Wildcards: * and ?. Example: customer_churn*,fraud_detection",
 )
 @click.option(
-    "--models", 
+    "--filtered-models",
+    "filtered_models",
     type=str,
-    help="Comma-separated list of model names/patterns to include. Supports wildcards: * (any) and ? (single char). Example: churn*,fraud_detector",
+    help="Comma-separated MLflow model names/patterns to include. Wildcards: * and ?. Example: churn*,fraud_detector",
 )
 @click.option(
     "--latest-only",
@@ -153,9 +161,10 @@ console = Console()
     help="Only include the latest version of each model",
 )
 @click.option(
-    "--disable-project-filtering",
-    is_flag=True,
-    help="Disable automatic Domino project filtering (scan all projects)",
+    "--language",
+    default=DEFAULT_LANGUAGE,
+    type=click.Choice(["auto", "python", "r", "sas", "matlab"], case_sensitive=False),
+    help="Programming language for scanning, or auto to detect from repository files",
 )
 @click.option(
     "--dataset-path",
@@ -165,7 +174,7 @@ console = Console()
 )
 def main(
     spec: str,
-    code_root: str | None,
+    code_root: str,
     provider: str,
     model: str | None,
     provider_base_url: str | None,
@@ -181,10 +190,10 @@ def main(
     notebook_from_cache: bool,
     notebook_path: str | None,
     timeout: float,
-    experiments: str | None,
-    models: str | None,
+    filtered_experiments: str | None,
+    filtered_models: str | None,
     latest_only: bool,
-    disable_project_filtering: bool,
+    language: str,
     dataset_path: str,
 ) -> None:
     """Generate model documentation from ML codebases.
@@ -199,11 +208,23 @@ def main(
 
     Environment variables (can be set in .env file):
 
-        ANTHROPIC_API_KEY - API key for Anthropic Claude
-        OPENAI_API_KEY - API key for OpenAI GPT-4
+        DOMINO_PROJECT_ID - Required. Domino project ID for MLflow filtering metadata.
+        ANTHROPIC_API_KEY / OPENAI_API_KEY - LLM credentials (see Settings)
 
     For full configuration options, see the Settings class in autodoc/core/config.py
     """
+    if not (os.environ.get("DOMINO_PROJECT_ID") or "").strip():
+        console.print(
+            "\n[bold red]Error:[/] DOMINO_PROJECT_ID is required. "
+            "Set it to your Domino project ID before running.",
+            style="red",
+        )
+        sys.exit(1)
+
+    if not str(code_root).strip():
+        console.print("\n[bold red]Error:[/] --code-root must be a non-empty path.", style="red")
+        sys.exit(1)
+
     try:
         # Configure logging based on verbosity
         log_level = logging.INFO if verbose else logging.WARNING
@@ -235,8 +256,7 @@ def main(
             settings.llm_max_backoff = max_backoff
         if backoff_jitter is not None:
             settings.llm_backoff_jitter = backoff_jitter
-        if code_root:
-            settings.code_root = Path(code_root)
+        settings.code_root = Path(code_root)
         if max_files:
             settings.max_files = max_files
         if workers:
@@ -247,7 +267,7 @@ def main(
         from artifact_layout import init_layout, get_layout
         init_layout()
         output_dir = get_layout().docs_dir
-        code_dir = settings.code_root if settings.code_root.exists() else _get_default_code_root()
+        code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)
         if notebook_from_cache:
@@ -259,14 +279,15 @@ def main(
             )
             return
 
-        # Parse CSV filtering options
         experiment_names = None
-        if experiments:
-            experiment_names = [name.strip() for name in experiments.split(",") if name.strip()]
-            
+        if filtered_experiments:
+            experiment_names = [
+                name.strip() for name in filtered_experiments.split(",") if name.strip()
+            ]
+
         model_names = None
-        if models:
-            model_names = [name.strip() for name in models.split(",") if name.strip()]
+        if filtered_models:
+            model_names = [name.strip() for name in filtered_models.split(",") if name.strip()]
 
         # Load document spec
         console.print(f"\n[bold blue]Loading specification:[/] {spec}")
@@ -288,9 +309,6 @@ def main(
             console.print(f"[dim]Max backoff:[/] {settings.llm_max_backoff}")
             console.print(f"[dim]Backoff jitter:[/] {settings.llm_backoff_jitter}")
             console.print(f"[dim]Timeout:[/] {timeout}s")
-            
-            # Show filtering options
-            console.print(f"[dim]Project filtering:[/] {'disabled' if disable_project_filtering else 'enabled'}")
             if experiment_names:
                 console.print(f"[dim]Experiments:[/] {', '.join(experiment_names)}")
             if model_names:
@@ -346,8 +364,8 @@ def main(
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            disable_project_filtering=disable_project_filtering,
             dataset_mount_path=dataset_path,
+            language=language,
         )
 
         # Run generation with progress
@@ -446,17 +464,6 @@ def _regenerate_notebook_from_cache(
     console.print(f"\n[bold green]Success![/] Notebook regenerated:")
     console.print(f"  [cyan]{result_notebook_path}[/]")
     console.print()
-
-
-
-
-def _get_default_code_root() -> Path:
-    """Get default code root directory."""
-    # Check Domino environment first
-    if Path("/mnt/code").exists():
-        return Path("/mnt/code")
-    # Fall back to current directory
-    return Path(".")
 
 
 if __name__ == "__main__":

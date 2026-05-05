@@ -1,7 +1,8 @@
 """Tests for domino_client.py — current REST-based API (no SDK dependency).
 
-Covers: list_hardware_tiers, get_project_default_tier,
-get_job_status, stop_job, set_ui_host, build_job_url,
+Covers: list_hardware_tiers, list_self_environments, list_environment_revisions,
+get_project_default_tier,
+get_job_status, stop_job, set_ui_host, build_job_url, build_autodoc_dataset_data_page_url,
 resolve_project, submit_job with current signatures.
 """
 
@@ -127,6 +128,63 @@ class TestListHardwareTiers:
     def test_api_error_returns_empty(self, mock_req):
         mock_req.side_effect = RuntimeError("API down")
         assert dc.list_hardware_tiers(project_id="proj-123") == []
+
+
+# ---------------------------------------------------------------------------
+# list_self_environments
+# ---------------------------------------------------------------------------
+
+class TestListSelfEnvironments:
+    @patch.object(dc, "_domino_request")
+    def test_parses_array(self, mock_req):
+        mock_req.return_value = [
+            {"id": "e1", "name": "Env A"},
+        ]
+        envs = dc.list_self_environments()
+        assert len(envs) == 1
+        assert envs[0]["id"] == "e1"
+        assert envs[0]["name"] == "Env A"
+        mock_req.assert_called_once_with("GET", "/v4/environments/self")
+
+    @patch.object(dc, "_domino_request")
+    def test_parses_wrapped(self, mock_req):
+        mock_req.return_value = {"environments": [{"id": "e2", "name": "B"}]}
+        envs = dc.list_self_environments()
+        assert envs[0]["id"] == "e2"
+
+    @patch.object(dc, "_domino_request")
+    def test_error_returns_empty(self, mock_req):
+        mock_req.side_effect = OSError("net")
+        assert dc.list_self_environments() == []
+
+
+# ---------------------------------------------------------------------------
+# list_environment_revisions
+# ---------------------------------------------------------------------------
+
+class TestListEnvironmentRevisions:
+    @patch.object(dc, "_domino_request")
+    def test_parses_revisions(self, mock_req):
+        mock_req.return_value = {
+            "revisions": [
+                {"id": "rid1", "number": 1, "created": 1713600000000},
+                {"id": "rid2", "number": 2, "created": 1713700000000},
+            ],
+        }
+        revs = dc.list_environment_revisions("env123")
+        mock_req.assert_called_once_with(
+            "GET",
+            "/v4/environments/env123/page/0/pageSize/1000/revisions",
+        )
+        assert len(revs) == 2
+        assert revs[0]["id"] == "rid2"
+        assert revs[0]["number"] == 2
+        assert "option_label" in revs[0]
+
+    @patch.object(dc, "_domino_request")
+    def test_empty_id_returns_empty(self, mock_req):
+        assert dc.list_environment_revisions("") == []
+        mock_req.assert_not_called()
 
     def test_no_project_id_returns_empty(self):
         assert dc.list_hardware_tiers(project_id=None) == []
@@ -270,7 +328,7 @@ class TestBuildJobUrl:
         assert url == "https://domino.example.com/jobs/test_owner/test_project/run-123/logs?status=all"
 
     def test_none_without_ui_host(self):
-        assert dc.build_job_url("run-123") is None
+        assert dc.build_job_url("run-123", project_id="proj-123") is None
 
     @patch.object(dc, "resolve_project")
     def test_with_cross_project(self, mock_resolve):
@@ -280,6 +338,21 @@ class TestBuildJobUrl:
         )
         url = dc.build_job_url("run-456", project_id="other-proj")
         assert "/bob/other-model/" in url
+
+
+class TestBuildAutodocDatasetDataPageUrl:
+    def test_builds_url(self):
+        dc.set_ui_host("domino.example.com")
+        with patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner")):
+            url = dc.build_autodoc_dataset_data_page_url("proj-123", "ds-uuid-1")
+        assert url == "https://domino.example.com/u/test_owner/test_project/data/rw/upload/autodoc/ds-uuid-1/docs"
+
+    def test_none_without_ui_host(self):
+        assert dc.build_autodoc_dataset_data_page_url("proj-123", "ds-1") is None
+
+    def test_none_empty_dataset_id(self):
+        dc.set_ui_host("domino.example.com")
+        assert dc.build_autodoc_dataset_data_page_url("proj-123", "  ") is None
 
 
 # ---------------------------------------------------------------------------
@@ -324,14 +397,16 @@ class TestSubmitJob:
     @patch.object(dc, "_domino_request")
     def test_returns_run_id(self, mock_req, _mock_ctx):
         mock_req.return_value = {"id": "run-abc"}
-        run_id = dc.submit_job("python main.py", "main", project_id="proj-123")
+        run_id = dc.submit_job(
+            "python main.py", "main", "", "proj-123", "", "",
+        )
         assert run_id == "run-abc"
 
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
     @patch.object(dc, "_domino_request")
     def test_includes_branch(self, mock_req, _mock_ctx):
         mock_req.return_value = {"id": "run-1"}
-        dc.submit_job("python main.py", "feature/x", project_id="proj-123")
+        dc.submit_job("python main.py", "feature/x", "", "proj-123", "", "")
         payload = mock_req.call_args.kwargs["json"]
         assert payload["mainRepoGitRef"] == {"type": "branches", "value": "feature/x"}
 
@@ -339,7 +414,7 @@ class TestSubmitJob:
     @patch.object(dc, "_domino_request")
     def test_no_branch(self, mock_req, _mock_ctx):
         mock_req.return_value = {"id": "run-1"}
-        dc.submit_job("python main.py", None, project_id="proj-123")
+        dc.submit_job("python main.py", None, "", "proj-123", "", "")
         payload = mock_req.call_args.kwargs["json"]
         assert "mainRepoGitRef" not in payload
 
@@ -347,7 +422,7 @@ class TestSubmitJob:
     @patch.object(dc, "_domino_request")
     def test_includes_tier(self, mock_req, _mock_ctx):
         mock_req.return_value = {"id": "run-1"}
-        dc.submit_job("python main.py", None, tier_id="gpu-large", project_id="proj-123")
+        dc.submit_job("python main.py", None, "gpu-large", "proj-123", "", "")
         payload = mock_req.call_args.kwargs["json"]
         assert payload["overrideHardwareTierId"] == "gpu-large"
 
@@ -356,11 +431,11 @@ class TestSubmitJob:
     def test_raises_on_missing_run_id(self, mock_req, _mock_ctx):
         mock_req.return_value = {"unexpected": "response"}
         with pytest.raises(ValueError, match="unexpected response"):
-            dc.submit_job("python main.py", None, project_id="proj-123")
+            dc.submit_job("python main.py", None, "", "proj-123", "", "")
 
     def test_raises_on_no_project(self):
-        with pytest.raises(RuntimeError, match="No project ID"):
-            dc.submit_job("python main.py", None, project_id=None)
+        with pytest.raises(ValueError, match="project_id is required"):
+            dc.submit_job("python main.py", None, "", "", "", "")
 
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
     @patch.object(dc, "_domino_request")
@@ -380,7 +455,7 @@ class TestSubmitJob:
             return {"id": "run-retry"}
 
         mock_req.side_effect = side_effect
-        run_id = dc.submit_job("python main.py", "bad-branch", project_id="proj-123")
+        run_id = dc.submit_job("python main.py", "bad-branch", "", "proj-123", "", "")
         assert run_id == "run-retry"
         assert mock_req.call_count == 2
         # Final payload (shared reference) should not have mainRepoGitRef

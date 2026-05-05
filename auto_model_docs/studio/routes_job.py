@@ -2,29 +2,28 @@
 
 from __future__ import annotations
 
-from fasthtml.common import *
+import json
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
+from starlette.responses import Response
 
 import auth_context
 from authorization import (
     require_domino_job_list,
     require_domino_job_start,
-    require_domino_job_stop,
 )
+
+from dataset_manager import AUTODOC_DATASET_NAME
 
 from .state import (
     _resolve_request_project_id,
-    _resolve_request_dataset_ids,
-    domino_client,
+    domino_datasets,
     domino_job_store,
-)
-from .ui_components import (
-    _render_job_history_table,
+    logger,
 )
 from .job_engine import (
     _parse_request,
     _submit_domino_job,
-    sync_jobs_for,
 )
 
 
@@ -35,90 +34,119 @@ def _current_owner_id() -> str:
         return ""
 
 
+def _json(data, status_code: int = 200) -> Response:
+    return Response(json.dumps(data), status_code=status_code, media_type="application/json")
+
+
+def _error_body(exc: HTTPException) -> str:
+    d = exc.detail
+    if isinstance(d, str):
+        return d
+    if isinstance(d, dict):
+        inner = d.get("detail")
+        if isinstance(inner, str):
+            return inner
+    return "Request failed."
+
+
+def _jobs_payload(project_id: str, owner_id: str) -> list:
+    if not owner_id or not project_id:
+        return []
+    try:
+        return domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
+    except RuntimeError:
+        return []
+
+
+def _job_history_document_url(project_id: str) -> str:
+    try:
+        rows = domino_datasets.list_datasets(project_id)
+    except Exception:
+        logger.debug("list_datasets for document_url failed", exc_info=True)
+        return ""
+    if not isinstance(rows, list):
+        return ""
+    ds_id = ""
+    for d in rows or []:
+        if str(d.get("name") or "") != AUTODOC_DATASET_NAME:
+            continue
+        ds_id = str(d.get("id") or "").strip()
+        break
+    if not ds_id:
+        return ""
+    import domino_client
+
+    u = domino_client.build_autodoc_dataset_data_page_url(project_id, ds_id)
+    return u or ""
+
+
 def register_job_routes(rt):
 
     async def run(req: Request):
         owner_id = _current_owner_id()
-        ds_id, snap_id = _resolve_request_dataset_ids(req)
         if not owner_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
-        job_request = await _parse_request(req)
-        if not job_request.project_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
-        require_domino_job_start(job_request.project_id)
+            return _json({"error": "Not authenticated."}, 401)
         try:
-            await _submit_domino_job(job_request, owner_id, ds_id, snap_id)
-        except Exception as exc:
-            if ds_id and snap_id:
-                job_id = domino_job_store.create_job(
-                    ds_id, snap_id,
-                    owner_id=owner_id, branch=job_request.branch,
-                    tier=job_request.hardware_tier, spec_path=job_request.spec_path,
-                    project_id=job_request.project_id,
-                )
-                domino_job_store.update_job(ds_id, snap_id, job_id, status="failed", domino_status=str(exc))
-        return _render_job_history_table(owner_id, ds_id, snap_id)
+            job_request = await _parse_request(req)
+        except RuntimeError as e:
+            return _json({"error": str(e)}, 400)
+        if not job_request.project_id:
+            return _json({"error": "Project ID is required."}, 400)
+        try:
+            ensured = domino_datasets.ensure_dataset(job_request.project_id)
+            dataset_mount_path = domino_datasets.resolve_dataset_mount_path(ensured)
+        except Exception:
+            logger.exception("ensure_dataset or mount path resolution failed for project %s", job_request.project_id)
+            return _json(
+                {"error": "Could not prepare the documentation dataset. Try again later."},
+                500,
+            )
+        try:
+            require_domino_job_start(job_request.project_id)
+        except HTTPException as e:
+            return _json({"error": _error_body(e)}, e.status_code)
+        try:
+            run_id, job_url = await _submit_domino_job(job_request, dataset_mount_path)
+        except ValueError as e:
+            return _json({"error": str(e)}, 400)
+        except Exception:
+            return _json({"error": "Job submission failed. Try again later."}, 500)
+        domino_job_store.record_job(
+            owner_id,
+            job_request.project_id,
+            domino_run_id=run_id,
+            job_url=job_url,
+            hardware_tier=(job_request.hardware_tier or "").strip(),
+            spec_path=(job_request.spec_path or "").strip(),
+        )
+        return _json({"ok": True}, 200)
 
     rt("/run")(run)
 
     async def job_history(req: Request):
         owner_id = _current_owner_id()
-        ds_id, snap_id = _resolve_request_dataset_ids(req)
         if not owner_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
+            return _json({"jobs": [], "document_url": ""})
         project_id = _resolve_request_project_id(req)
         if not project_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
+            return _json({"jobs": [], "document_url": ""})
         require_domino_job_list(project_id)
-        if ds_id and snap_id:
-            sync_jobs_for(owner_id, ds_id, snap_id)
-        return _render_job_history_table(owner_id, ds_id, snap_id)
+        jobs = _jobs_payload(project_id, owner_id)
+        return _json({"jobs": jobs, "document_url": _job_history_document_url(project_id)})
 
     rt("/job-history")(job_history)
 
     async def cancel_queued_jobs(req: Request):
         owner_id = _current_owner_id()
-        ds_id, snap_id = _resolve_request_dataset_ids(req)
         if not owner_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
+            return _json({"ok": False, "error": "not authenticated", "jobs": [], "document_url": ""})
         project_id = _resolve_request_project_id(req)
         if not project_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
+            return _json({"ok": False, "error": "missing project_id", "jobs": [], "document_url": ""})
         require_domino_job_list(project_id)
-        if ds_id and snap_id:
-            domino_job_store.cancel_queued_jobs(ds_id, snap_id, owner_id)
-        return _render_job_history_table(owner_id, ds_id, snap_id)
+        domino_job_store.cancel_queued_jobs(project_id, owner_id)
+        jobs = _jobs_payload(project_id, owner_id)
+        return _json({"ok": True, "jobs": jobs, "document_url": _job_history_document_url(project_id)})
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
 
-    async def stop_job_history(req: Request):
-        owner_id = _current_owner_id()
-        ds_id, snap_id = _resolve_request_dataset_ids(req)
-        if not owner_id:
-            return _render_job_history_table(owner_id, ds_id, snap_id)
-        form = await req.form()
-        job_id = form.get("job_id")
-        if job_id:
-            project_id = _resolve_request_project_id(req)
-            if not project_id:
-                return _render_job_history_table(owner_id, ds_id, snap_id)
-            ds_id = form.get("datasetId", "") or ds_id
-            snap_id = form.get("snapshotId", "") or snap_id
-            if ds_id and snap_id:
-                row = domino_job_store.get_job(ds_id, snap_id, job_id)
-                if row and row.get("owner_id") != owner_id:
-                    return _render_job_history_table(owner_id, ds_id, snap_id)
-                if row and row.get("domino_run_id"):
-                    require_domino_job_stop(row["domino_run_id"])
-                    try:
-                        domino_client.stop_job(
-                            row["domino_run_id"],
-                            project_id=row.get("project_id"),
-                        )
-                    except Exception:
-                        pass
-                if row:
-                    domino_job_store.update_job(ds_id, snap_id, job_id, status="cancelled")
-        return _render_job_history_table(owner_id, ds_id, snap_id)
-
-    rt("/stop-job-history")(stop_job_history)

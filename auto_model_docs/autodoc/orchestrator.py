@@ -24,6 +24,7 @@ from autodoc.core.models import (
     SectionResult,
     SectionSpec,
     detect_language,
+    get_language_profile,
 )
 from autodoc.generation import ContentGenerator, DocumentBuilder, NotebookBuilder, SectionPlanner
 from autodoc.llm import LLMClient
@@ -67,8 +68,8 @@ class Orchestrator:
         experiment_names: Optional[List[str]] = None,
         model_names: Optional[List[str]] = None,
         latest_only: bool = False,
-        disable_project_filtering: bool = False,
         dataset_mount_path: str = "",
+        language: str = "auto",
     ):
         """Initialize the orchestrator.
 
@@ -88,7 +89,6 @@ class Orchestrator:
             experiment_names: List of experiment names to include.
             model_names: List of specific model names to include.
             latest_only: Only include the latest version of each model.
-            disable_project_filtering: Disable automatic Domino project filtering.
         """
         self.llm = llm
         self.code_root = code_root
@@ -97,10 +97,14 @@ class Orchestrator:
         self.notebook_path = notebook_path
         self.dataset_mount_path = dataset_mount_path
 
-        # Detect language before creating sanitizer and scanner
-        detected_profile, detected_count = detect_language(code_root)
-        self.language_profile: LanguageProfile = detected_profile or PYTHON_PROFILE
-        self.detected_file_count: int = detected_count
+        _lang = str(language or "auto").strip().lower()
+        if _lang != "auto":
+            self.language_profile = get_language_profile(_lang)
+            self.detected_file_count = 0
+        else:
+            detected_profile, detected_count = detect_language(code_root)
+            self.language_profile = detected_profile or PYTHON_PROFILE
+            self.detected_file_count = detected_count
 
         # Create sanitizer with language-specific secret patterns
         # Separate regex patterns from file-name patterns
@@ -137,7 +141,6 @@ class Orchestrator:
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            disable_project_filtering=disable_project_filtering,
         )
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
