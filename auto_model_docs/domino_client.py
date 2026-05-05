@@ -1,10 +1,7 @@
 """Domino API client using direct REST calls (no SDK dependency).
 
-Supports an optional ``project_id`` override so the app can target a
-different project than the one it is running in.  When *project_id* is
-``None`` every helper falls back to the environment variables set by
-the Domino platform (``DOMINO_PROJECT_ID``, ``DOMINO_PROJECT_OWNER``,
-``DOMINO_PROJECT_NAME``).
+Callers pass an explicit ``project_id`` where the API needs a project.
+There is no env-var fallback for project context in this module.
 """
 
 from __future__ import annotations
@@ -13,9 +10,27 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, List, Optional
+
+if TYPE_CHECKING:
+    from autodoc.core.models import (
+        ArtifactResult,
+        BundleAttachment,
+        BundleSummary,
+        ComputedPolicy,
+        GovernanceFinding,
+    )
 
 logger = logging.getLogger(__name__)
+
+# Governance v1 (rai-guardrails-service), same host as other Domino API calls:
+#   GET  /api/governance/v1/bundles?projectId[]=<projectId>
+#   POST /api/governance/v1/rpc/compute-policy  body: bundleId, policyId
+#   GET  /api/governance/v1/bundles/<bundleId>/findings
+# v1 does not call GET /api/governance/v1/bundles/<bundleId> (list + compute-policy only).
+# Model page modelId query param = MLflow registered model name; match attachments where
+# type ModelVersion and identifier.name equals modelId.
 
 # ---------------------------------------------------------------------------
 # Domino status → local status mapping
@@ -72,15 +87,16 @@ def _domino_request(
     params: dict[str, Any] | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
     max_retries: int = _DEFAULT_MAX_RETRIES,
+    base_url: str | None = None,
 ) -> Any:
     """Send a synchronous HTTP request to the Domino API with retry logic."""
     import httpx
 
-    base_url = _resolve_api_host()
-    if not base_url:
+    resolved_base = (base_url if base_url is not None else _resolve_api_host()).rstrip("/")
+    if not resolved_base:
         raise RuntimeError("Domino API host is not configured. Set DOMINO_API_HOST.")
 
-    url = f"{base_url}{path}"
+    url = f"{resolved_base}{path}"
     last_exc: Exception | None = None
 
     for attempt in range(max_retries + 1):
@@ -177,20 +193,15 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
         return None
 
 
-def get_project_context(
-    project_id: Optional[str] = None,
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
-    """Resolve (project_id, project_name, project_owner).
-
-    Requires *project_id* — does not fall back to the app project.
-    """
-    if not project_id:
-        return None, None, None
-    info = resolve_project(project_id)
+def get_project_context(project_id: str) -> tuple[str, Optional[str], Optional[str]]:
+    """Resolve (project_id, project_name, project_owner)."""
+    pid = project_id.strip()
+    if not pid:
+        raise ValueError("project_id is required")
+    info = resolve_project(pid)
     if info:
         return info.id, info.name, info.owner_username
-    # Resolution failed — return the ID but no name/owner
-    return project_id, None, None
+    return pid, None, None
 
 
 def browse_code(
@@ -209,84 +220,132 @@ def browse_code(
     return _domino_request("GET", "/v4/code/browseCode", params=params)
 
 
-def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, Any]:
-    """Build combobox payload from browseCode JSON (projectSettings)."""
+def git_browse(owner_username: str, project_name: str) -> dict[str, Any]:
+    """GET /v4/code/gitBrowse. Returns project git browse info including imported repos."""
+    params: dict[str, Any] = {
+        "ownerUsername": owner_username,
+        "projectName": project_name,
+    }
+    return _domino_request("GET", "/v4/code/gitBrowse", params=params)
+
+
+def get_code_paths(project_id: str) -> dict[str, Any]:
+    """Return {default, paths} for the code path selector.
+
+    default is /mnt/code (GBP) or /mnt (DFS).
+    paths includes default plus the location of each imported git repo.
+    """
+    info = resolve_project(project_id)
+    if not info:
+        raise ValueError(f"Could not resolve project {project_id}")
+    browse = browse_code(info.owner_username, info.name)
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
-    manual = "/mnt/code" if is_git else "/mnt"
-    options: list[dict[str, str]] = [{"value": manual, "label": manual}]
-    seen: set[str] = {manual}
-    for repo in ps.get("repositories") or []:
-        if not isinstance(repo, dict):
-            continue
-        loc = str(repo.get("location") or "").strip()
-        if not loc or loc in seen:
-            continue
-        seen.add(loc)
-        name = str(repo.get("repoName") or "").strip()
-        label = f"{loc} ({name})" if name else loc
-        options.append({"value": loc, "label": label})
-    return {
-        "isGitBasedProject": is_git,
-        "defaultRoot": manual,
-        "options": options,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Branches
-# ---------------------------------------------------------------------------
-
-def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]:
-    """List branches in the target project via the Domino git API.
-
-    Requires the project to have been resolved first (to obtain the repo ID).
-    Returns a list of ``{"name": branch_name}`` dicts, or empty on failure.
-    """
-    info = _project_cache.get(project_id)
-    if not info or not info.main_repo_id:
-        info = resolve_project(project_id)
-    if not info or not info.main_repo_id:
-        return []
-
+    default_path = "/mnt/code" if is_git else "/mnt"
+    paths: list[str] = [default_path]
     try:
-        data = _domino_request(
-            "GET",
-            f"/v4/projects/{project_id}/gitRepositories/{info.main_repo_id}/git/branches",
-            params={"count": 300, "searchPattern": search},
-        )
-        branches = []
-        # Unwrap nested pagination: {"data": {"items": [...], ...}}
-        payload = data
-        if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
-            payload = payload["data"]
-        if isinstance(payload, list):
-            items = payload
-        elif isinstance(payload, dict):
-            items = (
-                payload.get("items")
-                or payload.get("branches")
-                or payload.get("data")
-                or []
-            )
-            # Ensure we got a list, not another nested dict
-            if not isinstance(items, list):
-                items = []
-        else:
-            items = []
-        for item in items:
-            if isinstance(item, dict):
-                name = item.get("name") or item.get("value", "")
-            elif isinstance(item, str):
-                name = item
-            else:
-                continue
-            if name:
-                branches.append({"name": name})
-        return branches
+        git_data = git_browse(info.owner_username, info.name)
+        for repo in (git_data or {}).get("repositories") or []:
+            loc = (repo or {}).get("location", "").strip()
+            if loc and loc not in paths:
+                paths.append(loc)
     except Exception as exc:
-        logger.warning("Failed to list branches via API: %s", exc)
-        return []
+        logger.warning("get_code_paths: gitBrowse failed: %s", exc)
+    return {"default": default_path, "paths": paths}
+
+
+def get_project_code_root(owner_username: str, project_name: str) -> str:
+    """Return the code root path for a project (/mnt/code for git-based, /mnt otherwise)."""
+    browse = browse_code(owner_username, project_name, path_string="")
+    ps = browse.get("projectSettings") or {}
+    is_git = bool(ps.get("isGitBasedProject"))
+    return "/mnt/code" if is_git else "/mnt"
+
+
+def get_code_source_info(project_id: str) -> dict[str, Any]:
+    """Return {is_git, repo_id, location} for the project's default code source."""
+    info = resolve_project(project_id)
+    if not info:
+        raise ValueError(f"Could not resolve project {project_id}")
+    browse = browse_code(info.owner_username, info.name)
+    ps = browse.get("projectSettings") or {}
+    is_git = bool(ps.get("isGitBasedProject"))
+    repo_id: Optional[str] = None
+    location = "/mnt/code" if is_git else "/mnt"
+    if is_git:
+        try:
+            proj_data = _domino_request("GET", f"/v4/projects/{project_id}")
+            main_repo = (proj_data or {}).get("mainRepository") or {}
+            rid = main_repo.get("id")
+            if rid:
+                repo_id = str(rid)
+        except Exception as exc:
+            logger.warning("get_code_source_info: mainRepository lookup failed: %s", exc)
+    return {"is_git": is_git, "repo_id": repo_id, "location": location}
+
+
+def browse_gbp_code(project_id: str, repo_id: str, directory: str = "") -> list[dict[str, Any]]:
+    """Browse files in a GBP git repo at the given directory path."""
+    params: dict[str, Any] = {}
+    if directory:
+        params["directory"] = directory
+    data = _domino_request(
+        "GET",
+        f"/v4/projects/{project_id}/gitRepositories/{repo_id}/git/browse",
+        params=params,
+    )
+    inner = data.get("data") or {}
+    items = inner.get("items") or data.get("items") or []
+    result: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind", "")
+        result.append({
+            "fileName": item.get("name", ""),
+            "isDirectory": kind == "dir",
+        })
+    return result
+
+
+def browse_dfs_code(owner_username: str, project_name: str, file_path: str = "") -> list[dict[str, Any]]:
+    """Browse DFS code files/directories at the given path."""
+    fp = (file_path or "").strip() or "/"
+    params: dict[str, Any] = {
+        "ownerUsername": owner_username,
+        "projectName": project_name,
+        "filePath": fp,
+    }
+    result: list[dict[str, Any]] = []
+    try:
+        dirs = _domino_request("GET", "/v4/files/browseDirectories", params=params)
+        for d in (dirs if isinstance(dirs, list) else []):
+            if isinstance(d, dict):
+                result.append({"fileName": d.get("name", ""), "isDirectory": True})
+    except Exception as exc:
+        logger.warning("browse_dfs_code directories failed: %s", exc)
+    try:
+        files = _domino_request("GET", "/v4/files/browseFiles", params=params)
+        for f in (files if isinstance(files, list) else []):
+            if isinstance(f, dict):
+                result.append({"fileName": f.get("name", ""), "isDirectory": False})
+    except Exception as exc:
+        logger.warning("browse_dfs_code files failed: %s", exc)
+    return result
+
+
+def read_gbp_file_raw(project_id: str, repo_id: str, file_path: str) -> bytes:
+    """Read raw file content from a GBP git repo."""
+    import httpx
+    base_url = _resolve_api_host()
+    if not base_url:
+        raise RuntimeError("Domino API host is not configured")
+    url = f"{base_url}/v4/projects/{project_id}/gitRepositories/{repo_id}/git/raw"
+    headers = _get_auth_headers()
+    with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
+        resp = client.get(url, params={"fileName": file_path}, headers=headers)
+        resp.raise_for_status()
+        return resp.content
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +515,108 @@ def get_project_default_tier() -> Optional[str]:
     return os.environ.get("DOMINO_HARDWARE_TIER_ID") or None
 
 
+def _format_domino_datetime(raw: Any) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, (int, float)):
+        try:
+            ts = float(raw) / 1000.0 if raw > 1e12 else float(raw)
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            return dt.strftime("%B %d, %Y")
+        except Exception:
+            return ""
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.isdigit():
+            return _format_domino_datetime(int(s))
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).strftime("%B %d, %Y")
+        except Exception:
+            return s[:16]
+    if isinstance(raw, dict):
+        v = raw.get("$date")
+        if isinstance(v, (int, float)):
+            return _format_domino_datetime(v)
+        if isinstance(v, str):
+            return _format_domino_datetime(v)
+    return ""
+
+
+def _revision_option_label(rev: dict[str, Any]) -> str:
+    num = rev.get("number")
+    created = rev.get("created")
+    date_s = _format_domino_datetime(created)
+    prefix = f"#{num}" if num is not None else "#?"
+    if date_s:
+        return f"{prefix}: {date_s}"
+    return prefix
+
+
+def list_self_environments() -> list[dict[str, Any]]:
+    try:
+        data = _domino_request("GET", "/v4/environments/self")
+        if isinstance(data, list):
+            raw = data
+        elif isinstance(data, dict):
+            raw = data.get("environments", data.get("data", []))
+        else:
+            raw = []
+        out: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            eid = item.get("id")
+            if eid is None:
+                continue
+            name = (item.get("name") or str(eid)).strip()
+            out.append({"id": str(eid), "name": name})
+        return out
+    except Exception as exc:
+        logger.warning("Failed to list self environments: %s", exc)
+        return []
+
+
+def list_environment_revisions(environment_id: str) -> list[dict[str, Any]]:
+    eid = environment_id.strip()
+    if not eid:
+        return []
+    try:
+        data = _domino_request(
+            "GET",
+            f"/v4/environments/{eid}/page/0/pageSize/1000/revisions",
+        )
+        if isinstance(data, dict):
+            raw_list = data.get("revisions", data.get("data", []))
+        elif isinstance(data, list):
+            raw_list = data
+        else:
+            raw_list = []
+        revs: list[dict[str, Any]] = []
+        for r in raw_list:
+            if not isinstance(r, dict):
+                continue
+            rid = r.get("id")
+            if rid is None:
+                continue
+            rid_s = str(rid)
+            row = {
+                "id": rid_s,
+                "number": r.get("number"),
+                "created": r.get("created"),
+                "active": r.get("active"),
+                "option_label": _revision_option_label(r),
+            }
+            revs.append(row)
+        revs.sort(key=lambda x: (-(x.get("number") or 0), x.get("id") or ""))
+        return revs
+    except Exception as exc:
+        logger.warning("Failed to list environment revisions: %s", exc)
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Job submission
 # ---------------------------------------------------------------------------
@@ -463,19 +624,15 @@ def get_project_default_tier() -> Optional[str]:
 def submit_job(
     command: str | list[str],
     branch: Optional[str],
-    tier_id: Optional[str] = None,
-    project_id: Optional[str] = None,
+    tier_id: str,
+    project_id: str,
+    environment_id: str,
+    environment_revision_id: str,
 ) -> str:
-    """Submit a Domino job via the v1 jobs API and return the job ID.
-
-    When *project_id* is provided the job is started in that project.
-    Otherwise uses the env-var project.
-    """
+    """Submit a Domino job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
-    if not pid:
-        raise RuntimeError("No project ID available to submit a job.")
 
-    title = f"AutoDoc: {pname or pid}" + (f" ({branch})" if branch else "")
+    title = f"Model Docs: {pname or pid}" + (f" ({branch})" if branch else "")
 
     command_str = " ".join(command) if isinstance(command, list) else command
 
@@ -484,11 +641,20 @@ def submit_job(
         "commandToRun": command_str,
         "title": title,
     }
-    if tier_id:
-        payload["overrideHardwareTierId"] = tier_id
+    tid = tier_id.strip()
+    if tid:
+        payload["overrideHardwareTierId"] = tid
     if branch:
         payload["mainRepoGitRef"] = {"type": "branches", "value": branch}
 
+    eid = environment_id.strip()
+    rid = environment_revision_id.strip()
+    if eid:
+        payload["environmentId"] = eid
+        if rid:
+            payload["environmentRevisionSpec"] = {"revisionId": rid}
+        else:
+            payload["environmentRevisionSpec"] = "ActiveRevision"
 
     try:
         data = _domino_request("POST", "/v4/jobs/start", json=payload)
@@ -605,11 +771,8 @@ def set_ui_host(request_host: str, scheme: str = "https") -> None:
     _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
 
 
-def build_job_url(run_id: str, project_id: Optional[str] = None) -> str | None:
-    """Return the Domino UI URL for a job.
-
-    When *project_id* is given, resolves owner/name from the API cache.
-    """
+def build_job_url(run_id: str, project_id: str) -> str | None:
+    """Return the Domino UI URL for a job."""
     if not _ui_host:
         return None
 
@@ -617,3 +780,296 @@ def build_job_url(run_id: str, project_id: Optional[str] = None) -> str | None:
     if not powner or not pname:
         return None
     return f"{_ui_host}/jobs/{powner}/{pname}/{run_id}/logs?status=all"
+
+
+def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str | None:
+    """Return the Domino UI URL for the autodoc dataset data browser (rw upload path)."""
+    from dataset_manager import AUTODOC_DATASET_NAME
+
+    if not _ui_host:
+        return None
+    ds = (dataset_id or "").strip()
+    if not ds:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+    seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
+    return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
+
+
+def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
+    """Return the Domino UI URL for the artifacts browser at docs/<run_id[:8]>."""
+    if not _ui_host:
+        return None
+    rid = (run_id or "").strip()
+    if not rid:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+    short = rid[:8]
+    return f"{_ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"
+
+
+def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | None:
+    """Download an artifact file from a project's DFS at HEAD.
+
+    Uses GET /u/<owner>/<project>/raw/latest/<path>?inline=false, which redirects
+    to the commit-pinned URL and returns the file bytes. Returns None on 404.
+    """
+    import httpx
+
+    api_host = _resolve_api_host()
+    if not api_host:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+
+    path = (artifact_path or "").lstrip("/")
+    url = f"{api_host}/u/{powner}/{pname}/raw/latest/{path}"
+    headers = _get_auth_headers()
+    try:
+        with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
+            resp = client.get(url, params={"inline": "false"}, headers=headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.content
+    except Exception:
+        logger.exception("download_artifact_at_head failed for %s %s", project_id, artifact_path)
+        return None
+
+
+_GOVERNANCE_BASE = "/api/governance/v1"
+_DEFAULT_BUNDLE_PAGE_LIMIT = 25
+
+
+def normalize_governance_api_host(raw: str) -> str:
+    from urllib.parse import urlparse, urlunparse
+
+    value = (raw or "").strip().rstrip("/")
+    if not value:
+        raise ValueError("governance api host is required")
+    candidate = value if "://" in value else f"https://{value}"
+    parsed = urlparse(candidate)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(f"invalid governance api host: {raw!r}")
+    netloc = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
+    return urlunparse((parsed.scheme, netloc, "", "", "", "")).rstrip("/")
+
+
+def _governance_request(
+    method: str,
+    path: str,
+    *,
+    api_host: str,
+    json: Any = None,
+    params: dict[str, Any] | None = None,
+    timeout: float = _DEFAULT_TIMEOUT,
+    max_retries: int = _DEFAULT_MAX_RETRIES,
+) -> Any:
+    base_url = normalize_governance_api_host(api_host)
+    return _domino_request(
+        method,
+        path,
+        json=json,
+        params=params,
+        timeout=timeout,
+        max_retries=max_retries,
+        base_url=base_url,
+    )
+
+
+def _parse_governance_attachment(raw: dict[str, Any]) -> "BundleAttachment":
+    from autodoc.core.models import BundleAttachment
+
+    return BundleAttachment(
+        id=str(raw.get("id", "")),
+        type=str(raw.get("type", "")),
+        identifier=raw.get("identifier") or {},
+    )
+
+
+def _parse_governance_bundle(raw: dict[str, Any]) -> "BundleSummary":
+    from autodoc.core.models import BundleSummary
+
+    attachments = [
+        _parse_governance_attachment(a)
+        for a in (raw.get("attachments") or [])
+        if isinstance(a, dict)
+    ]
+    created_by = raw.get("createdBy") or {}
+    owner_username = None
+    owner_display_name = None
+    if isinstance(created_by, dict):
+        owner_username = created_by.get("userName") or created_by.get("username")
+        first = (created_by.get("firstName") or "").strip()
+        last = (created_by.get("lastName") or "").strip()
+        full = f"{first} {last}".strip()
+        if full:
+            owner_display_name = full
+    project_owner = raw.get("projectOwner") or None
+
+    return BundleSummary(
+        id=str(raw.get("id", "")),
+        name=str(raw.get("name", "")),
+        project_id=str(raw.get("projectId", "")),
+        policy_id=str(raw.get("policyId", "")),
+        policy_name=str(raw.get("policyName", "")),
+        state=str(raw.get("state", "")),
+        evidence_restricted=bool(raw.get("evidenceRestricted", False)),
+        stage=raw.get("stage") or None,
+        classification_value=raw.get("classificationValue") or None,
+        owner_username=str(owner_username) if owner_username else None,
+        owner_display_name=str(owner_display_name) if owner_display_name else None,
+        project_owner=str(project_owner) if project_owner else None,
+        attachments=attachments,
+        created_at=raw.get("createdAt") or None,
+    )
+
+
+def _parse_governance_finding(raw: dict[str, Any]) -> "GovernanceFinding":
+    from autodoc.core.models import GovernanceFinding
+
+    assignee_obj = raw.get("assignee") or {}
+    approver_obj = raw.get("approver") or {}
+    return GovernanceFinding(
+        id=str(raw.get("id", "")),
+        bundle_id=str(raw.get("bundleId", "")),
+        name=str(raw.get("name", "")),
+        severity=str(raw.get("severity", "")),
+        status=str(raw.get("status", "")),
+        description=raw.get("description") or None,
+        assignee=assignee_obj.get("name") if isinstance(assignee_obj, dict) else None,
+        approver=approver_obj.get("name") if isinstance(approver_obj, dict) else None,
+        due_date=raw.get("dueDate") or None,
+    )
+
+
+def _parse_governance_result(raw: dict[str, Any]) -> "ArtifactResult":
+    from autodoc.core.models import ArtifactResult
+
+    return ArtifactResult(
+        id=str(raw.get("id", "")),
+        evidence_id=str(raw.get("evidenceId", "")),
+        bundle_id=str(raw.get("bundleId", "")),
+        artifact_id=str(raw.get("artifactId", "")),
+        artifact_content=raw.get("artifactContent"),
+        is_latest=bool(raw.get("isLatest", False)),
+    )
+
+
+def _governance_bundle_items(data: Any) -> list[dict[str, Any]]:
+    items = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return []
+    return [b for b in items if isinstance(b, dict)]
+
+
+def _governance_page_exhausted(data: dict[str, Any], offset: int, fetched_count: int) -> bool:
+    if fetched_count == 0:
+        return True
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        return True
+    pagination = meta.get("pagination")
+    if not isinstance(pagination, dict):
+        return True
+    total = pagination.get("totalCount")
+    limit = pagination.get("limit") or _DEFAULT_BUNDLE_PAGE_LIMIT
+    if total is None:
+        return fetched_count < limit
+    return offset + fetched_count >= total
+
+
+def list_bundles(project_id: str, *, api_host: str) -> "List[BundleSummary]":
+    offset = 0
+    limit = _DEFAULT_BUNDLE_PAGE_LIMIT
+    all_bundles: list[Any] = []
+    try:
+        while True:
+            data = _governance_request(
+                "GET",
+                f"{_GOVERNANCE_BASE}/bundles",
+                api_host=api_host,
+                params={"projectId[]": project_id, "offset": offset, "limit": limit},
+            )
+            items = _governance_bundle_items(data)
+            all_bundles.extend(_parse_governance_bundle(b) for b in items)
+            if not isinstance(data, dict) or _governance_page_exhausted(data, offset, len(items)):
+                break
+            pagination = (data.get("meta") or {}).get("pagination") or {}
+            page_limit = pagination.get("limit") or limit
+            offset += page_limit
+    except Exception:
+        logger.exception("list_bundles failed for project %s", project_id)
+        return []
+    return all_bundles
+
+
+def compute_policy(bundle_id: str, policy_id: str, *, api_host: str) -> "Optional[ComputedPolicy]":
+    from autodoc.core.models import ComputedPolicy
+
+    try:
+        raw = _governance_request(
+            "POST",
+            f"{_GOVERNANCE_BASE}/rpc/compute-policy",
+            api_host=api_host,
+            json={"bundleId": bundle_id, "policyId": policy_id},
+        )
+        if not isinstance(raw, dict):
+            return None
+
+        bundle_raw = raw.get("bundle") or {}
+        policy_raw = raw.get("policy") or {}
+        bundle = _parse_governance_bundle(bundle_raw)
+
+        stages: list[dict[str, Any]] = []
+        for stage in (policy_raw.get("stages") or []):
+            if isinstance(stage, dict):
+                stages.append(stage)
+
+        results = [
+            _parse_governance_result(r)
+            for r in (raw.get("results") or [])
+            if isinstance(r, dict)
+        ]
+        results = [r for r in results if r.is_latest]
+
+        return ComputedPolicy(
+            bundle=bundle,
+            policy_id=str(policy_raw.get("id", "")),
+            policy_name=str(policy_raw.get("name", "")),
+            policy_stages=stages,
+            results=results,
+        )
+    except Exception:
+        logger.exception("compute_policy failed for bundle %s policy %s", bundle_id, policy_id)
+        return None
+
+
+def get_findings(bundle_id: str, *, api_host: str) -> "List[GovernanceFinding]":
+    try:
+        data = _governance_request(
+            "GET",
+            f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings",
+            api_host=api_host,
+        )
+        items = data if isinstance(data, list) else (data.get("data") if isinstance(data, dict) else [])
+        if not isinstance(items, list):
+            return []
+        return [_parse_governance_finding(f) for f in items if isinstance(f, dict)]
+    except Exception:
+        logger.exception("get_findings failed for bundle %s", bundle_id)
+        return []

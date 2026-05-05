@@ -7,7 +7,7 @@ making it easy to review, update, and maintain them in one place.
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autodoc.core.models import LanguageProfile
+    from autodoc.core.models import ComputedPolicy, LanguageProfile
     from autodoc.scanning.file_card import FileCard
 
 
@@ -52,6 +52,27 @@ SYSTEM_LIST_GENERATOR = (
     "Generate clear, informative list items. "
     "Include citation markers [@citation_id] when list items reference specific data sources."
 )
+
+GOVERNANCE_SYSTEM_NOTE = (
+    "Treat the Governance Evidence block as the authoritative source for governance facts "
+    "(risk tier, intended use, validation status, approval state, findings); never override "
+    "it with inferences."
+)
+
+GOVERNANCE_ANTI_FABRICATION = """
+- Any model risk classification, validation status, regulatory mapping, approval state, or
+  intended-use claim must come VERBATIM from the Governance Evidence block above. Do not infer
+  these from code or MLflow. Cite them with [@governance.*]/[@evidence.*].
+- When you state or rely on an open finding, cite it with [@finding.*]. Do not invent findings.
+- Do not fabricate evidence answers; if a fact is not in the Governance Evidence block, omit it.
+- Do not use one source to override or "correct" another. If code and governance evidence
+  describe the same attribute differently (e.g. model type, feature count), present BOTH
+  with their citations and note the discrepancy explicitly:
+  "The code implements XGBoost [@code.x], while the governance record states logistic
+  regression [@evidence.model_type]. This discrepancy should be reviewed."
+- Do not fabricate a reconciliation. Do not silently choose one source.
+- Discrepancies of this kind are significant governance observations, not editorial problems.
+""".strip()
 
 SYSTEM_FILE_RANKER = (
     "You are an expert at analyzing ML codebases. "
@@ -272,6 +293,7 @@ def build_section_planning_prompt(
     data_sources: str,
     metrics_info: str = "",
     artifacts_info: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for planning section content.
 
@@ -292,6 +314,7 @@ def build_section_planning_prompt(
         Formatted prompt string.
     """
     model_line = f"\n## Specific Model: {model_name}" if model_name else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Plan content for a model documentation section.
 
@@ -304,7 +327,7 @@ def build_section_planning_prompt(
 - Features: {features_preview}
 - Target Variable: {target_variable}
 - Registered Models: {registered_models}{metrics_info}{artifacts_info}
-- Data Sources: {data_sources}
+- Data Sources: {data_sources}{governance_section}
 
 ## Task
 Determine what content blocks this section should contain to create useful documentation.
@@ -384,6 +407,18 @@ SECTION_PLANNING_SCHEMA: Dict[str, Any] = {
 # Content Generator Prompts
 # =============================================================================
 
+def _governance_instructions(governance_evidence: str) -> str:
+    if not governance_evidence:
+        return ""
+    return f"\n{GOVERNANCE_ANTI_FABRICATION}\n"
+
+
+def narrative_system_prompt(governance_evidence: str = "") -> str:
+    if not governance_evidence:
+        return SYSTEM_NARRATIVE_WRITER
+    return f"{SYSTEM_NARRATIVE_WRITER} {GOVERNANCE_SYSTEM_NOTE}"
+
+
 def build_narrative_prompt(
     section_name: str,
     purpose: str,
@@ -399,6 +434,7 @@ def build_narrative_prompt(
     artifact_data: str = "",
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating narrative content.
 
@@ -424,6 +460,7 @@ def build_narrative_prompt(
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Write professional documentation content.
 
@@ -438,7 +475,7 @@ def build_narrative_prompt(
 - Data Sources: {data_sources}{model_line}{model_info}
 
 ## Additional Context
-{insights or "No additional insights available."}{artifact_section}{code_section}{mlflow_section}
+{insights or "No additional insights available."}{artifact_section}{code_section}{mlflow_section}{governance_section}
 
 ## Instructions
 - Write 2-4 paragraphs of clear, professional prose
@@ -449,7 +486,7 @@ def build_narrative_prompt(
 - Do NOT include a title or heading
 - Just write the paragraph content directly
 - When you reference specific metrics, code, or MLflow data, include a citation using the format [@citation_id] where the citation_id comes from the evidence sections above
-- Only cite when making specific factual claims from the evidence - do not over-cite
+- Only cite when making specific factual claims from the evidence - do not over-cite{_governance_instructions(governance_evidence)}
 
 CRITICAL: Only describe metrics, results, and methodologies that are explicitly mentioned in the context above.
 If cross-validation or other specific techniques are not mentioned in the context, do NOT claim they were performed.
@@ -468,6 +505,7 @@ def build_table_prompt(
     artifact_data: str = "",
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating table content.
 
@@ -487,6 +525,7 @@ def build_table_prompt(
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Generate a data table for documentation.
 
@@ -498,7 +537,7 @@ def build_table_prompt(
 - Model Classes: {model_classes}
 - Transformations: {transformations}
 - Hyperparameters: {hyperparameters}{metrics_info}{artifact_section}
-{code_section}{mlflow_section}
+{code_section}{mlflow_section}{governance_section}
 
 CRITICAL INSTRUCTIONS:
 - ONLY include metrics and values that are explicitly provided in the "Available Context" above
@@ -506,7 +545,7 @@ CRITICAL INSTRUCTIONS:
 - Do NOT generate cross-validation metrics unless CV results are explicitly provided above
 - If specific data is not available, either omit that row/column or mark it as "Not Available"
 - Use the exact metric values provided - do not round, estimate, or modify them
-- Include a citation marker [@citation_id] in the table caption referencing the data source from the evidence sections above
+- Include a citation marker [@citation_id] in the table caption referencing the data source from the evidence sections above{_governance_instructions(governance_evidence)}
 
 Generate a useful table with 3-10 rows using ONLY the data provided above."""
 
@@ -543,6 +582,7 @@ def build_chart_prompt(
     artifact_data: str = "",
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating chart data.
 
@@ -561,6 +601,7 @@ def build_chart_prompt(
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Generate data for a {chart_type} chart.
 
@@ -570,7 +611,7 @@ def build_chart_prompt(
 ## Context
 - Model Type: {model_classes}
 - ML Task: {ml_task_type}
-{code_section}{mlflow_section}
+{code_section}{mlflow_section}{governance_section}
 
 ## Instructions for Chart Generation:
 1. If metrics are provided above (e.g., "roc_auc: 0.6903", "precision: 0.2399"), use them as:
@@ -589,7 +630,7 @@ Do NOT fabricate or estimate any values. If NO metrics are provided above, retur
 - values: []
 
 Provide labels and values for the chart using ONLY the data provided above.
-Include a citation marker [@citation_id] in the chart title referencing the data source from the evidence sections above."""
+Include a citation marker [@citation_id] in the chart title referencing the data source from the evidence sections above.{_governance_instructions(governance_evidence)}"""
 
 
 CHART_SCHEMA: Dict[str, Any] = {
@@ -621,6 +662,7 @@ def build_list_prompt(
     features: str,
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating list content.
 
@@ -634,6 +676,8 @@ def build_list_prompt(
     Returns:
         Formatted prompt string.
     """
+    governance_section = f"\n{governance_evidence}" if governance_evidence else ""
+
     return f"""Generate a list for documentation.
 
 ## Purpose: {purpose}
@@ -644,7 +688,7 @@ def build_list_prompt(
 - ML Task: {ml_task_type}
 - Features: {features}
 {code_evidence}
-{mlflow_evidence}
+{mlflow_evidence}{governance_section}
 
 CRITICAL: Only include information that is explicitly provided in the context above.
 Do NOT fabricate metrics, statistics, or claim methodologies that are not mentioned.
@@ -652,7 +696,7 @@ If specific data is not available, focus on what IS known from the context.
 
 Generate a descriptive title for this list (e.g., "Key Limitations", "Recommended Actions", "Implementation Steps")
 and 5-10 concise, informative items using ONLY the data provided above.
-When list items reference specific data from the evidence sections, include citation markers using [@citation_id] format."""
+When list items reference specific data from the evidence sections, include citation markers using [@citation_id] format.{_governance_instructions(governance_evidence)}"""
 
 
 LIST_SCHEMA: Dict[str, Any] = {

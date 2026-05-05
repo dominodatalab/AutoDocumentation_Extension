@@ -52,25 +52,6 @@ def _mock_response(status_code=200, json_data=None, text=""):
 
 
 # ---------------------------------------------------------------------------
-# _resolve_project_id
-# ---------------------------------------------------------------------------
-
-class TestResolveProjectId:
-    def test_uses_provided_id(self):
-        assert ds._resolve_project_id("proj-999") == "proj-999"
-
-    def test_raises_when_none(self):
-        """No longer falls back to env — raises when no ID given."""
-        with pytest.raises(RuntimeError, match="No project ID"):
-            ds._resolve_project_id(None)
-
-    def test_raises_when_empty(self):
-        with pytest.raises(RuntimeError, match="No project ID"):
-            ds._resolve_project_id("")
-
-
-
-# ---------------------------------------------------------------------------
 # list_datasets
 # ---------------------------------------------------------------------------
 
@@ -120,35 +101,116 @@ class TestListDatasets:
 
 class TestEnsureDataset:
     @patch.object(ds, "_create_dataset")
-    def test_create_succeeds(self, mock_create):
-        mock_create.return_value = {"id": "ds-new", "name": "autodoc-specs", "rwSnapshotId": "snap"}
+    @patch.object(ds, "list_datasets")
+    def test_returns_existing_without_create(self, mock_list, mock_create):
+        mock_list.return_value = [
+            {"id": "ds-existing", "name": "autodoc", "rwSnapshotId": "snap"},
+        ]
+        result = ds.ensure_dataset("proj-123")
+        assert result["id"] == "ds-existing"
+        mock_create.assert_not_called()
+
+    @patch.object(ds, "_create_dataset")
+    @patch.object(ds, "list_datasets")
+    def test_create_succeeds_after_empty_list(self, mock_list, mock_create):
+        mock_list.return_value = []
+        mock_create.return_value = {"id": "ds-new", "name": "autodoc", "rwSnapshotId": "snap"}
         result = ds.ensure_dataset("proj-123")
         assert result["id"] == "ds-new"
         mock_create.assert_called_once()
 
     @patch.object(ds, "list_datasets")
     @patch.object(ds, "_create_dataset")
-    def test_create_fails_finds_existing(self, mock_create, mock_list):
+    def test_create_fails_finds_on_relist(self, mock_create, mock_list):
         mock_create.side_effect = RuntimeError("already exists")
-        mock_list.return_value = [
-            {"id": "ds-existing", "name": "autodoc", "rwSnapshotId": "snap"},
+        mock_list.side_effect = [
+            [],
+            [{"id": "ds-existing", "name": "autodoc", "rwSnapshotId": "snap"}],
         ]
         result = ds.ensure_dataset("proj-123")
         assert result["id"] == "ds-existing"
+        assert mock_list.call_count == 2
 
     @patch.object(ds, "list_datasets")
     @patch.object(ds, "_create_dataset")
     def test_create_fails_not_found_raises(self, mock_create, mock_list):
         mock_create.side_effect = RuntimeError("permission denied")
-        mock_list.return_value = [{"id": "ds-other", "name": "other-dataset"}]
+        mock_list.side_effect = [
+            [{"id": "ds-other", "name": "other-dataset"}],
+            [{"id": "ds-other", "name": "other-dataset"}],
+        ]
         with pytest.raises(RuntimeError, match="Failed to create or find"):
             ds.ensure_dataset("proj-123")
 
     @patch.object(ds, "_create_dataset")
-    def test_custom_name(self, mock_create):
+    @patch.object(ds, "list_datasets")
+    def test_custom_name(self, mock_list, mock_create):
+        mock_list.return_value = []
         mock_create.return_value = {"id": "ds-custom", "name": "my-specs"}
         ds.ensure_dataset("proj-123", name="my-specs", description="Custom")
         mock_create.assert_called_once_with("proj-123", "my-specs", "Custom")
+
+
+# ---------------------------------------------------------------------------
+# get_existing_autodoc_dataset
+# ---------------------------------------------------------------------------
+
+
+class TestGetExistingAutodocDataset:
+    @patch.object(ds, "list_datasets")
+    def test_returns_matching_row(self, mock_list):
+        mock_list.return_value = [
+            {"id": "other", "name": "other-ds"},
+            {"id": "ds-a", "name": "autodoc"},
+        ]
+        out = ds.get_existing_autodoc_dataset("proj-1")
+        assert out == {"id": "ds-a", "name": "autodoc"}
+        mock_list.assert_called_once_with("proj-1")
+
+    @patch.object(ds, "list_datasets")
+    def test_returns_none_when_missing(self, mock_list):
+        mock_list.return_value = [{"id": "x", "name": "other"}]
+        assert ds.get_existing_autodoc_dataset("proj-1") is None
+
+    @patch.object(ds, "list_datasets")
+    def test_custom_name(self, mock_list):
+        mock_list.return_value = [{"id": "s", "name": "my-specs"}]
+        assert ds.get_existing_autodoc_dataset("proj-1", name="my-specs")["id"] == "s"
+
+
+# ---------------------------------------------------------------------------
+# resolve_dataset_mount_path
+# ---------------------------------------------------------------------------
+
+
+class TestResolveDatasetMountPath:
+    def test_uses_path_from_ensured_when_present(self):
+        assert ds.resolve_dataset_mount_path(
+            {"id": "ds-1", "datasetPath": " /mnt/autodoc "},
+        ) == "/mnt/autodoc"
+
+    @patch.object(ds, "get_dataset_detail")
+    def test_fetches_detail_when_path_missing(self, mock_detail):
+        mock_detail.return_value = {"datasetPath": "/from/detail"}
+        assert ds.resolve_dataset_mount_path({"id": "ds-1", "name": "autodoc"}) == "/from/detail"
+        mock_detail.assert_called_once_with("ds-1")
+
+    @patch.object(ds, "get_dataset_detail")
+    def test_detail_nested_dataset_rw_dto(self, mock_detail):
+        mock_detail.return_value = {
+            "datasetRwDto": {"datasetPath": "/nested/path"},
+        }
+        assert ds.resolve_dataset_mount_path({"id": "ds-2"}) == "/nested/path"
+
+    def test_raises_without_id_and_without_path(self):
+        with pytest.raises(RuntimeError, match="missing dataset id"):
+            ds.resolve_dataset_mount_path({"name": "x"})
+
+    @patch.object(ds, "get_dataset_detail")
+    def test_raises_when_detail_has_no_path(self, mock_detail):
+        mock_detail.return_value = {}
+        with pytest.raises(RuntimeError, match="Cannot resolve"):
+            ds.resolve_dataset_mount_path({"id": "ds-1"})
 
 
 # ---------------------------------------------------------------------------
@@ -164,24 +226,24 @@ class TestGetRwSnapshotId:
                 {"id": "snap-active", "status": "Active"},
             ]
         })
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") == "snap-active"
+        assert ds.get_rw_snapshot_id("ds-1") == "snap-active"
 
     @patch.object(ds, "_api_request")
     def test_fallback_to_first(self, mock_req):
         mock_req.return_value = _mock_response(json_data={
             "snapshots": [{"id": "snap-only", "status": "Completed"}]
         })
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") == "snap-only"
+        assert ds.get_rw_snapshot_id("ds-1") == "snap-only"
 
     @patch.object(ds, "_api_request")
     def test_empty_snapshots(self, mock_req):
         mock_req.return_value = _mock_response(json_data={"snapshots": []})
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") is None
+        assert ds.get_rw_snapshot_id("ds-1") is None
 
     @patch.object(ds, "_api_request")
     def test_api_error_returns_none(self, mock_req):
         mock_req.side_effect = RuntimeError("network error")
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") is None
+        assert ds.get_rw_snapshot_id("ds-1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +262,7 @@ class TestListFiles:
                 {"name": {"fileName": "README.md", "isDirectory": False}, "size": {"sizeInBytes": 200}},
             ]
         })
-        files = ds.list_files("snap-1", project_id="proj-123")
+        files = ds.list_files("snap-1")
         names = [f["fileName"] for f in files]
         assert "spec.yaml" in names
         assert "config.yml" in names
@@ -211,14 +273,14 @@ class TestListFiles:
     @patch.object(ds, "_api_request")
     def test_passes_path_param(self, mock_req):
         mock_req.return_value = _mock_response(json_data={"rows": []})
-        ds.list_files("snap-1", path="models/v2", project_id="proj-123")
+        ds.list_files("snap-1", "models/v2")
         call_kwargs = mock_req.call_args
         assert call_kwargs.kwargs["params"]["path"] == "models/v2"
 
     @patch.object(ds, "_api_request")
     def test_empty_directory(self, mock_req):
         mock_req.return_value = _mock_response(json_data={"rows": []})
-        assert ds.list_files("snap-1", project_id="proj-123") == []
+        assert ds.list_files("snap-1") == []
 
     @patch.object(ds, "_api_request")
     def test_case_insensitive_yaml(self, mock_req):
@@ -228,7 +290,7 @@ class TestListFiles:
                 {"name": {"fileName": "Config.YML", "isDirectory": False}, "size": {}},
             ]
         })
-        files = ds.list_files("snap-1", project_id="proj-123")
+        files = ds.list_files("snap-1")
         assert len(files) == 2
 
 
@@ -257,7 +319,7 @@ class TestUploadFile:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        await ds.upload_file("ds-1", "my_spec.yaml", b"title: My Model", project_id="proj-123")
+        await ds.upload_file("ds-1", "my_spec.yaml", b"title: My Model")
         assert mock_client.request.call_count == 3
 
         # Verify step 1: start

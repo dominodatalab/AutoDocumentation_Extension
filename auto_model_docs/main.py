@@ -22,12 +22,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from autodoc.core.config import Settings
 from autodoc.core.models import DocumentSpec
+from default_consts import (
+    DEFAULT_GENERATION_WORKERS,
+    DEFAULT_LANGUAGE,
+    DEFAULT_MAX_FILES,
+    DEFAULT_PLANNING_WORKERS,
+    DEFAULT_PROVIDER,
+    DEFAULT_TIMEOUT,
+)
 from autodoc.llm import LLMClient
 from autodoc.orchestrator import Orchestrator
 from autodoc.scanning import ContentSanitizer
-from domino_auth import configure_auth, cli_auth
-
-configure_auth(cli_auth)
 
 
 console = Console()
@@ -44,13 +49,14 @@ console = Console()
 @click.option(
     "--code-root",
     "-c",
+    required=True,
     type=click.Path(exists=True),
-    help="Root directory of codebase to analyze (default: /mnt/code or ./)",
+    help="Root directory of codebase to analyze",
 )
 @click.option(
     "--provider",
     "-p",
-    default="openai",
+    default=DEFAULT_PROVIDER,
     type=click.Choice(["anthropic", "openai"]),
     help="LLM provider to use",
 )
@@ -98,7 +104,7 @@ console = Console()
 )
 @click.option(
     "--max-files",
-    default=50,
+    default=DEFAULT_MAX_FILES,
     type=int,
     help="Maximum number of files to scan",
 )
@@ -106,13 +112,13 @@ console = Console()
     "--generation-workers",
     "-w",
     "workers",
-    default=4,
+    default=DEFAULT_GENERATION_WORKERS,
     type=int,
     help="Number of parallel workers for content generation",
 )
 @click.option(
     "--planning-workers",
-    default=4,
+    default=DEFAULT_PLANNING_WORKERS,
     type=int,
     help="Number of parallel workers for section planning",
 )
@@ -133,19 +139,21 @@ console = Console()
 )
 @click.option(
     "--timeout",
-    default=120.0,
+    default=DEFAULT_TIMEOUT,
     type=float,
     help="Timeout for individual LLM API calls in seconds (default: 120)",
 )
 @click.option(
-    "--experiments",
+    "--filtered-experiments",
+    "filtered_experiments",
     type=str,
-    help="Comma-separated list of experiment names/patterns to include. Supports wildcards: * (any) and ? (single char). Example: customer_churn*,fraud_detection",
+    help="Comma-separated experiment names/patterns to include. Wildcards: * and ?. Example: customer_churn*,fraud_detection",
 )
 @click.option(
-    "--models", 
+    "--filtered-models",
+    "filtered_models",
     type=str,
-    help="Comma-separated list of model names/patterns to include. Supports wildcards: * (any) and ? (single char). Example: churn*,fraud_detector",
+    help="Comma-separated MLflow model names/patterns to include. Wildcards: * and ?. Example: churn*,fraud_detector",
 )
 @click.option(
     "--latest-only",
@@ -153,19 +161,38 @@ console = Console()
     help="Only include the latest version of each model",
 )
 @click.option(
-    "--disable-project-filtering",
-    is_flag=True,
-    help="Disable automatic Domino project filtering (scan all projects)",
+    "--language",
+    default=DEFAULT_LANGUAGE,
+    type=click.Choice(["auto", "python", "r", "sas", "matlab"], case_sensitive=False),
+    help="Programming language for scanning, or auto to detect from repository files",
 )
 @click.option(
-    "--dataset-path",
+    "--output_dir",
     type=click.Path(),
-    required=True,
-    help="Mount path of the autodoc dataset (e.g. /domino/datasets/local/autodoc)",
+    default="/mnt/artifacts",
+    help="Root artifacts directory where docs and cache are stored (default: /mnt/artifacts)",
+)
+@click.option(
+    "--bundle-id",
+    default=None,
+    type=str,
+    help="Governance bundle UUID for this document run",
+)
+@click.option(
+    "--governance-api-host",
+    default=None,
+    type=str,
+    help="Domino cluster origin for governance API calls (from the browser)",
+)
+@click.option(
+    "--findings-scope",
+    default=None,
+    type=click.Choice(["open", "all"], case_sensitive=False),
+    help="Findings filter: open (To do only) or all",
 )
 def main(
     spec: str,
-    code_root: str | None,
+    code_root: str,
     provider: str,
     model: str | None,
     provider_base_url: str | None,
@@ -181,11 +208,14 @@ def main(
     notebook_from_cache: bool,
     notebook_path: str | None,
     timeout: float,
-    experiments: str | None,
-    models: str | None,
+    filtered_experiments: str | None,
+    filtered_models: str | None,
     latest_only: bool,
-    disable_project_filtering: bool,
-    dataset_path: str,
+    language: str,
+    output_dir: str,
+    bundle_id: str | None,
+    governance_api_host: str | None,
+    findings_scope: str | None,
 ) -> None:
     """Generate model documentation from ML codebases.
 
@@ -199,11 +229,23 @@ def main(
 
     Environment variables (can be set in .env file):
 
-        ANTHROPIC_API_KEY - API key for Anthropic Claude
-        OPENAI_API_KEY - API key for OpenAI GPT-4
+        DOMINO_PROJECT_ID - Required. Domino project ID for MLflow filtering metadata.
+        ANTHROPIC_API_KEY / OPENAI_API_KEY - LLM credentials (see Settings)
 
     For full configuration options, see the Settings class in autodoc/core/config.py
     """
+    if not (os.environ.get("DOMINO_PROJECT_ID") or "").strip():
+        console.print(
+            "\n[bold red]Error:[/] DOMINO_PROJECT_ID is required. "
+            "Set it to your Domino project ID before running.",
+            style="red",
+        )
+        sys.exit(1)
+
+    if not str(code_root).strip():
+        console.print("\n[bold red]Error:[/] --code-root must be a non-empty path.", style="red")
+        sys.exit(1)
+
     try:
         # Configure logging based on verbosity
         log_level = logging.INFO if verbose else logging.WARNING
@@ -212,7 +254,7 @@ def main(
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[logging.StreamHandler()]
         )
-        
+
         # Load settings from .env and environment
         settings = Settings()
 
@@ -235,8 +277,7 @@ def main(
             settings.llm_max_backoff = max_backoff
         if backoff_jitter is not None:
             settings.llm_backoff_jitter = backoff_jitter
-        if code_root:
-            settings.code_root = Path(code_root)
+        settings.code_root = Path(code_root)
         if max_files:
             settings.max_files = max_files
         if workers:
@@ -246,29 +287,24 @@ def main(
 
         from artifact_layout import init_layout, get_layout
         init_layout()
-        output_dir = get_layout().docs_dir
-        code_dir = settings.code_root if settings.code_root.exists() else _get_default_code_root()
+        artifacts_root = output_dir.rstrip("/") or "/mnt/artifacts"
+        code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)
         if notebook_from_cache:
-            _regenerate_notebook_from_cache(
-                output_dir,
-                verbose,
-                Path(notebook_path) if notebook_path else None,
-                dataset_mount_path=dataset_path,
-            )
+            _regenerate_notebook_from_cache(artifacts_root, verbose)
             return
 
-        # Parse CSV filtering options
         experiment_names = None
-        if experiments:
-            experiment_names = [name.strip() for name in experiments.split(",") if name.strip()]
-            
-        model_names = None
-        if models:
-            model_names = [name.strip() for name in models.split(",") if name.strip()]
+        if filtered_experiments:
+            experiment_names = [
+                name.strip() for name in filtered_experiments.split(",") if name.strip()
+            ]
 
-        # Load document spec
+        model_names = None
+        if filtered_models:
+            model_names = [name.strip() for name in filtered_models.split(",") if name.strip()]
+
         console.print(f"\n[bold blue]Loading specification:[/] {spec}")
         doc_spec = DocumentSpec.from_yaml(spec)
         console.print(f"[bold]Document:[/] {doc_spec.title}")
@@ -276,7 +312,7 @@ def main(
 
         if verbose:
             console.print(f"[dim]Code root:[/] {code_dir}")
-            console.print(f"[dim]Output dir:[/] {output_dir}")
+            console.print(f"[dim]Artifacts root:[/] {artifacts_root}")
             console.print(f"[dim]Provider:[/] {settings.llm_provider}")
             console.print(f"[dim]Model:[/] {settings.get_model_name()}")
             console.print(f"[dim]Max files:[/] {settings.max_files}")
@@ -288,9 +324,6 @@ def main(
             console.print(f"[dim]Max backoff:[/] {settings.llm_max_backoff}")
             console.print(f"[dim]Backoff jitter:[/] {settings.llm_backoff_jitter}")
             console.print(f"[dim]Timeout:[/] {timeout}s")
-            
-            # Show filtering options
-            console.print(f"[dim]Project filtering:[/] {'disabled' if disable_project_filtering else 'enabled'}")
             if experiment_names:
                 console.print(f"[dim]Experiments:[/] {', '.join(experiment_names)}")
             if model_names:
@@ -328,14 +361,13 @@ def main(
             llm=llm,
             sanitizer=sanitizer,
             code_root=code_dir,
-            output_dir=output_dir,
+            output_dir=artifacts_root,
             mlflow_tracking_uri=settings.mlflow_tracking_uri,
             parallel_workers=settings.parallel_workers,
             planning_workers=settings.planning_workers,
             max_files=settings.max_files,
             max_file_size=settings.max_file_size,
             generate_notebook=notebook or bool(notebook_path),
-            notebook_path=Path(notebook_path) if notebook_path else None,
             exclude_patterns=settings.exclude_patterns,
             max_selected_files=settings.max_selected_files,
             batch_size=settings.batch_size,
@@ -346,9 +378,34 @@ def main(
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            disable_project_filtering=disable_project_filtering,
-            dataset_mount_path=dataset_path,
+            language=language,
         )
+
+        governance_context = None
+        if bundle_id:
+            from domino_auth import cli_auth, configure_auth
+            from autodoc.governance_read import GovernanceLoadError, load_governance_context
+
+            configure_auth(cli_auth)
+            scope = findings_scope or doc_spec.governance_findings_scope
+            gov_host = (governance_api_host or "").strip()
+            if not gov_host:
+                console.print(
+                    "\n[bold red]Error:[/] --governance-api-host is required when --bundle-id is set",
+                    style="red",
+                )
+                sys.exit(1)
+            try:
+                governance_context = load_governance_context(
+                    bundle_id,
+                    api_host=gov_host,
+                    findings_scope=scope,
+                )
+            except GovernanceLoadError as exc:
+                console.print(f"\n[bold red]Error:[/] {exc}", style="red")
+                sys.exit(1)
+            if verbose:
+                console.print(f"[dim]Governance bundle:[/] {bundle_id}")
 
         # Run generation with progress
         console.print("\n[bold blue]Starting document generation...[/]\n")
@@ -368,13 +425,19 @@ def main(
                 progress.update(task_id, completed=completed, description=f"{phase}...")
 
             # Run async generation
-            output_path = asyncio.run(orchestrator.generate(doc_spec, on_progress))
+            output_path = asyncio.run(
+                orchestrator.generate(
+                    doc_spec,
+                    on_progress,
+                    governance_context=governance_context,
+                )
+            )
 
         # Success!
         console.print(f"\n[bold green]Success![/] Document generated:")
         console.print(f"  [cyan]{output_path}[/]")
         if notebook or notebook_path:
-            actual_notebook_path = orchestrator.notebook_builder.notebook_path
+            actual_notebook_path = f"{orchestrator.run_dir}/model_docs.ipynb"
             console.print(f"  [cyan]{actual_notebook_path}[/]")
         console.print()
 
@@ -395,19 +458,18 @@ def main(
 
 
 def _regenerate_notebook_from_cache(
-    output_dir: Path,
+    output_dir: str,
     verbose: bool,
-    notebook_path: Path | None = None,
-    dataset_mount_path: str = "",
 ) -> None:
     from autodoc.generation import NotebookBuilder
+    from datetime import datetime
+    from pathlib import Path as PathLib
 
     console.print("\n[bold blue]Regenerating notebook from cache...[/]\n")
 
     from artifact_layout import get_layout
-    import local_data_manager
     cache_path = get_layout().generation_cache
-    if not local_data_manager.file_exists(dataset_mount_path, cache_path):
+    if not (PathLib(output_dir) / cache_path).exists():
         console.print(
             f"[bold red]Error:[/] No cached results found at {cache_path}",
             style="red",
@@ -419,13 +481,12 @@ def _regenerate_notebook_from_cache(
 
     orchestrator = Orchestrator.__new__(Orchestrator)
     orchestrator.output_dir = output_dir
-    orchestrator.notebook_path = notebook_path
-    orchestrator.dataset_mount_path = dataset_mount_path
-    orchestrator.notebook_builder = NotebookBuilder(
-        output_dir=output_dir,
-        notebook_path=notebook_path,
-        dataset_mount_path=dataset_mount_path,
-    )
+    run_id = os.environ.get("DOMINO_RUN_ID", "")
+    if run_id:
+        orchestrator.run_dir = f"docs/{run_id[:8]}"
+    else:
+        orchestrator.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    orchestrator.notebook_builder = NotebookBuilder(output_dir=output_dir)
 
     with Progress(
         SpinnerColumn(),
@@ -446,17 +507,6 @@ def _regenerate_notebook_from_cache(
     console.print(f"\n[bold green]Success![/] Notebook regenerated:")
     console.print(f"  [cyan]{result_notebook_path}[/]")
     console.print()
-
-
-
-
-def _get_default_code_root() -> Path:
-    """Get default code root directory."""
-    # Check Domino environment first
-    if Path("/mnt/code").exists():
-        return Path("/mnt/code")
-    # Fall back to current directory
-    return Path(".")
 
 
 if __name__ == "__main__":

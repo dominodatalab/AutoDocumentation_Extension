@@ -26,6 +26,9 @@ from autodoc.generation.citations import (
     CITATION_MARKER_PATTERN,
     CitationRegistry,
     build_mlflow_summary_citation_id,
+    format_code_reference_text,
+    format_governance_traceability_label,
+    is_governance_source_type,
     parse_citation_id,
 )
 
@@ -37,14 +40,14 @@ class DocumentBuilder:
     title page, table of contents, and content sections.
     """
 
-    def __init__(self, output_dir: str = "docs", dataset_mount_path: str = ""):
+    def __init__(self, output_dir: str = "/mnt/artifacts"):
         self.output_dir = output_dir
-        self.dataset_mount_path = dataset_mount_path
 
     async def build(
         self,
         spec: DocumentSpec,
         results: List[SectionResult],
+        output_path: str,
     ) -> str:
         """Build the Word document from generated content.
 
@@ -86,9 +89,7 @@ class DocumentBuilder:
                 self._add_traceability_appendix(doc, section_citations, registry)
 
             # Save document
-            output_path = self._save_document(doc)
-
-            return output_path
+            return self._save_document(doc, output_path)
 
         except Exception as e:
             raise BuilderError(f"Document building failed: {e}") from e
@@ -780,30 +781,13 @@ class DocumentBuilder:
                 parts.append(display_id)
                 parts.append("Model Run")
             elif entry.type == "code_file":
-                # Format code reference - strip __init__ and similar dunder methods
-                code_path = entry.code_path or ""
-                code_symbol = entry.code_symbol or ""
-
-                # Clean up symbol - remove __init__, __call__, etc.
-                clean_symbol = code_symbol
-                clean_symbol = clean_symbol.replace(".__init__", "")
-                clean_symbol = clean_symbol.replace(".__call__", "")
-                clean_symbol = clean_symbol.replace(".__new__", "")
-
-                if code_path and clean_symbol:
-                    parts.append(f"Code: {code_path}#{clean_symbol}")
-                elif code_path:
-                    parts.append(f"Code: {code_path}")
-                else:
-                    # Fallback: clean up display_id if it contains the info
-                    clean_display = display_id
-                    # Remove redundant "Code:" prefixes if multiple
-                    clean_display = re.sub(r',\s*@?Code:', ', ', clean_display)
-                    clean_display = re.sub(r';\s*@?Code:', '; ', clean_display)
-                    clean_display = clean_display.replace(".__init__", "")
-                    clean_display = clean_display.replace(".__call__", "")
-                    clean_display = clean_display.replace(".__new__", "")
-                    parts.append(clean_display)
+                parts.append(
+                    entry.text
+                    or format_code_reference_text(entry.code_path, entry.code_symbol)
+                    or display_id
+                )
+            elif is_governance_source_type(entry.type):
+                parts.append(entry.text or entry.display_label or display_id)
             else:
                 # For unknown types, clean up the display_id
                 clean_display = display_id
@@ -857,7 +841,7 @@ class DocumentBuilder:
                         line_info = f" (lines {start}-{end})"
                     elif start:
                         line_info = f" (line {start})"
-                    label = f"{path}#{symbol}" if symbol else path
+                    label = format_code_reference_text(path, symbol)
                     doc.add_paragraph(f"{label}{line_info}", style="List Bullet")
                 elif ctype == "mlflow_artifact":
                     artifact = parsed.get("artifact_path", "")
@@ -873,19 +857,24 @@ class DocumentBuilder:
                     run_id = parsed.get("run_id", "")
                     label = f"MLflow Run: {exp}/{run}" if exp else f"MLflow Run: {run_id}"
                     doc.add_paragraph(label, style="List Bullet")
+                elif is_governance_source_type(ctype):
+                    entry = registry.get_entry(cid)
+                    if entry and entry.text:
+                        label = entry.text
+                    else:
+                        label = format_governance_traceability_label(cid, {})
+                    doc.add_paragraph(label, style="List Bullet")
                 else:
                     doc.add_paragraph(cid, style="List Bullet")
 
-    def _save_document(self, doc: Document) -> str:
+    def _save_document(self, doc: Document, output_path: str) -> str:
         import io
-        import local_data_manager
-        from artifact_layout import get_layout
+        from pathlib import Path
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"model_docs_{timestamp}.docx"
-        dataset_path = f"{get_layout().docs_dir}/{filename}"
+        full_path = Path(self.output_dir) / output_path
 
         buffer = io.BytesIO()
         doc.save(buffer)
-        local_data_manager.write_file(self.dataset_mount_path, dataset_path, buffer.getvalue())
-        return dataset_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(buffer.getvalue())
+        return output_path

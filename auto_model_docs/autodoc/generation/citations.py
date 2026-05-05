@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 CITATION_MARKER_PATTERN = re.compile(r"\[@([^\]]+)\]")
@@ -90,6 +91,256 @@ def build_mlflow_summary_citation_id(run_id: str) -> str:
     return build_mlflow_citation_id(run_id, "summary", "all")
 
 
+_EVIDENCE_SLUG_STOPWORDS = frozenset({
+    "a", "an", "the", "is", "was", "were", "be", "been", "being",
+    "do", "does", "did", "have", "has", "had", "will", "would", "could",
+    "should", "may", "might", "must", "shall", "can", "need", "to", "of",
+    "in", "on", "at", "by", "for", "with", "about", "into", "from", "as",
+    "it", "this", "that", "these", "those", "any", "what", "which", "who",
+    "whom", "whose", "how", "when", "where", "why",
+})
+
+
+def slugify_evidence_question(question: str) -> str:
+    words = re.findall(r"[a-z0-9]+", (question or "").lower())
+    filtered = [w for w in words if w not in _EVIDENCE_SLUG_STOPWORDS]
+    content = filtered[:6] if filtered else words[:6]
+    slug = "_".join(content) if content else "evidence"
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    return slug or "evidence"
+
+
+def build_governance_citation_id(key: str) -> str:
+    return f"governance.{key}"
+
+
+def build_evidence_citation_id(
+    question: str,
+    used_slugs: Optional[set[str]] = None,
+) -> str:
+    base = slugify_evidence_question(question)
+    if used_slugs is None:
+        return f"evidence.{base}"
+    candidate = base
+    suffix = 2
+    while candidate in used_slugs:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    used_slugs.add(candidate)
+    return f"evidence.{candidate}"
+
+
+def build_finding_citation_id(finding_id: str) -> str:
+    return f"finding.{finding_id}"
+
+
+GOVERNANCE_SOURCE_TYPES = frozenset({"governance", "evidence", "finding"})
+
+GOVERNANCE_FIELD_LABELS = {
+    "bundle": "Bundle",
+    "policy": "Policy",
+    "stage": "Stage",
+    "state": "State",
+    "risk_tier": "Risk tier",
+    "owner": "Owner",
+}
+
+CITATION_META_FIELDS = (
+    "type",
+    "source_key",
+    "bundle_id",
+    "bundle_name",
+    "policy_name",
+    "evidence_text",
+    "evidence_stage",
+    "evidence_set_name",
+    "question",
+    "answer",
+    "finding_title",
+    "finding_description",
+    "finding_severity",
+    "finding_status",
+)
+
+
+def is_governance_source_type(entry_type: str) -> bool:
+    return entry_type in GOVERNANCE_SOURCE_TYPES
+
+
+def _governance_field_label(source_key: str) -> str:
+    return GOVERNANCE_FIELD_LABELS.get(
+        source_key,
+        source_key.replace("_", " ").title() if source_key else "Governance",
+    )
+
+
+def _governance_bundle_short_name(bundle_name: Optional[str]) -> str:
+    name = (bundle_name or "").strip()
+    return name or "Governance bundle"
+
+
+def _short_bundle_id(bundle_id: Optional[str]) -> str:
+    bid = (bundle_id or "").strip()
+    if len(bid) >= 8:
+        return bid[:8]
+    return bid
+
+
+def _bundle_name_with_short_id(bundle_name: Optional[str], bundle_id: Optional[str]) -> str:
+    name = _governance_bundle_short_name(bundle_name)
+    short_id = _short_bundle_id(bundle_id)
+    if short_id:
+        return f"{name} ({short_id})"
+    return name
+
+
+def _bundle_context_tail(details: dict[str, Any], *, include_short_id: bool = False) -> str:
+    bundle_name = details.get("bundle_name")
+    bundle_id = details.get("bundle_id") if include_short_id else None
+    policy_name = (details.get("policy_name") or "").strip()
+    bundle_part = (
+        _bundle_name_with_short_id(bundle_name, bundle_id)
+        if include_short_id
+        else _governance_bundle_short_name(bundle_name)
+    )
+    parts = [bundle_part]
+    if policy_name:
+        parts.append(policy_name)
+    return " · ".join(parts)
+
+
+def _truncate_label(text: str, limit: int = 72) -> str:
+    cleaned = (text or "").strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def humanize_code_symbol(symbol: str) -> str:
+    clean = (symbol or "").strip()
+    clean = clean.replace(".__init__", "").replace(".__call__", "").replace(".__new__", "")
+    if clean.startswith("_"):
+        clean = clean[1:]
+    clean = clean.replace("_", " ").strip()
+    return clean
+
+
+def format_code_reference_text(code_path: str, code_symbol: str = "") -> str:
+    path = (code_path or "").strip() or "unknown"
+    symbol = humanize_code_symbol(code_symbol)
+    if symbol:
+        return f"{path} · {symbol}"
+    return path
+
+
+def format_governance_display_label(citation_id: str, details: dict[str, Any]) -> str:
+    bundle_name = _governance_bundle_short_name(details.get("bundle_name"))
+    entry_type = details.get("type", "")
+    parsed = parse_citation_id(citation_id)
+
+    if entry_type == "governance":
+        source_key = details.get("source_key") or parsed.get("source_key") or ""
+        value = (details.get("evidence_text") or "").strip()
+        label = _governance_field_label(str(source_key))
+        if value and source_key != "bundle":
+            return f"{label}: {value}"
+        return label
+    if entry_type == "evidence":
+        question = (details.get("question") or "").strip()
+        if question:
+            return _truncate_label(question, 64)
+        return "Evidence"
+    if entry_type == "finding":
+        title = (details.get("finding_title") or "").strip()
+        if title:
+            return _truncate_label(title, 64)
+        return "Finding"
+    return citation_id
+
+
+def format_governance_reference_text(citation_id: str, details: dict[str, Any]) -> str:
+    entry_type = details.get("type", "")
+    parsed = parse_citation_id(citation_id)
+    tail = _bundle_context_tail(details)
+
+    if entry_type == "governance":
+        source_key = str(details.get("source_key") or parsed.get("source_key") or "")
+        value = (details.get("evidence_text") or "").strip()
+        label = _governance_field_label(source_key)
+        if source_key == "bundle":
+            return f"Governance bundle: {_bundle_name_with_short_id(details.get('bundle_name'), details.get('bundle_id'))}"
+        lead = f"{label}: {value}" if value else label
+        return f"{lead} · {tail}"
+
+    if entry_type == "evidence":
+        question = (details.get("question") or "").strip()
+        answer = (details.get("answer") or "").strip()
+        stage = (details.get("evidence_stage") or "").strip()
+        evset = (details.get("evidence_set_name") or "").strip()
+        lead_parts: list[str] = []
+        if question:
+            lead_parts.append(f"{question} — \"{answer}\"" if answer else question)
+        elif (details.get("evidence_text") or "").strip():
+            lead_parts.append(str(details["evidence_text"]).strip())
+        if stage or evset:
+            lead_parts.append(" / ".join(p for p in (stage, evset) if p))
+        lead = " · ".join(lead_parts) if lead_parts else "Evidence"
+        return f"{lead} · {tail}"
+
+    if entry_type == "finding":
+        title = (details.get("finding_title") or "").strip()
+        description = (details.get("finding_description") or "").strip()
+        severity = (details.get("finding_severity") or "").strip()
+        status = (details.get("finding_status") or "").strip()
+        body = title
+        if description:
+            body = f"{title} — {description}" if title else description
+        tags = []
+        if severity:
+            tags.append(f"[{severity}]")
+        if status and status != "To do":
+            tags.append(f"[{status.upper()}]")
+        lead = f"{' '.join(tags)} {body}".strip() if tags else body
+        return f"{lead} · {tail}"
+
+    evidence_text = (details.get("evidence_text") or "").strip()
+    if evidence_text:
+        return f"{evidence_text} · {tail}"
+    return tail
+
+
+def format_governance_traceability_label(citation_id: str, details: dict[str, Any]) -> str:
+    return format_governance_reference_text(citation_id, details)
+
+
+def citation_details_meta_payload(details: dict[str, Any]) -> dict[str, Any]:
+    if not is_governance_source_type(details.get("type", "")):
+        return {}
+    return {
+        key: details[key]
+        for key in CITATION_META_FIELDS
+        if details.get(key) not in (None, "")
+    }
+
+
+def citation_details_meta_comment(details: dict[str, Any]) -> str:
+    payload = citation_details_meta_payload(details)
+    if not payload:
+        return ""
+    return f" @meta:{json.dumps(payload, separators=(',', ':'))}"
+
+
+def parse_citation_details_meta_comment(line: str) -> dict[str, Any]:
+    match = re.search(r"@meta:(\{.*\})", line)
+    if not match:
+        return {}
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _parse_code_citation(raw: str) -> dict:
     """Parse the raw portion of a Code: citation, handling line number suffix."""
     start_line = None
@@ -123,6 +374,13 @@ def parse_citation_id(citation_id: str) -> dict:
     # Legacy format: code:path#symbol
     if citation_id.startswith("code:"):
         return _parse_code_citation(citation_id[len("code:"):])
+
+    if citation_id.startswith("governance."):
+        return {"type": "governance", "source_key": citation_id[len("governance."):]}
+    if citation_id.startswith("evidence."):
+        return {"type": "evidence", "source_key": citation_id[len("evidence."):]}
+    if citation_id.startswith("finding."):
+        return {"type": "finding", "source_key": citation_id[len("finding."):]}
 
     # Legacy format: mlflow:run/{run_id}/{kind}/{key}
     if citation_id.startswith("mlflow:run/"):
@@ -177,6 +435,8 @@ class CitationEntry:
     id: str
     type: str
     text: str
+    display_label: str = ""
+    governance_meta: dict[str, Any] = field(default_factory=dict)
     run_url: str = ""
     # Additional metadata for rich references
     experiment_name: str = ""
@@ -250,11 +510,12 @@ class CitationRegistry:
         if run_id:
             run_url = build_run_url(self.tracking_uri, experiment_id, run_id)
 
-        # Build the reference text based on type
+        display_label = citation_id
+        governance_meta: dict[str, Any] = {}
+
         if entry_type == "code_file":
-            location = code_path or "unknown"
-            symbol_part = f", Symbol: {code_symbol}()" if code_symbol else ""
-            text = f"Source Code\n    File: {location}{symbol_part}"
+            text = format_code_reference_text(code_path, code_symbol)
+            display_label = text
 
         elif entry_type == "mlflow_artifact":
             filename = os.path.basename(artifact_path) if artifact_path else "unknown"
@@ -275,6 +536,11 @@ class CitationRegistry:
             if run_id:
                 text += f"\n    Run ID: {run_id}"
 
+        elif is_governance_source_type(entry_type):
+            text = format_governance_reference_text(citation_id, details)
+            display_label = format_governance_display_label(citation_id, details)
+            governance_meta = citation_details_meta_payload(details)
+
         else:
             text = f"Reference: {citation_id}"
 
@@ -282,6 +548,8 @@ class CitationRegistry:
             id=citation_id,
             type=entry_type,
             text=text,
+            display_label=display_label,
+            governance_meta=governance_meta,
             run_url=run_url,
             experiment_name=experiment_name,
             run_name=run_name,
@@ -296,6 +564,15 @@ class CitationRegistry:
         if citation_id not in self._entries:
             return None
         return citation_id
+
+    def get_display_label(self, citation_id: str) -> Optional[str]:
+        entry = self._entries.get(citation_id)
+        if entry is None:
+            return None
+        return entry.display_label or citation_id
+
+    def get_entry(self, citation_id: str) -> Optional[CitationEntry]:
+        return self._entries.get(citation_id)
 
     # Legacy method for backward compatibility
     def get_number(self, citation_id: str) -> Optional[int]:
@@ -357,9 +634,10 @@ def replace_markers_with_ids(
         citation_id = match.group(1)
         display_id = registry.register(citation_id, details_map.get(citation_id))
         used_ids.append(display_id)
+        label = registry.get_display_label(display_id) or display_id
         if markdown:
-            return f"[{display_id}](#ref-{display_id})<!-- @cite:{citation_id} -->"
-        return f"[{display_id}]"
+            return f"[{label}](#ref-{display_id})<!-- @cite:{citation_id} -->"
+        return f"[{label}]"
 
     replaced = CITATION_MARKER_PATTERN.sub(_replace, text or "")
 
@@ -369,10 +647,11 @@ def replace_markers_with_ids(
                 continue
             display_id = registry.register(citation_id, details_map.get(citation_id))
             used_ids.append(display_id)
+            label = registry.get_display_label(display_id) or display_id
             marker = (
-                f"[{display_id}](#ref-{display_id})<!-- @cite:{citation_id} -->"
+                f"[{label}](#ref-{display_id})<!-- @cite:{citation_id} -->"
                 if markdown
-                else f"[{display_id}]"
+                else f"[{label}]"
             )
             replaced = f"{replaced} {marker}".rstrip()
 

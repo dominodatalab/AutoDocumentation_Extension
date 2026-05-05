@@ -68,7 +68,7 @@ class TestLLMClientInit:
             mock_cls.return_value = MagicMock()
             client = LLMClient(provider="anthropic", api_key="sk-test")
         assert client.provider == "anthropic"
-        assert client.model == "claude-sonnet-4-20250514"
+        assert client.model == "claude-haiku-4-5"
         assert client.max_retries == 3
 
     def test_anthropic_base_url_passed_to_sdk(self):
@@ -88,7 +88,7 @@ class TestLLMClientInit:
             mock_cls.return_value = MagicMock()
             client = LLMClient(provider="openai", api_key="sk-test")
         assert client.provider == "openai"
-        assert client.model == "gpt-4o"
+        assert client.model == "gpt-5.4-mini"
 
     def test_custom_model_override(self):
         """Explicit model name overrides default."""
@@ -382,6 +382,12 @@ class TestCompleteJsonOpenAI:
 
         result = await client.complete_json("prompt", schema={"type": "object"})
         assert result == expected_data
+        create = client.client.chat.completions.create
+        assert create.await_args is not None
+        kwargs = create.await_args.kwargs
+        assert "max_completion_tokens" in kwargs
+        assert kwargs["max_completion_tokens"] == 4096
+        assert "max_tokens" not in kwargs
 
     @pytest.mark.asyncio
     async def test_empty_response_raises(self, client):

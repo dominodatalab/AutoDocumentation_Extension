@@ -54,11 +54,11 @@ def _mock_dependencies(monkeypatch):
         id: str
         owner_id: str
         domino_run_id: Optional[str] = None
-        branch: Optional[str] = None
         hardware_tier: Optional[str] = None
         status: str = "queued"
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
+        dataset_id: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -184,11 +184,11 @@ class TestDbRecordToDataclass:
             "id": "job-1",
             "owner_id": "alice",
             "domino_run_id": "run-1",
-            "branch": "main",
             "hardware_tier": "tier-1",
             "status": "running",
             "domino_status": "Executing",
             "job_url": "https://domino/jobs/1",
+            "dataset_id": "ds-9",
             "spec_path": "/spec.yaml",
             "submitted_at": "2026-01-01T00:00:00",
             "completed_at": None,
@@ -199,6 +199,7 @@ class TestDbRecordToDataclass:
         assert record.owner_id == "alice"
         assert record.status == "running"
         assert record.domino_run_id == "run-1"
+        assert record.dataset_id == "ds-9"
 
     def test_handles_missing_optional_fields(self):
         ui = _import_ui()
@@ -207,6 +208,7 @@ class TestDbRecordToDataclass:
         assert record.id == "job-2"
         assert record.status == "queued"  # default
         assert record.domino_run_id is None
+        assert record.dataset_id is None
 
 
 # ---------------------------------------------------------------------------
@@ -263,8 +265,8 @@ class TestValidateEnvironment:
 class TestFieldId:
     def test_prefix(self):
         ui = _import_ui()
-        assert ui._field_id("branch") == "field-branch"
         assert ui._field_id("model") == "field-model"
+        assert ui._field_id("hardware_tier") == "field-hardware_tier"
 
 
 # ---------------------------------------------------------------------------
@@ -330,61 +332,86 @@ class TestRenderDominoStatus:
         assert result is not None
 
 
+class TestValidateStudioComputeEnvironment:
+    def test_missing_both_env_vars(self, monkeypatch, _mock_dependencies):
+        monkeypatch.delenv("DOMINO_ENVIRONMENT_ID", raising=False)
+        monkeypatch.delenv("DOMINO_ENVIRONMENT_REVISION_ID", raising=False)
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(MagicMock())
+        assert len(out) == 2
+        assert "administrator" in " ".join(out).lower()
+
+    def test_revision_not_accessible(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "need-this")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.return_value = [{"id": "other-rev"}]
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(mock_c)
+        mock_c.list_environment_revisions.assert_called_once_with("e1")
+        assert len(out) == 2
+
+    def test_api_raises_returns_friendly(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "r1")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.side_effect = RuntimeError("network")
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(mock_c)
+        assert len(out) == 2
+        assert "try again" in " ".join(out).lower()
+
+    def test_ok_empty_list(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "r1")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.return_value = [{"id": "r1", "number": 1}]
+        ui = _import_ui()
+        assert ui.validate_studio_domino_compute_environment(mock_c) == []
+
+
 # ---------------------------------------------------------------------------
 # _render_job_history_table
 # ---------------------------------------------------------------------------
-
-class TestRenderJobHistoryTable:
-    def test_renders_empty_message_when_no_jobs(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = []
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-    def test_renders_active_and_completed_jobs(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = [
-            {"id": "j1", "status": "running", "branch": "main",
-             "hardware_tier": "small", "submitted_at": "2026-01-01T00:00",
-             "job_url": "https://domino/j1", "domino_run_id": "r1"},
-            {"id": "j2", "status": "succeeded", "branch": "main",
-             "hardware_tier": "small", "submitted_at": "2025-12-31T00:00",
-             "job_url": "https://domino/j2"},
-        ]
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-    def test_shows_queue_banner_for_queued_jobs(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = [
-            {"id": "j1", "status": "queued", "branch": "main",
-             "hardware_tier": None, "submitted_at": "2026-01-01T00:00",
-             "job_url": None, "domino_run_id": None},
-        ]
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-    def test_handles_pre_bootstrap_runtime_error(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.side_effect = RuntimeError("Not ready")
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-
 class TestStudioPageInsightBanner:
     def test_insight_card_is_single_full_width_banner_before_grid(self):
         root = Path(__file__).resolve().parent.parent
         src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        assert src.count('cls="insight-card"') == 1
-        assert "studio-page-insight" in src
-        assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
+        scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert 'id="wizard-step1"' in src
+        assert 'id="template-preview-empty"' in src
+        assert "access_log=False" in src
+        assert "validate_studio_domino_compute_environment" in src
+        assert "studio-compute-env-json" in src
+        assert "loadBuiltinTemplates" in scripts
+        assert "loadYamlTemplatePreview" in scripts
+        assert ".preview-yaml-pre" in styles
 
-    def test_version_and_logs_footer_after_main_form_not_in_header(self):
+
+class TestInfoTooltipLayer:
+    def test_floating_tooltip_layer_escapes_overflow(self):
         root = Path(__file__).resolve().parent.parent
-        src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        assert "studio-footer-meta" in src
-        assert 'cls="header-meta"' not in src
-        assert src.index('id="main-form"') < src.index("studio-footer-meta")
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "#studio-info-tooltip" in styles
+        assert "position: fixed" in styles
+        assert "#studio-info-tooltip.visible" in styles
+        assert "studio-info-tooltip" in scripts
+        assert "closest('.info-tooltip')" in scripts
+
+
+class TestStudioTwoStepLayout:
+    def test_configure_and_history_two_columns_two_steps(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert 'id="wizard-step1"' in web
+        assert 'id="wizard-step2"' in web
+        assert "Choose a template" in web
+        assert 'id="generate-btn"' in web
+        assert "adv-opts-overlay" in web
+        assert "wizard-layout" in web or ".wizard-layout" in styles
 
 
 class TestSpecFileBrowserUi:
@@ -396,13 +423,125 @@ class TestSpecFileBrowserUi:
         assert "calc(5 * var(--spec-file-row))" in styles
         assert "specParentPath" in scripts
         assert "spec-file-parent" in scripts
+        assert "spec-file-icon" in scripts
+        assert "udcc1" in scripts
         assert "data-parent" in scripts
         assert ".spec-file-list > .spec-file-item:last-of-type" in styles
         assert "spec-file-list-pending" in scripts
         assert "spec-file-list-pending" in styles
         assert 'id="spec-file-list"' in web
-        assert "spec-path-input" in web
+        assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
-        assert "advanced-section-inline" in web
+        assert "<th>Documents</th>" in scripts
+        assert "renderJobHistory" in scripts
+        assert "field-environment_id" not in web
+        assert "environment-revision-slot" not in web
+        assert "adv-opts-overlay" in web
+        assert "adv-opts-open-btn" in scripts
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web
+        assert 'id="field-model"' in web
+        assert "DEFAULT_OPENAI_MODEL" in web
+        assert 'id="spec-yaml-upload"' in web
+        assert web.index('id="field-spec_path"') < web.index('id="spec-yaml-upload"')
+        assert web.index('id="spec-yaml-upload"') < web.index('id="spec-file-list"')
+        assert 'id="generate-btn"' in web
+        assert ".wizard-generate-btn" in styles
+
+    def test_spec_dataset_select_excludes_autodoc_name(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        from dataset_manager import AUTODOC_DATASET_NAME
+
+        assert AUTODOC_DATASET_NAME == "autodoc"
+        assert "datasets[i].name === 'autodoc'" in scripts_src
+
+    def test_template_gallery_uses_template_uid(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "data-uid" in scripts_src
+
+
+class TestResultsPanelNoRerenderInTerminalState:
+    def test_results_panel_skips_rerender_for_same_terminal_job(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_lastResultsPanelKey" in scripts_src
+        assert "panelKey === _lastResultsPanelKey" in scripts_src
+        assert "isTerminal" in scripts_src
+        assert "_selectedTemplateUid" in scripts_src
+
+
+class TestLandingDocPreviewRestoresEditYaml:
+    def test_close_landing_preview_restores_edit_template_yaml(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_landingPreviewOriginalEditYaml" in scripts_src
+        assert "edit-template-yaml" in scripts_src
+        assert "_landingPreviewOriginalEditYaml = null" in scripts_src
+        assert "editArea.value = _landingPreviewOriginalEditYaml" in scripts_src
+
+
+class TestGovernanceBundlePickerOptgroups:
+    def test_bundle_select_groups_by_model_with_optgroup(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_groupBundlesByModel" in scripts_src
+        assert "_renderGovernanceBundleSelectOptions" in scripts_src
+        assert "_bundleLeafLabel" in scripts_src
+        assert "<optgroup label=" in scripts_src
+        assert "_renderGovernanceBundleSelectOptions(visible, _selectedBundleId)" in scripts_src
+        assert "_bundleAutoLabel" in scripts_src
+        assert "_filterModelNamePatterns" in scripts_src
+        assert "_bundleMatchesModelNameFilters" in scripts_src
+        assert "_firstVisibleBundle" in scripts_src
+        assert "filter-model-names" in scripts_src
+        assert "applyGovernanceBundleSelection" in scripts_src
+
+    def test_model_name_filter_not_live_wired_to_bundle_picker(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "filter-model-names" in scripts_src
+        assert "addEventListener('input', applyGovernanceBundleSelection)" not in scripts_src
+        assert "addEventListener('change', applyGovernanceBundleSelection)" not in scripts_src
+
+    def test_model_name_filter_prefilled_from_model_id_url(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_prefillModelNameFilterFromUrl" in scripts_src
+        assert "resolvedModelId()" in scripts_src
+        assert "_prefillModelNameFilterFromUrl();" in scripts_src
+
+    def test_governance_bundle_select_always_shown(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_defaultBundleId" in scripts_src
+        assert "visible.length === 1" not in scripts_src
+        assert "select.style.display = 'none'" not in scripts_src
+
+    def test_bundles_for_context_all_when_no_model_id(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_bundleContainsModel" in scripts_src
+        assert "if (!mid) return list;" in scripts_src
+
+    def test_bundles_for_context_filters_by_model_id(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_bundleContainsModel(list[i], mid)" in scripts_src
+        assert "resolvedModelId()" in scripts_src
+
+    def test_doc_scope_label_below_template_gallery(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        gallery_idx = web.index('id="template-gallery"')
+        scope_idx = web.index('id="doc-scope-label"')
+        assert scope_idx > gallery_idx
+        assert "Code · Metrics · Artifacts · Governance · Evidence · Findings" in web
+
+    def test_filters_accordion_open_by_default(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        idx = web.index("filters-body")
+        section = web[max(0, idx - 200) : idx + 200]
+        assert "open=True" in section

@@ -87,3 +87,113 @@ class TestLocalDataManager:
             sub_files = local_data_manager.list_files(tmp, "sub")
             assert len(sub_files) == 1
             assert sub_files[0]["fileName"] == "b.txt"
+
+
+class TestDatasetManagerReadFileRaw:
+    def _patch_client(self, monkeypatch, resp):
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+
+        class Inner:
+            def get(self, *a, **k):
+                return resp
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+
+    def test_read_file_returns_plain_yaml_bytes_unchanged(self, monkeypatch):
+        body = b"slug: z\ncard_title: ZZ\n"
+
+        class Resp:
+            content = body
+            headers = {"content-type": "text/plain"}
+
+            def raise_for_status(self):
+                return None
+
+        self._patch_client(monkeypatch, Resp())
+        assert DatasetManager.read_file("snap", "spec-templates/x.yaml") == body
+
+    def test_read_file_calls_file_raw_endpoint(self, monkeypatch):
+        body = b"slug: z\ncard_title: ZZ\n"
+        captured = {}
+
+        class Resp:
+            content = body
+            headers = {"content-type": "text/plain"}
+
+            def raise_for_status(self):
+                return None
+
+        class Inner:
+            def get(self, url, **kwargs):
+                captured["url"] = url
+                captured["params"] = kwargs.get("params")
+                return Resp()
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+
+        DatasetManager.read_file("snap-99", "spec-templates/x.yaml")
+        assert captured["url"].endswith("/v4/datasetrw/snapshot/snap-99/file/raw")
+        assert captured["params"] == {"path": "spec-templates/x.yaml"}
+
+    def test_read_file_does_not_transform_json_shaped_body(self, monkeypatch):
+        body = b'{"content":"slug: z\\ncard_title: ZZ\\n"}'
+
+        class Resp:
+            content = body
+            headers = {"content-type": "text/plain"}
+
+            def raise_for_status(self):
+                return None
+
+        self._patch_client(monkeypatch, Resp())
+        assert DatasetManager.read_file("snap", "spec-templates/x.yaml") == body
+
+    def test_read_file_raises_on_http_error(self, monkeypatch):
+        import httpx
+
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+
+        req = httpx.Request(
+            "GET",
+            "https://api.example/v4/datasetrw/snapshot/snap/file/raw",
+        )
+        err_resp = httpx.Response(404, request=req, content=b"not found")
+
+        class Inner:
+            def get(self, *a, **k):
+                return err_resp
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+        with pytest.raises(httpx.HTTPStatusError):
+            DatasetManager.read_file("snap", "spec-templates/missing.yaml")

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import yaml
 from pydantic import BaseModel, Field
@@ -233,6 +233,7 @@ class DocumentSpec(BaseModel):
     hints: Dict[str, str] = Field(default_factory=dict)
     citation_style: str = "numeric"
     formatting: Dict[str, Any] = Field(default_factory=dict)
+    governance_findings_scope: Literal["open", "all"] = "open"
 
     @classmethod
     def from_yaml(cls, path: str) -> "DocumentSpec":
@@ -270,6 +271,10 @@ class DocumentSpec(BaseModel):
                 # Handle dict format: {name: "...", per_model: true, hint: "..."}
                 sections.append(SectionSpec(**section))
 
+        scope = data.get("governance_findings_scope", "open")
+        if scope not in ("open", "all"):
+            scope = "open"
+
         return cls(
             title=data["title"],
             authors=data.get("authors", "Data Science Team"),
@@ -277,6 +282,7 @@ class DocumentSpec(BaseModel):
             hints=data.get("hints", {}),
             citation_style=data.get("citation_style", "numeric"),
             formatting=data.get("formatting", {}),
+            governance_findings_scope=scope,
         )
 
     @classmethod
@@ -447,6 +453,112 @@ class Citation:
     url: Optional[str] = None
 
 
+# =============================================================================
+# Governance / Bundle Models
+# =============================================================================
+
+
+@dataclass
+class BundleAttachment:
+    """A resource attached to a governance bundle."""
+
+    id: str
+    type: str
+    identifier: Dict[str, Any]
+
+
+@dataclass
+class BundleSummary:
+    """Metadata for a governance bundle (from GET /bundles or GET /bundles/{id})."""
+
+    id: str
+    name: str
+    project_id: str
+    policy_id: str
+    policy_name: str
+    state: str
+    evidence_restricted: bool
+    stage: Optional[str] = None
+    classification_value: Optional[str] = None
+    owner_username: Optional[str] = None
+    owner_display_name: Optional[str] = None
+    project_owner: Optional[str] = None
+    attachments: List[BundleAttachment] = field(default_factory=list)
+    created_at: Optional[str] = None
+
+
+@dataclass
+class GovernanceFinding:
+    """A finding on a governance bundle."""
+
+    id: str
+    bundle_id: str
+    name: str
+    severity: str
+    status: str
+    description: Optional[str] = None
+    assignee: Optional[str] = None
+    approver: Optional[str] = None
+    due_date: Optional[str] = None
+
+
+@dataclass
+class ArtifactResult:
+    """A submitted evidence answer for one artifact within a bundle."""
+
+    id: str
+    evidence_id: str
+    bundle_id: str
+    artifact_id: str
+    artifact_content: Any
+    is_latest: bool = False
+
+
+@dataclass
+class ComputedPolicy:
+    """Result of POST /rpc/compute-policy. Contains both policy definition and submitted answers."""
+
+    bundle: BundleSummary
+    policy_id: str
+    policy_name: str
+    policy_stages: List[Dict[str, Any]]
+    results: List[ArtifactResult]
+    findings: List[GovernanceFinding] = field(default_factory=list)
+
+
+@dataclass
+class EvidenceItem:
+    artifact_id: str
+    question: str
+    answer: str
+    evidence_set_name: Optional[str] = None
+    stage: Optional[str] = None
+    answered_at: Optional[str] = None
+    citation_id: Optional[str] = None
+
+
+@dataclass
+class Finding:
+    finding_id: str
+    title: str
+    description: str = ""
+    severity: Optional[str] = None
+    status: str = "To do"
+    artifact_label: Optional[str] = None
+
+
+@dataclass
+class GovernanceContext:
+    bundle_id: str
+    bundle_name: Optional[str] = None
+    policy_name: Optional[str] = None
+    stage: Optional[str] = None
+    state: Optional[str] = None
+    risk_tier: Optional[str] = None
+    owner: Optional[str] = None
+    evidence: List[EvidenceItem] = field(default_factory=list)
+    findings: List[Finding] = field(default_factory=list)
+
 
 @dataclass
 class GenerationContext:
@@ -459,6 +571,8 @@ class GenerationContext:
     model_run_id: Optional[str] = None
     hint: Optional[str] = None
     language: str = "python"
+    governance_context: Optional[GovernanceContext] = None
+    governance_evidence: str = ""
 
 
 # =============================================================================

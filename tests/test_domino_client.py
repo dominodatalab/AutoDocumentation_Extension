@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -31,7 +32,13 @@ from domino_client import (
     get_project_context,
     submit_job,
     browse_code,
-    code_root_options_from_browse_response,
+    get_project_code_root,
+    get_code_source_info,
+    browse_gbp_code,
+    browse_dfs_code,
+    read_gbp_file_raw,
+    git_browse,
+    get_code_paths,
 )
 
 # No skip markers needed — all functions now exist in domino_client
@@ -212,12 +219,9 @@ class TestGetProjectContext:
         assert pname == "my-model"
         assert powner == "alice"
 
-    def test_without_project_id_returns_nones(self):
-        """When no project_id, should return (None, None, None)."""
-        pid, pname, powner = get_project_context(project_id=None)
-        assert pid is None
-        assert pname is None
-        assert powner is None
+    def test_empty_project_id_raises(self):
+        with pytest.raises(ValueError, match="project_id is required"):
+            get_project_context("")
 
 
 class TestBrowseCodeAndCodeRootOptions:
@@ -237,39 +241,23 @@ class TestBrowseCodeAndCodeRootOptions:
             browse_code("alice", "myproj", path_string="src/")
         assert mock_req.call_args.kwargs["params"]["pathString"] == "src/"
 
-    def test_code_root_gbp_and_dynamic(self):
-        raw = {
-            "projectSettings": {
-                "isGitBasedProject": True,
-                "repositories": [
-                    {"location": "/mnt/imported/code/lib", "repoName": "lib"},
-                ],
-            },
-        }
-        out = code_root_options_from_browse_response(raw)
-        assert out["isGitBasedProject"] is True
-        assert out["defaultRoot"] == "/mnt/code"
-        vals = [o["value"] for o in out["options"]]
-        assert vals[0] == "/mnt/code"
-        assert "/mnt/imported/code/lib" in vals
-        labels = [o["label"] for o in out["options"]]
-        assert any("lib" in lab for lab in labels)
+    def test_code_root_git_based_project(self):
+        with patch.object(dc, "browse_code") as mock_browse:
+            mock_browse.return_value = {"projectSettings": {"isGitBasedProject": True}}
+            result = get_project_code_root("alice", "myproj")
+        assert result == "/mnt/code"
 
-    def test_code_root_dfs_only_default_when_no_repos(self):
-        raw = {"projectSettings": {"isGitBasedProject": False, "repositories": []}}
-        out = code_root_options_from_browse_response(raw)
-        assert out["defaultRoot"] == "/mnt"
-        assert [o["value"] for o in out["options"]] == ["/mnt"]
+    def test_code_root_dfs_project(self):
+        with patch.object(dc, "browse_code") as mock_browse:
+            mock_browse.return_value = {"projectSettings": {"isGitBasedProject": False}}
+            result = get_project_code_root("alice", "myproj")
+        assert result == "/mnt"
 
-    def test_code_root_skips_duplicate_of_default(self):
-        raw = {
-            "projectSettings": {
-                "isGitBasedProject": False,
-                "repositories": [{"location": "/mnt", "repoName": "x"}],
-            },
-        }
-        out = code_root_options_from_browse_response(raw)
-        assert [o["value"] for o in out["options"]] == ["/mnt"]
+    def test_code_root_calls_browse_with_empty_path(self):
+        with patch.object(dc, "browse_code") as mock_browse:
+            mock_browse.return_value = {"projectSettings": {}}
+            get_project_code_root("alice", "myproj")
+        mock_browse.assert_called_once_with("alice", "myproj", path_string="")
 
 
 # ===================================================================
@@ -288,6 +276,8 @@ class TestSubmitJob:
                 branch="main",
                 tier_id="small",
                 project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
             )
 
         assert run_id == "run-abc-123"
@@ -296,30 +286,62 @@ class TestSubmitJob:
         """Branch should be passed as mainRepoGitRef in the payload."""
         with patch.object(dc, "_domino_request") as mock_req:
             mock_req.return_value = {"id": "run-xyz"}
-            submit_job(command=["python", "main.py"], branch="feature/x", project_id="proj-123")
+            submit_job(
+                command=["python", "main.py"],
+                branch="feature/x",
+                tier_id="",
+                project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
+            )
 
         payload = mock_req.call_args.kwargs["json"]
         assert payload["mainRepoGitRef"] == {"type": "branches", "value": "feature/x"}
 
-    def test_no_project_id_raises_runtime_error(self):
-        """When project_id is None, submit_job should raise."""
-        with pytest.raises(RuntimeError, match="No project ID"):
+    def test_no_project_id_raises_value_error(self):
+        """When project_id is empty, submit_job should raise."""
+        with pytest.raises(ValueError, match="project_id is required"):
             submit_job(
                 command=["python", "main.py"],
                 branch="main",
-                project_id=None,
+                tier_id="",
+                project_id="",
+                environment_id="",
+                environment_revision_id="",
             )
 
     def test_submit_no_branch_no_tier(self):
         """submit_job with no branch or tier should still succeed."""
         with patch.object(dc, "_domino_request") as mock_req:
             mock_req.return_value = {"id": "run-simple"}
-            run_id = submit_job(command=["echo", "hello"], branch=None, project_id="proj-123")
+            run_id = submit_job(
+                command=["echo", "hello"],
+                branch=None,
+                tier_id="",
+                project_id="proj-123",
+                environment_id="",
+                environment_revision_id="",
+            )
 
         assert run_id == "run-simple"
         payload = mock_req.call_args.kwargs["json"]
         assert "mainRepoGitRef" not in payload
         assert "overrideHardwareTierId" not in payload
+
+    def test_submit_includes_environment_and_revision(self):
+        with patch.object(dc, "_domino_request") as mock_req:
+            mock_req.return_value = {"id": "run-env"}
+            submit_job(
+                command=["echo", "hi"],
+                branch=None,
+                tier_id="",
+                project_id="proj-123",
+                environment_id="envid00112233445566778899aa",
+                environment_revision_id="revid00112233445566778899aa",
+            )
+        payload = mock_req.call_args.kwargs["json"]
+        assert payload["environmentId"] == "envid00112233445566778899aa"
+        assert payload["environmentRevisionSpec"] == {"revisionId": "revid00112233445566778899aa"}
 
 
 # ===================================================================
@@ -345,61 +367,71 @@ def _make_job_request(**overrides) -> Any:
         pytest.skip("studio package not importable")
 
     defaults = dict(
-        spec_path=None,
-        spec_content=None,
+        spec_path="",
         provider="anthropic",
-        model=None,
-        code_root=None,
-        max_files=None,
-        workers=None,
-        planning_workers=None,
-        timeout=None,
+        model="",
+        code_root="/mnt/code",
+        max_files=50,
+        workers=4,
+        planning_workers=3,
+        timeout=120.0,
         notebook=True,
-        notebook_path=None,
-        experiment_names=None,
-        model_names=None,
+        notebook_path="",
+        filtered_experiment_names="",
+        filtered_model_names="",
         latest_only=False,
-        verbose=False,
-        branch="main",
+        verbose=True,
         hardware_tier="small",
-        spec_filename=None,
-        project_id=None,
-        provider_base_url=None,
+        environment_id="",
+        environment_revision_id="",
+        project_id="",
+        provider_base_url="",
+        max_retries=5,
+        initial_backoff=10.0,
+        max_backoff=120.0,
+        backoff_jitter=0.2,
+        notebook_from_cache=False,
     )
     defaults.update(overrides)
     return _JR(**defaults)
+
+
+_ds = "/domino/datasets/local/autodoc"
 
 
 @skip_no_webapp
 class TestBuildJobCommandStr:
     """Tests for _build_job_command_str (in studio/job_engine.py)."""
 
-    def test_includes_notebook_flag(self):
-        """Domino jobs should always include --notebook."""
-        req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path=None)
+    def test_includes_notebook_flag_when_enabled(self):
+        req = _make_job_request(notebook=True)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml")
         assert "--notebook" in cmd
+
+    def test_omits_notebook_when_disabled(self):
+        req = _make_job_request(notebook=False)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml")
+        assert "--notebook" not in cmd
 
     def test_includes_spec_path(self):
         """Spec path should appear in the command."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path="/mnt/data/specs/my_spec.yaml")
+        cmd = _bld_cmd(req, "/mnt/data/specs/my_spec.yaml")
         assert "--spec" in cmd
         assert "/mnt/data/specs/my_spec.yaml" in cmd
 
     def test_no_artifacts_copy(self):
         """Command should not include any cp or artifacts step."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, spec_path=None)
+        cmd = _bld_cmd(req, "/spec.yaml")
         assert "cp" not in cmd
-        assert "artifacts" not in cmd
 
     def test_includes_provider_base_url_when_set(self):
         req = _make_job_request(
             provider="openai",
             provider_base_url="https://api.example/v1",
         )
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml")
         assert "--provider-base-url" in cmd
         assert "https://api.example/v1" in cmd
 
@@ -408,6 +440,265 @@ class TestBuildJobCommandStr:
             provider="anthropic",
             provider_base_url="https://api.anthropic.example",
         )
-        cmd = _bld_cmd(req, spec_path="/spec.yaml")
+        cmd = _bld_cmd(req, "/spec.yaml")
         assert "--provider-base-url" in cmd
         assert "https://api.anthropic.example" in cmd
+
+    def test_includes_language_default_in_command(self):
+        from default_consts import DEFAULT_LANGUAGE
+
+        req = _make_job_request()
+        cmd = _bld_cmd(req, "/spec.yaml")
+        parts = shlex.split(cmd)
+        assert parts[parts.index("--language") + 1] == DEFAULT_LANGUAGE
+
+
+# ===================================================================
+# get_code_source_info() tests
+# ===================================================================
+
+class TestGetCodeSourceInfo:
+    def _make_proj(self):
+        from domino_client import ProjectInfo
+        return ProjectInfo(id="proj-1", name="myproj", owner_username="alice")
+
+    def test_gbp_returns_main_repository_id(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        proj_resp = {"mainRepository": {"id": "main-repo-1"}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "_domino_request", return_value=proj_resp) as mock_req:
+            info = get_code_source_info("proj-1")
+        assert info["is_git"] is True
+        assert info["repo_id"] == "main-repo-1"
+        assert info["location"] == "/mnt/code"
+        assert "/v4/projects/proj-1" in mock_req.call_args[0][1]
+
+    def test_dfs_returns_is_git_false_no_repo_id(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": False}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp):
+            info = get_code_source_info("proj-1")
+        assert info["is_git"] is False
+        assert info["repo_id"] is None
+        assert info["location"] == "/mnt"
+
+    def test_gbp_missing_main_repository_returns_none_repo_id(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        proj_resp = {}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "_domino_request", return_value=proj_resp):
+            info = get_code_source_info("proj-1")
+        assert info["is_git"] is True
+        assert info["repo_id"] is None
+
+    def test_gbp_project_api_failure_returns_none_repo_id(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "_domino_request", side_effect=Exception("network error")):
+            info = get_code_source_info("proj-1")
+        assert info["is_git"] is True
+        assert info["repo_id"] is None
+
+    def test_unresolvable_project_raises(self):
+        with patch.object(dc, "resolve_project", return_value=None):
+            with pytest.raises(ValueError, match="Could not resolve"):
+                get_code_source_info("proj-bad")
+
+
+# ===================================================================
+# browse_gbp_code() tests
+# ===================================================================
+
+class TestBrowseGbpCode:
+    def test_returns_files_and_dirs_nested_response(self):
+        items = [{"kind": "file", "name": "spec.yaml"}, {"kind": "dir", "name": "sub"}]
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": items}}):
+            result = browse_gbp_code("proj-1", "repo-1", "")
+        assert {"fileName": "spec.yaml", "isDirectory": False} in result
+        assert {"fileName": "sub", "isDirectory": True} in result
+
+    def test_returns_files_and_dirs_flat_response(self):
+        items = [{"kind": "file", "name": "spec.yaml"}, {"kind": "dir", "name": "sub"}]
+        with patch.object(dc, "_domino_request", return_value={"items": items}):
+            result = browse_gbp_code("proj-1", "repo-1", "")
+        assert {"fileName": "spec.yaml", "isDirectory": False} in result
+        assert {"fileName": "sub", "isDirectory": True} in result
+
+    def test_empty_directory_omits_param(self):
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": []}}) as mock_req:
+            browse_gbp_code("proj-1", "repo-1", "")
+        params = mock_req.call_args.kwargs.get("params") or mock_req.call_args[1].get("params", {})
+        assert "directory" not in params
+
+    def test_nonempty_directory_passes_param(self):
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": []}}) as mock_req:
+            browse_gbp_code("proj-1", "repo-1", "src")
+        params = mock_req.call_args.kwargs.get("params") or mock_req.call_args[1].get("params", {})
+        assert params.get("directory") == "src"
+
+    def test_url_contains_project_and_repo(self):
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": []}}) as mock_req:
+            browse_gbp_code("proj-abc", "repo-xyz", "")
+        url = mock_req.call_args[0][1]
+        assert "proj-abc" in url
+        assert "repo-xyz" in url
+
+
+# ===================================================================
+# browse_dfs_code() tests
+# ===================================================================
+
+class TestBrowseDfsCode:
+    def test_merges_dirs_and_files(self):
+        dirs = [{"name": "subdir"}]
+        files = [{"name": "spec.yaml"}]
+
+        def _req(method, url, **kwargs):
+            if "browseDirectories" in url:
+                return dirs
+            return files
+
+        with patch.object(dc, "_domino_request", side_effect=_req):
+            result = browse_dfs_code("alice", "myproj", "/")
+        names = [r["fileName"] for r in result]
+        assert "subdir" in names
+        assert "spec.yaml" in names
+        dir_items = [r for r in result if r["isDirectory"]]
+        file_items = [r for r in result if not r["isDirectory"]]
+        assert dir_items[0]["fileName"] == "subdir"
+        assert file_items[0]["fileName"] == "spec.yaml"
+
+    def test_dir_failure_still_returns_files(self):
+        files = [{"name": "a.yaml"}]
+
+        def _req(method, url, **kwargs):
+            if "browseDirectories" in url:
+                raise RuntimeError("dir endpoint down")
+            return files
+
+        with patch.object(dc, "_domino_request", side_effect=_req):
+            result = browse_dfs_code("alice", "myproj", "/")
+        assert any(r["fileName"] == "a.yaml" for r in result)
+
+    def test_default_path_is_root_slash(self):
+        calls: list[Any] = []
+
+        def _req(method, url, **kwargs):
+            calls.append(kwargs.get("params", {}))
+            return []
+
+        with patch.object(dc, "_domino_request", side_effect=_req):
+            browse_dfs_code("alice", "myproj")
+        for params in calls:
+            assert params.get("filePath") == "/"
+
+
+# ===================================================================
+# read_gbp_file_raw() tests
+# ===================================================================
+
+class TestReadGbpFileRaw:
+    def test_returns_response_content(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        monkeypatch.setenv("DOMINO_USER_API_KEY", "key")
+        dc._project_cache.clear()
+
+        mock_resp = MagicMock()
+        mock_resp.content = b"yaml: content"
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get = MagicMock(return_value=mock_resp)
+
+        with patch("httpx.Client", return_value=mock_client):
+            result = read_gbp_file_raw("proj-1", "repo-1", "path/spec.yaml")
+
+        assert result == b"yaml: content"
+        call_kwargs = mock_client.get.call_args
+        assert call_kwargs[1]["params"]["fileName"] == "path/spec.yaml"
+
+    def test_raises_when_no_api_host(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        dc._project_cache.clear()
+        with patch.object(dc, "_resolve_api_host", return_value=None):
+            with pytest.raises(RuntimeError, match="not configured"):
+                read_gbp_file_raw("proj-1", "repo-1", "f.yaml")
+
+
+# ===================================================================
+# git_browse() tests
+# ===================================================================
+
+class TestGitBrowse:
+    def test_calls_gitBrowse_endpoint(self):
+        resp = {"repositories": [{"location": "/mnt/imported/code/myrepo"}]}
+        with patch.object(dc, "_domino_request", return_value=resp) as mock_req:
+            result = git_browse("alice", "myproj")
+        assert result == resp
+        assert mock_req.call_args[0][1] == "/v4/code/gitBrowse"
+        assert mock_req.call_args[1]["params"]["ownerUsername"] == "alice"
+        assert mock_req.call_args[1]["params"]["projectName"] == "myproj"
+
+
+# ===================================================================
+# get_code_paths() tests
+# ===================================================================
+
+class TestGetCodePaths:
+    def _make_proj(self):
+        from domino_client import ProjectInfo
+        return ProjectInfo(id="proj-1", name="myproj", owner_username="alice")
+
+    def test_gbp_with_imported_repos(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        git_resp = {"repositories": [
+            {"location": "/mnt/imported/code/repoA"},
+            {"location": "/mnt/imported/code/repoB"},
+        ]}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", return_value=git_resp):
+            result = get_code_paths("proj-1")
+        assert result["default"] == "/mnt/code"
+        assert result["paths"][0] == "/mnt/code"
+        assert "/mnt/imported/code/repoA" in result["paths"]
+        assert "/mnt/imported/code/repoB" in result["paths"]
+
+    def test_dfs_with_imported_repos(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": False}}
+        git_resp = {"repositories": [{"location": "/repos/repoX"}]}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", return_value=git_resp):
+            result = get_code_paths("proj-1")
+        assert result["default"] == "/mnt"
+        assert result["paths"][0] == "/mnt"
+        assert "/repos/repoX" in result["paths"]
+
+    def test_gbp_no_imported_repos(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        git_resp = {"repositories": []}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", return_value=git_resp):
+            result = get_code_paths("proj-1")
+        assert result["paths"] == ["/mnt/code"]
+
+    def test_git_browse_failure_returns_default_only(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", side_effect=Exception("timeout")):
+            result = get_code_paths("proj-1")
+        assert result["default"] == "/mnt/code"
+        assert result["paths"] == ["/mnt/code"]
+
+    def test_unresolvable_project_raises(self):
+        with patch.object(dc, "resolve_project", return_value=None):
+            with pytest.raises(ValueError, match="Could not resolve"):
+                get_code_paths("proj-bad")

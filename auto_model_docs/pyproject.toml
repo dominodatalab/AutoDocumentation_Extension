@@ -27,6 +27,7 @@ dependencies = [
     "openai==2.26.0",
     "mlflow==3.2.0",
     "python-docx==1.2.0",
+    "mammoth>=1.6.0",
     "matplotlib==3.8.4",
     "pydantic==2.10.6",
     "pydantic-settings==2.13.1",
@@ -55,6 +56,9 @@ autodoc = "auto_model_docs.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.setuptools.package-data]
+studio = ["static/fontawesome/*.otf"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -31,14 +31,12 @@ def _get_state_module():
     # If already imported, reload with mocks
     mock_domino_client = MagicMock()
     mock_domino_job_store = MagicMock()
-    mock_spec_store = MagicMock()
     mock_auth_context = MagicMock()
     mock_domino_datasets = MagicMock()
 
     # Pre-register the sibling modules so _import_sibling succeeds
     sys.modules["domino_client"] = mock_domino_client
     sys.modules["domino_job_store"] = mock_domino_job_store
-    sys.modules["spec_store"] = mock_spec_store
     sys.modules["auth_context"] = MagicMock()
     sys.modules["domino_datasets"] = mock_domino_datasets
 
@@ -58,9 +56,30 @@ def _get_state_module():
 @pytest.fixture
 def state_module():
     """Provide a fresh studio.state module."""
+    saved = {
+        "domino_client": sys.modules.get("domino_client"),
+        "domino_job_store": sys.modules.get("domino_job_store"),
+        "auth_context": sys.modules.get("auth_context"),
+        "domino_datasets": sys.modules.get("domino_datasets"),
+        "studio.state": sys.modules.get("studio.state"),
+        "studio": sys.modules.get("studio"),
+    }
     mod = _get_state_module()
     mod._STARTUP_WARNINGS = []
     yield mod
+    for key, val in saved.items():
+        if val is None:
+            sys.modules.pop(key, None)
+        else:
+            sys.modules[key] = val
+
+
+class TestLoggingSetup:
+    def test_httpx_httpcore_noise_suppressed(self, state_module):
+        import logging
+
+        assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+        assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
 
 
 # ---------------------------------------------------------------------------
@@ -72,14 +91,46 @@ class TestJobRequest:
         jr = state_module.JobRequest
         field_names = {f.name for f in fields(jr)}
         expected = {
-            "spec_path", "spec_content", "provider", "model",
+            "spec_path", "provider", "model",
             "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
-            "experiment_names", "model_names", "latest_only", "verbose",
-            "branch", "hardware_tier", "spec_filename",
+            "filtered_experiment_names", "filtered_model_names", "latest_only", "verbose",
+            "hardware_tier",
+            "environment_id", "environment_revision_id",
             "project_id", "provider_base_url",
+            "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
+            "notebook_from_cache",
         }
         assert expected.issubset(field_names)
+
+    def test_job_request_constructible(self, state_module):
+        jr = state_module.JobRequest(
+            spec_path="",
+            provider="anthropic",
+            model="",
+            code_root="",
+            max_files=50,
+            workers=4,
+            planning_workers=4,
+            timeout=120.0,
+            notebook=False,
+            notebook_path="",
+            filtered_experiment_names="",
+            filtered_model_names="",
+            latest_only=False,
+            verbose=False,
+            hardware_tier="",
+            environment_id="",
+            environment_revision_id="",
+            project_id="",
+            provider_base_url="",
+            max_retries=5,
+            initial_backoff=10.0,
+            max_backoff=120.0,
+            backoff_jitter=0.2,
+            notebook_from_cache=False,
+        )
+        assert jr.provider == "anthropic"
 
 
 class TestDominoJobRecord:
@@ -88,26 +139,6 @@ class TestDominoJobRecord:
         assert rec.status == "queued"
         assert rec.domino_run_id is None
         assert rec.project_id is None
-
-
-class TestLogBuffer:
-    def test_captures_log_records(self, state_module):
-        import logging
-        state_module.log_buffer.buffer.clear()
-        logging.getLogger("test.buffer").warning("hello-buffer-123")
-        snap = state_module.log_buffer.snapshot()
-        assert any("hello-buffer-123" in line for line in snap)
-
-    def test_respects_capacity(self, state_module):
-        import logging
-        state_module.log_buffer.buffer.clear()
-        cap = state_module.log_buffer.buffer.maxlen
-        logger = logging.getLogger("test.buffer")
-        logger.setLevel(logging.DEBUG)
-        for i in range(cap + 50):
-            logger.warning("line-%d", i)
-        snap = state_module.log_buffer.snapshot()
-        assert len(snap) == cap
 
 
 class TestEnvironmentWarning:

@@ -16,7 +16,6 @@ import httpx
 
 from domino_auth import resolve_api_host as _resolve_api_host
 from domino_auth import current_auth as _current_auth
-from domino_auth import resolve_project_id as _resolve_project_id
 
 
 def _get_auth_headers() -> dict[str, str]:
@@ -92,18 +91,16 @@ def _api_request(
 # List datasets (writable only)
 # ---------------------------------------------------------------------------
 
-def list_datasets(project_id: Optional[str] = None) -> list[dict[str, Any]]:
+def list_datasets(project_id: str) -> list[dict[str, Any]]:
     """List datasets for a project via the v4 datasets-v2 endpoint.
 
     Returns id, name, description, rwSnapshotId, and datasetPath per dataset.
     """
-    pid = _resolve_project_id(project_id)
-
     resp = _api_request(
         "GET", "/v4/datasetrw/datasets-v2",
         params={
             "includeStorageInfo": "true",
-            "projectIdsToInclude": pid,
+            "projectIdsToInclude": project_id,
         },
     )
     items = resp.json()
@@ -153,6 +150,7 @@ def _create_dataset(
                 "id": ds.get("datasetId") or ds.get("id", ""),
                 "name": ds.get("datasetName") or ds.get("name", name),
                 "rwSnapshotId": ds.get("readWriteSnapshotId") or (snapshot_ids[0] if snapshot_ids else None),
+                "datasetPath": (ds.get("datasetPath") or "").strip(),
             }
         except httpx.HTTPStatusError as exc:
             last_error = exc.response.text if exc.response else str(exc)
@@ -168,27 +166,37 @@ def _create_dataset(
 
 
 def ensure_dataset(
-    project_id: Optional[str] = None,
+    project_id: str,
     name: str = AUTODOC_SPECS_DATASET,
     description: str = AUTODOC_SPECS_DESCRIPTION,
 ) -> dict[str, Any]:
-    """Find or create the named dataset.  Create-first pattern."""
-    pid = _resolve_project_id(project_id)
+    """Return the named dataset if it exists; otherwise create it."""
+    datasets = list_datasets(project_id)
+    for row in datasets:
+        if row["name"] == name:
+            return row
 
-    # Try create first (single fast call)
     try:
-        created = _create_dataset(pid, name, description)
-        return created
+        return _create_dataset(project_id, name, description)
     except Exception:
-        logger.debug("Create failed for '%s', looking up existing", name, exc_info=True)
+        logger.debug("Create failed for '%s', re-listing datasets", name, exc_info=True)
 
-    # Find existing
-    datasets = list_datasets(pid)
-    for ds in datasets:
-        if ds["name"] == name:
-            return ds
+    datasets = list_datasets(project_id)
+    for row in datasets:
+        if row["name"] == name:
+            return row
 
-    raise RuntimeError(f"Failed to create or find dataset '{name}' in project {pid}")
+    raise RuntimeError(f"Failed to create or find dataset '{name}' in project {project_id}")
+
+
+def get_existing_autodoc_dataset(
+    project_id: str,
+    name: str = AUTODOC_SPECS_DATASET,
+) -> Optional[dict[str, Any]]:
+    for row in list_datasets(project_id):
+        if row.get("name") == name:
+            return row
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -201,17 +209,41 @@ def get_dataset_detail(dataset_id: str) -> dict[str, Any]:
     return resp.json()
 
 
+def _dataset_path_from_detail_payload(detail: Any) -> str:
+    if not isinstance(detail, dict):
+        return ""
+    path = (detail.get("datasetPath") or "").strip()
+    if path:
+        return path
+    for key in ("datasetRwDto", "dataset"):
+        inner = detail.get(key)
+        if isinstance(inner, dict):
+            path = (inner.get("datasetPath") or "").strip()
+            if path:
+                return path
+    return ""
+
+
+def resolve_dataset_mount_path(ensured: dict[str, Any]) -> str:
+    path = (ensured.get("datasetPath") or "").strip()
+    if path:
+        return path
+    ds_id = (ensured.get("id") or "").strip()
+    if not ds_id:
+        raise RuntimeError("Cannot resolve dataset mount path: missing dataset id")
+    detail = get_dataset_detail(ds_id)
+    path = _dataset_path_from_detail_payload(detail)
+    if not path:
+        raise RuntimeError(f"Cannot resolve dataset mount path for dataset {ds_id}")
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Snapshots
 # ---------------------------------------------------------------------------
 
-def get_rw_snapshot_id(
-    dataset_id: str, project_id: Optional[str] = None,
-) -> Optional[str]:
+def get_rw_snapshot_id(dataset_id: str) -> Optional[str]:
     """Resolve the read-write (active) snapshot ID for a dataset."""
-    pid = _resolve_project_id(project_id)
-
-
     try:
         resp = _api_request(
             "GET", f"/api/datasetrw/v1/datasets/{dataset_id}/snapshots",
@@ -234,15 +266,8 @@ def get_rw_snapshot_id(
 # File browsing
 # ---------------------------------------------------------------------------
 
-def list_files(
-    snapshot_id: str,
-    path: str = "",
-    project_id: Optional[str] = None,
-) -> list[dict[str, Any]]:
+def list_files(snapshot_id: str, path: str = "") -> list[dict[str, Any]]:
     """List files in a dataset snapshot, returning only directories and yaml files."""
-    pid = _resolve_project_id(project_id)
-
-
     resp = _api_request(
         "GET", f"/v4/datasetrw/files/{snapshot_id}",
         params={"path": path},
@@ -287,7 +312,6 @@ async def upload_file(
     dataset_id: str,
     file_path: str,
     content: bytes,
-    project_id: Optional[str] = None,
 ) -> None:
     """Upload a file to a dataset via the v4 chunked upload API.
 
@@ -296,7 +320,6 @@ async def upload_file(
     import hashlib
     import io
 
-    pid = _resolve_project_id(project_id)
     headers = _get_auth_headers()
     base = _resolve_api_host()
     base_url = base.rstrip("/")

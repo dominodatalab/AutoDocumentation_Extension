@@ -65,7 +65,7 @@ class LLMClient:
         if self.provider == "anthropic":
             from anthropic import AsyncAnthropic
 
-            self.model = model or "claude-sonnet-4-20250514"
+            self.model = model or "claude-haiku-4-5"
             key = api_key or os.environ.get("ANTHROPIC_API_KEY")
             if not key:
                 raise LLMError("ANTHROPIC_API_KEY not set")
@@ -75,7 +75,7 @@ class LLMClient:
         elif self.provider == "openai":
             from openai import AsyncOpenAI
 
-            self.model = model or "gpt-4o"
+            self.model = model or "gpt-5.4-mini"
             key = api_key or os.environ.get("OPENAI_API_KEY")
             if not key:
                 raise LLMError("OPENAI_API_KEY not set")
@@ -131,7 +131,7 @@ class LLMClient:
                 async def _request():
                     return await self.client.chat.completions.create(
                         model=self.model,
-                        max_tokens=max_tokens,
+                        max_completion_tokens=max_tokens,
                         temperature=temperature,
                         messages=[
                             {"role": "system", "content": system},
@@ -210,7 +210,7 @@ class LLMClient:
                 async def _request():
                     return await self.client.chat.completions.create(
                         model=self.model,
-                        max_tokens=max_tokens,
+                        max_completion_tokens=max_tokens,
                         response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": f"{system}\nAlways respond with valid JSON."},

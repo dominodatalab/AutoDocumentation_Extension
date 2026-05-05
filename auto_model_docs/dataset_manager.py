@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import logging
 from typing import Any
 
@@ -116,17 +117,32 @@ class DatasetManager:
     def read_file(snapshot_id: str, path: str) -> bytes:
         """Download file content from a snapshot.
 
-        Endpoint: GET /v4/datasetrw/snapshot/{snapshotId}/file/preview?path=
+        Endpoint: GET /v4/datasetrw/snapshot/{snapshotId}/file/raw?path=
         """
         base_url = _resolve_api_host().rstrip("/")
+        url = f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/raw"
+        logger.info(
+            "DatasetManager.read_file: GET %s params=%r snapshot_id=%r",
+            url,
+            {"path": path},
+            snapshot_id,
+        )
         with httpx.Client(timeout=60.0) as client:
             resp = client.get(
-                f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/preview",
+                url,
                 params={"path": path},
                 headers=_get_auth_headers(),
             )
             resp.raise_for_status()
-        return resp.content
+        hdrs = getattr(resp, "headers", {}) or {}
+        data = resp.content or b""
+        logger.info(
+            "DatasetManager.read_file: response status=%s content-type=%r len=%d",
+            getattr(resp, "status_code", 200),
+            (hdrs.get("content-type") or "")[:120],
+            len(data),
+        )
+        return data
 
     @staticmethod
     def read_file_meta(snapshot_id: str, path: str) -> dict[str, Any]:
@@ -151,9 +167,16 @@ class DatasetManager:
         Endpoint: GET /v4/datasetrw/files/{snapshotId}?path=
         """
         base_url = _resolve_api_host().rstrip("/")
+        url = f"{base_url}/v4/datasetrw/files/{snapshot_id}"
+        logger.info(
+            "DatasetManager.list_files: GET %s params=%r snapshot_id=%r",
+            url,
+            {"path": path},
+            snapshot_id,
+        )
         with httpx.Client(timeout=30.0) as client:
             resp = client.get(
-                f"{base_url}/v4/datasetrw/files/{snapshot_id}",
+                url,
                 params={"path": path},
                 headers=_get_auth_headers(),
             )
@@ -161,6 +184,12 @@ class DatasetManager:
 
         data = resp.json()
         rows = data.get("rows", [])
+        logger.info(
+            "DatasetManager.list_files: rows=%d snapshot_id=%r path=%r",
+            len(rows),
+            snapshot_id,
+            path,
+        )
 
         path_prefix = (path.rstrip("/") + "/") if path else ""
         files: list[dict[str, Any]] = []
@@ -179,6 +208,12 @@ class DatasetManager:
                 "sizeInBytes": size_info.get("sizeInBytes") or name_info.get("sizeInBytes", 0),
                 "lastModified": row.get("lastModified"),
             })
+        names_out = [f["fileName"] for f in files]
+        logger.info(
+            "DatasetManager.list_files: normalized %d file entries fileNames=%r",
+            len(files),
+            names_out[:50],
+        )
         return files
 
     @staticmethod

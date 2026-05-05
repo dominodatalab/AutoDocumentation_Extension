@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime
 
 import pytest
 
@@ -41,6 +42,21 @@ class TestArtifactLayout:
     def test_generation_cache(self):
         layout = ArtifactLayout()
         assert layout.generation_cache == ".autodoc/cache.json"
+
+    def test_run_dir_with_timestamp(self):
+        layout = ArtifactLayout()
+        ts = datetime(2026, 5, 27, 14, 30, 45)
+        run_dir = layout.run_dir(ts)
+        assert run_dir == "docs/2026-05-27_14-30-45"
+
+    def test_run_dir_without_timestamp(self):
+        layout = ArtifactLayout()
+        run_dir = layout.run_dir()
+        # Check it starts with docs/ and has date-time format
+        assert run_dir.startswith("docs/")
+        parts = run_dir.split("/")
+        assert len(parts) == 2
+        assert "-" in parts[1]  # Contains dashes like 2026-05-27_14-30-45
 
 
 class TestSingleton:

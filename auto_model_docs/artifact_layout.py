@@ -1,9 +1,9 @@
 """Central path resolver for all autodoc artifacts.
 
 All artifact paths flow through this module. Paths are logical paths
-relative to the dataset root, used with the DatasetStore for actual I/O.
+relative to /mnt/artifacts/, used with domino_artifacts module for actual I/O.
 
-Directory structure within the autodoc dataset:
+Directory structure within artifacts:
     docs/          — Generated .docx and .ipynb files
     specs/         — Uploaded YAML spec files
     .autodoc/      — Internal artifacts
@@ -13,6 +13,7 @@ Directory structure within the autodoc dataset:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -21,10 +22,10 @@ _layout: Optional["ArtifactLayout"] = None
 
 
 class ArtifactLayout:
-    """Logical path resolver for autodoc artifacts within a dataset.
+    """Logical path resolver for autodoc artifacts within /mnt/artifacts/.
 
-    Paths returned are relative to the dataset root. All actual I/O
-    goes through DatasetStore (dataset_store.py).
+    Paths returned are relative to /mnt/artifacts/. All actual I/O
+    goes through domino_artifacts module or filesystem in job containers.
     """
 
     # -- User-visible paths (relative to dataset root) --
@@ -46,6 +47,20 @@ class ArtifactLayout:
     @property
     def generation_cache(self) -> str:
         return ".autodoc/cache.json"
+
+    def run_dir(self, timestamp: datetime | None = None) -> str:
+        """Generate docs/<YYYY-MM-DD_HH-MM-SS> directory path for a run.
+
+        Args:
+            timestamp: datetime to use. If None, uses current time.
+
+        Returns:
+            Path relative to artifacts root, e.g. "docs/2026-05-27_14-30-45"
+        """
+        if timestamp is None:
+            timestamp = datetime.now()
+        date_str = timestamp.strftime("%Y-%m-%d_%H-%M-%S")
+        return f"docs/{date_str}"
 
 
 def init_layout() -> ArtifactLayout:

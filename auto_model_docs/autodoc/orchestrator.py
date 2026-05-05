@@ -5,8 +5,10 @@ import time
 import base64
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +26,12 @@ from autodoc.core.models import (
     SectionResult,
     SectionSpec,
     detect_language,
+    get_language_profile,
 )
 from autodoc.generation import ContentGenerator, DocumentBuilder, NotebookBuilder, SectionPlanner
 from autodoc.llm import LLMClient
 from autodoc.scanning import ArtifactScanner, CodeScanner, ContentSanitizer
+from autodoc.core.models import GovernanceContext
 
 
 # Type alias for progress callback
@@ -63,12 +67,10 @@ class Orchestrator:
         analysis_timeout: float = 90.0,
         scan_retries: int = 2,
         scan_workers: int = 2,
-        notebook_path: Optional[Path] = None,
         experiment_names: Optional[List[str]] = None,
         model_names: Optional[List[str]] = None,
         latest_only: bool = False,
-        disable_project_filtering: bool = False,
-        dataset_mount_path: str = "",
+        language: str = "auto",
     ):
         """Initialize the orchestrator.
 
@@ -83,24 +85,29 @@ class Orchestrator:
             max_files: Maximum files to scan.
             max_file_size: Maximum file size in characters.
             generate_notebook: Whether to also generate an editable Jupyter notebook.
-            notebook_path: Custom path for the generated notebook. If not provided,
-                uses <output_dir>/model_docs_notebook.ipynb.
             experiment_names: List of experiment names to include.
             model_names: List of specific model names to include.
             latest_only: Only include the latest version of each model.
-            disable_project_filtering: Disable automatic Domino project filtering.
         """
         self.llm = llm
         self.code_root = code_root
         self.output_dir = output_dir
         self.generate_notebook = generate_notebook
-        self.notebook_path = notebook_path
-        self.dataset_mount_path = dataset_mount_path
+        import os
+        run_id = os.environ.get("DOMINO_RUN_ID", "")
+        if run_id:
+            self.run_dir = f"docs/{run_id[:8]}"
+        else:
+            self.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
-        # Detect language before creating sanitizer and scanner
-        detected_profile, detected_count = detect_language(code_root)
-        self.language_profile: LanguageProfile = detected_profile or PYTHON_PROFILE
-        self.detected_file_count: int = detected_count
+        _lang = str(language or "auto").strip().lower()
+        if _lang != "auto":
+            self.language_profile = get_language_profile(_lang)
+            self.detected_file_count = 0
+        else:
+            detected_profile, detected_count = detect_language(code_root)
+            self.language_profile = detected_profile or PYTHON_PROFILE
+            self.detected_file_count = detected_count
 
         # Create sanitizer with language-specific secret patterns
         # Separate regex patterns from file-name patterns
@@ -137,19 +144,14 @@ class Orchestrator:
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            disable_project_filtering=disable_project_filtering,
         )
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
-        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path)
+        self.builder = DocumentBuilder(output_dir=output_dir)
 
         # Optional notebook builder
         if generate_notebook:
-            self.notebook_builder = NotebookBuilder(
-                output_dir=output_dir,
-                notebook_path=notebook_path,
-                dataset_mount_path=dataset_mount_path,
-            )
+            self.notebook_builder = NotebookBuilder(output_dir=output_dir)
 
         # Semaphore for limiting concurrent LLM calls during content generation
         self.semaphore = asyncio.Semaphore(parallel_workers)
@@ -161,6 +163,7 @@ class Orchestrator:
         spec: DocumentSpec,
         on_progress: Optional[ProgressCallback] = None,
         on_status: Optional[StatusCallback] = None,
+        governance_context: Optional[GovernanceContext] = None,
     ) -> Path:
         """Execute the full document generation pipeline.
 
@@ -227,19 +230,24 @@ class Orchestrator:
             await asyncio.gather(code_task, artifact_task, return_exceptions=True)
             raise
 
-        # Log scan summary for debugging
-        for m in artifact_ctx.models:
-            metrics_list = list(m.metrics.keys()) if m.metrics else []
-            artifacts_list = m.artifacts if m.artifacts else []
-
         if on_progress:
             on_progress("Scanning", 1.0)
 
-        # Phase 2: Plan
+        governance_evidence = self.generator._format_governance_evidence(
+            governance_context
+        )
+
         if on_progress:
             on_progress("Planning", 0.0)
 
-        plans = await self._plan_all_sections(spec, code_ctx, artifact_ctx, on_progress)
+        plans = await self._plan_all_sections(
+            spec,
+            code_ctx,
+            artifact_ctx,
+            governance_context,
+            governance_evidence,
+            on_progress,
+        )
 
         if on_progress:
             on_progress("Planning", 1.0)
@@ -249,7 +257,12 @@ class Orchestrator:
             on_progress("Generating", 0.0)
 
         results = await self._generate_all_content(
-            plans, code_ctx, artifact_ctx, on_progress
+            plans,
+            code_ctx,
+            artifact_ctx,
+            governance_context,
+            governance_evidence,
+            on_progress,
         )
 
         if on_progress:
@@ -259,19 +272,16 @@ class Orchestrator:
         if on_progress:
             on_progress("Building", 0.0)
 
-        output_path = await self.builder.build(spec, results)
+        docx_output_path = f"{self.run_dir}/model_docs.docx"
+        output_path = await self.builder.build(spec, results, docx_output_path)
 
         if on_progress:
             on_progress("Building", 0.5)
 
         # Phase 4b: Also build notebook if requested
         if self.generate_notebook:
-            # Sync notebook filename with docx when no custom path was provided
-            if not self.notebook_builder.notebook_path:
-                # output_path is a dataset-relative string (e.g. "docs/model_docs_*.docx")
-                base = output_path.rsplit(".", 1)[0] if "." in output_path else output_path
-                self.notebook_builder.notebook_path = f"{base}.ipynb"
-            await self.notebook_builder.build(spec, results)
+            notebook_output_path = f"{self.run_dir}/model_docs.ipynb"
+            await self.notebook_builder.build(spec, results, notebook_output_path)
 
         # Save results to cache for --notebook-from-cache rebuilds
         self._save_results_cache(spec, results)
@@ -310,12 +320,10 @@ class Orchestrator:
             on_progress("Building notebook", 0.0)
 
         if not hasattr(self, "notebook_builder"):
-            self.notebook_builder = NotebookBuilder(
-                output_dir=self.output_dir,
-                notebook_path=self.notebook_path if hasattr(self, "notebook_path") else None,
-            )
+            self.notebook_builder = NotebookBuilder(output_dir=self.output_dir)
 
-        notebook_path = await self.notebook_builder.build(spec, results)
+        notebook_output_path = f"{self.run_dir}/model_docs.ipynb"
+        notebook_path = await self.notebook_builder.build(spec, results, notebook_output_path)
 
         if on_progress:
             on_progress("Building notebook", 1.0)
@@ -349,7 +357,9 @@ class Orchestrator:
 
         cache_path = self._get_cache_path()
         content = json.dumps(cache_data, indent=2).encode("utf-8")
-        local_data_manager.write_file(self.dataset_mount_path, cache_path, content)
+        full_path = Path(self.output_dir) / cache_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(content)
 
     def _load_results_cache(self) -> tuple[DocumentSpec, List[SectionResult]]:
         """Load generation results from cache via filesystem.
@@ -360,15 +370,14 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If cache file doesn't exist.
         """
-        import local_data_manager
         cache_path = self._get_cache_path()
-        if not local_data_manager.file_exists(self.dataset_mount_path, cache_path):
+        full_path = Path(self.output_dir) / cache_path
+        if not full_path.exists():
             raise FileNotFoundError(
                 f"No cached results found at {cache_path}. "
                 "Run full generation first with --notebook flag."
             )
-
-        content = local_data_manager.read_file(self.dataset_mount_path, cache_path)
+        content = full_path.read_bytes()
         cache_data = json.loads(content)
 
         # Reconstruct DocumentSpec
@@ -479,6 +488,8 @@ class Orchestrator:
         spec: DocumentSpec,
         code_ctx: CodeContext,
         artifact_ctx: ArtifactContext,
+        governance_context: Optional[GovernanceContext],
+        governance_evidence: str,
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionPlan]:
         """Plan all sections in the document."""
@@ -491,12 +502,13 @@ class Orchestrator:
                 models = artifact_ctx.models or []
 
                 if not models:
-                    # No models found, create a generic section
                     context = GenerationContext(
                         code_context=code_ctx,
                         artifact_context=artifact_ctx,
                         section_name=section.name,
                         hint=spec.hints.get(section.name),
+                        governance_context=governance_context,
+                        governance_evidence=governance_evidence,
                     )
                     planning_tasks.append((section, context, str(section_num)))
                 else:
@@ -508,6 +520,8 @@ class Orchestrator:
                             model_name=model.name,
                             model_run_id=model.run_id,
                             hint=spec.hints.get(section.name),
+                            governance_context=governance_context,
+                            governance_evidence=governance_evidence,
                         )
                         planning_tasks.append((section, context, f"{section_num}.{j}"))
             else:
@@ -517,6 +531,8 @@ class Orchestrator:
                     artifact_context=artifact_ctx,
                     section_name=section.name,
                     hint=spec.hints.get(section.name),
+                    governance_context=governance_context,
+                    governance_evidence=governance_evidence,
                 )
                 planning_tasks.append((section, context, str(section_num)))
 
@@ -567,6 +583,8 @@ class Orchestrator:
         plans: List[SectionPlan],
         code_ctx: CodeContext,
         artifact_ctx: ArtifactContext,
+        governance_context: Optional[GovernanceContext],
+        governance_evidence: str,
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionResult]:
         """Generate content for all sections in parallel."""
@@ -584,6 +602,8 @@ class Orchestrator:
                 section_name=plan.name,
                 model_name=plan.model_name,
                 model_run_id=plan.model_run_id,
+                governance_context=governance_context,
+                governance_evidence=governance_evidence,
             )
 
             async def _gen_block(block):

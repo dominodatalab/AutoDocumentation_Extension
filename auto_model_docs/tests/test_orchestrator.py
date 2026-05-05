@@ -3,14 +3,13 @@
 import asyncio
 import base64
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import artifact_layout
-import local_data_manager
-import dataset_manager
 
 from autodoc.core.models import (
     ArtifactContext,
@@ -33,44 +32,15 @@ from autodoc.orchestrator import Orchestrator
 
 
 # ---------------------------------------------------------------------------
-# In-memory DatasetStore for cache tests
+# In-memory artifact store for cache tests
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _init_layout_and_store(monkeypatch):
-    """Set up ArtifactLayout, dataset ctx, and in-memory DatasetManager patches."""
+def _init_layout():
+    """Set up ArtifactLayout for tests."""
     artifact_layout.init_layout()
-
-    files: dict[str, bytes] = {}
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "write_file",
-        staticmethod(lambda dsid, path, content: files.__setitem__(path, content)),
-    )
-
-    def _read(snap, path):
-        if path not in files:
-            raise FileNotFoundError(path)
-        return files[path]
-
-    monkeypatch.setattr(dataset_manager.DatasetManager, "read_file", staticmethod(_read))
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "file_exists",
-        staticmethod(lambda snap, path: path in files),
-    )
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "list_files",
-        staticmethod(lambda snap, path="": []),
-    )
-
-    import tempfile
-    _tmp = tempfile.mkdtemp()
-    _test_mount_path.value = _tmp
     yield
     artifact_layout.reset_layout()
-
-
-class _test_mount_path:
-    value = ""
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +132,25 @@ class TestLanguageDetection:
         )
         assert orch.language_profile is R_PROFILE
         assert orch.detected_file_count == 12
+
+    @patch("autodoc.orchestrator.ArtifactScanner")
+    @patch("autodoc.orchestrator.CodeScanner")
+    @patch("autodoc.orchestrator.DocumentBuilder")
+    @patch("autodoc.orchestrator.SectionPlanner")
+    @patch("autodoc.orchestrator.ContentGenerator")
+    @patch("autodoc.orchestrator.detect_language")
+    def test_explicit_language_skips_detection(
+        self, mock_detect, mock_gen, mock_planner, mock_builder, mock_cs, mock_as
+    ):
+        orch = Orchestrator(
+            llm=_make_mock_llm(),
+            sanitizer=_make_mock_sanitizer(),
+            code_root=Path("/tmp/r_explicit"),
+            language="r",
+        )
+        assert orch.language_profile is R_PROFILE
+        assert orch.detected_file_count == 0
+        mock_detect.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +343,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
 
         spec = _make_spec(title="Round Trip")
@@ -383,7 +371,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
 
         png_bytes = b"\x89PNG\r\n\x1a\nfake_chart_data"
@@ -420,7 +407,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         with pytest.raises(FileNotFoundError, match="No cached results"):
             orch._load_results_cache()
@@ -439,7 +425,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         results = [_make_section_result(errors=["narrative: timeout"])]
         spec = _make_spec()
@@ -470,7 +455,6 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         result = _make_section_result(number="2", name="Details")
         serialized = orch._serialize_section_result(result)
@@ -495,7 +479,6 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         raw_bytes = b"\x00\x01binary_chart_data"
         result = _make_section_result(
@@ -529,7 +512,6 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         plan = SectionPlan(
             number="3",
@@ -748,7 +730,6 @@ class TestCacheSpecFields:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
 
         spec = DocumentSpec(
@@ -774,3 +755,83 @@ class TestCacheSpecFields:
         assert loaded_spec.hints == {"Overview": "Keep it brief"}
         assert loaded_spec.citation_style == "numeric"
         assert loaded_spec.formatting == {"font_size": 11}
+
+
+# ---------------------------------------------------------------------------
+# Governance context wiring (B5)
+# ---------------------------------------------------------------------------
+
+
+class TestGovernanceContextWiring:
+    @patch("autodoc.orchestrator.Orchestrator._save_results_cache")
+    @patch("autodoc.orchestrator.ArtifactScanner")
+    @patch("autodoc.orchestrator.CodeScanner")
+    @patch("autodoc.orchestrator.DocumentBuilder")
+    @patch("autodoc.orchestrator.SectionPlanner")
+    @patch("autodoc.orchestrator.ContentGenerator")
+    @patch("autodoc.orchestrator.detect_language", return_value=(PYTHON_PROFILE, 1))
+    def test_context_governance_passed_to_generator(
+        self,
+        mock_detect,
+        mock_gen_cls,
+        mock_planner_cls,
+        mock_builder_cls,
+        mock_code_scanner_cls,
+        mock_artifact_scanner_cls,
+        mock_save_cache,
+    ):
+        from autodoc.core.models import GovernanceContext
+
+        orch = Orchestrator(
+            llm=_make_mock_llm(),
+            sanitizer=_make_mock_sanitizer(),
+            code_root=Path("/tmp"),
+        )
+
+        orch.code_scanner.scan = AsyncMock(return_value=CodeContext())
+        orch.artifact_scanner.scan = AsyncMock(return_value=ArtifactContext())
+
+        block = ContentBlock(
+            type=ContentType.NARRATIVE,
+            purpose="desc",
+            data_needed="code",
+            specifics={},
+            priority="required",
+        )
+        plan = SectionPlan(number="1", name="Overview", title="Overview", content_blocks=[block])
+        orch.planner.plan_section = AsyncMock(return_value=plan)
+
+        governance_ctx = GovernanceContext(
+            bundle_id="bundle-1",
+            bundle_name="Test Bundle",
+            risk_tier="High",
+        )
+        orch.generator._format_governance_evidence = MagicMock(return_value="[@governance.bundle]: Test")
+
+        gen_called = []
+
+        async def _gen_side_effect(_block, context):
+            gen_called.append(
+                (
+                    context.governance_context,
+                    context.governance_evidence,
+                )
+            )
+            return GeneratedContent(block_type=ContentType.NARRATIVE, content="text")
+
+        orch.generator.generate = AsyncMock(side_effect=_gen_side_effect)
+        orch.builder.build = AsyncMock(return_value=Path("/tmp/out.docx"))
+
+        asyncio.run(
+            orch.generate(
+                _make_spec(),
+                on_progress=lambda *_: None,
+                governance_context=governance_ctx,
+            )
+        )
+
+        assert gen_called, "generator.generate should be called at least once"
+        ctx, block_text = gen_called[0]
+        assert ctx is governance_ctx
+        assert "[@governance.bundle]" in block_text
+        orch.generator._format_governance_evidence.assert_called_once_with(governance_ctx)
