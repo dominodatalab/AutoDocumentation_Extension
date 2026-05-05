@@ -477,7 +477,9 @@ class TestSpecRoutesIntegration:
     def test_validate_spec_empty(self, client):
         resp = client.post("/validate-spec", data={})
         assert resp.status_code == 200
-        assert "No spec content" in resp.text
+        body = resp.json()
+        assert body["valid"] is False
+        assert len(body["errors"]) > 0
 
     def test_validate_spec_valid(self, client, integration_env):
         integration_env["doc_spec"].validate_spec.return_value = []
@@ -487,6 +489,9 @@ class TestSpecRoutesIntegration:
         )
         assert resp.status_code == 200
         integration_env["doc_spec"].validate_spec.assert_called()
+        body = resp.json()
+        assert body["valid"] is True
+        assert body["errors"] == []
 
     def test_validate_spec_with_errors(self, client, integration_env):
         integration_env["doc_spec"].validate_spec.return_value = ["Missing title field"]
@@ -495,12 +500,15 @@ class TestSpecRoutesIntegration:
             files={"spec_upload": ("bad.yaml", b"sections: []\n", "application/x-yaml")},
         )
         assert resp.status_code == 200
-        assert "failed" in resp.text.lower() or "Missing title" in resp.text
+        body = resp.json()
+        assert body["valid"] is False
+        assert "Missing title field" in body["errors"]
 
     def test_spec_list_empty(self, client):
         resp = client.get("/spec-list?projectId=proj-integration")
         assert resp.status_code == 200
-        assert "No saved spec" in resp.text
+        body = resp.json()
+        assert body["specs"] == []
 
     def test_save_spec(self, client):
         resp = client.post("/save-spec", data={
@@ -508,6 +516,8 @@ class TestSpecRoutesIntegration:
             "spec_content": "title: Test\n",
         })
         assert resp.status_code == 200
+        body = resp.json()
+        assert "saved" in body
 
 
 # ===========================================================================
@@ -553,26 +563,6 @@ class TestJobRoutesIntegration:
         job = store.get_job("ds-integration", "snap-integration", job_id)
         assert job["status"] == "cancelled"
 
-    def test_stop_job_calls_domino_api(self, client, integration_env):
-        """Stop via HTTP, verify Domino API call and job index update."""
-        store = integration_env["store"]
-        job_id = store.create_job(
-            "ds-integration", "snap-integration",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-        store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-stop-test")
-
-        resp = client.post("/stop-job-history", data={"job_id": job_id})
-        assert resp.status_code == 200
-
-        integration_env["domino_client"].stop_job.assert_called_with(
-            "run-stop-test", project_id="proj-integration",
-        )
-        job = store.get_job("ds-integration", "snap-integration", job_id)
-        assert job["status"] == "cancelled"
-
     def test_job_history_returns_submitted_jobs(self, client, integration_env):
         """Jobs created via /run appear in /job-history."""
         client.post(
@@ -610,20 +600,6 @@ class TestAuthorizationIntegration:
             },
         )
         assert resp.status_code == 403
-
-    def test_stop_job_denied_returns_403(self, client, integration_env):
-        store = integration_env["store"]
-        job_id = store.create_job(
-            "ds-integration", "snap-integration",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-        store.update_job("ds-integration", "snap-integration", job_id, status="submitted", domino_run_id="run-denied")
-        self._deny(integration_env["authz"], "require_domino_job_stop")
-        resp = client.post("/stop-job-history", data={"job_id": job_id})
-        assert resp.status_code == 403
-        integration_env["domino_client"].stop_job.assert_not_called()
 
     def test_job_history_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_list")

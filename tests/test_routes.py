@@ -128,7 +128,6 @@ def _mock_studio_modules(monkeypatch):
 
     # ui_components module
     mock_ui = ModuleType("studio.ui_components")
-    mock_ui._render_job_history_table = MagicMock(return_value=MagicMock())
     def _safe_int(v):
         if v in (None, ""):
             return None
@@ -183,7 +182,6 @@ def _mock_studio_modules(monkeypatch):
     # Tests that want to exercise deny behaviour override these via side_effect.
     mock_authz = ModuleType("authorization")
     mock_authz.require_domino_job_start = MagicMock()
-    mock_authz.require_domino_job_stop = MagicMock()
     mock_authz.require_domino_job_list = MagicMock()
     mock_authz.require_project_write = MagicMock()
 
@@ -229,10 +227,13 @@ def _mock_studio_modules(monkeypatch):
             sys.modules[key] = val
 
 
-def _make_request(query_params=None, form_data=None):
+def _make_request(query_params=None, form_data=None, json_body=None, content_type=None):
     """Create a mock Starlette Request."""
     req = MagicMock()
     req.query_params = query_params or {}
+
+    _ct = content_type or ("multipart/form-data" if form_data is not None else "application/json")
+    req.headers = {"content-type": _ct}
 
     if form_data is not None:
         async def _form():
@@ -242,6 +243,12 @@ def _make_request(query_params=None, form_data=None):
         async def _empty_form():
             return {}
         req.form = _empty_form
+
+    _jb = json_body if json_body is not None else {}
+
+    async def _json():
+        return _jb
+    req.json = _json
 
     return req
 
@@ -284,32 +291,39 @@ def _register(mod, register_fn_name="register_api_routes"):
 
 class TestApiRoutes:
     @pytest.mark.asyncio
-    async def test_branches_returns_select_when_available(self, _mock_studio_modules):
+    async def test_branches_returns_json_when_available(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
         client.list_branches_api.return_value = [{"name": "main"}, {"name": "develop"}]
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/api/branches"](req)
+        result = await routes["/api/branches"](req)
         client.list_branches_api.assert_called_once_with("proj-123", search="")
+        body = json.loads(result.body)
+        assert isinstance(body, list)
+        assert any(b["name"] == "main" for b in body)
 
     @pytest.mark.asyncio
-    async def test_branches_fallback_when_no_branches(self, _mock_studio_modules):
+    async def test_branches_returns_empty_list_when_no_branches(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         _mock_studio_modules["state"].domino_client.list_branches_api.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/api/branches"](req)  # should not raise
+        result = await routes["/api/branches"](req)
+        body = json.loads(result.body)
+        assert body == []
 
     @pytest.mark.asyncio
-    async def test_branches_fallback_when_no_project_id(self, _mock_studio_modules):
+    async def test_branches_returns_empty_list_when_no_project_id(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={})
-        await routes["/api/branches"](req)  # should not raise
+        result = await routes["/api/branches"](req)
+        body = json.loads(result.body)
+        assert body == []
 
     @pytest.mark.asyncio
-    async def test_hardware_tiers_returns_select(self, _mock_studio_modules):
+    async def test_hardware_tiers_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
@@ -318,11 +332,15 @@ class TestApiRoutes:
         ]
         client.get_project_default_tier.return_value = "tier-1"
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/api/hardware-tiers"](req)
+        result = await routes["/api/hardware-tiers"](req)
         client.list_hardware_tiers.assert_called_once()
+        body = json.loads(result.body)
+        assert isinstance(body, list)
+        assert body[0]["id"] == "tier-1"
+        assert body[0]["isDefault"] is True
 
     @pytest.mark.asyncio
-    async def test_environment_revisions_returns_select(self, _mock_studio_modules):
+    async def test_environment_revisions_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         client = _mock_studio_modules["state"].domino_client
@@ -336,8 +354,21 @@ class TestApiRoutes:
         req = _make_request(
             query_params={"projectId": "proj-123", "environmentId": "env-1"},
         )
-        await routes["/api/environment-revisions"](req)
+        result = await routes["/api/environment-revisions"](req)
         client.list_environment_revisions.assert_called_once_with("env-1")
+        body = json.loads(result.body)
+        assert isinstance(body, list)
+        assert body[0]["id"] == "r1"
+        assert body[0]["isDefault"] is True
+
+    @pytest.mark.asyncio
+    async def test_environment_revisions_empty_when_no_env_id(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/environment-revisions"](req)
+        body = json.loads(result.body)
+        assert body == []
 
     @pytest.mark.asyncio
     async def test_datasets_returns_json(self, _mock_studio_modules):
@@ -466,9 +497,13 @@ class TestJobRoutes:
     async def test_run_submits_job(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
         req = _make_request()
-        await routes["/run"](req)
+        result = await routes["/run"](req)
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_called_once()
+        body = json.loads(result.body)
+        assert body["ok"] is True
+        assert "jobs" in body
 
     @pytest.mark.asyncio
     async def test_run_handles_submission_error(self, _mock_studio_modules):
@@ -477,39 +512,37 @@ class TestJobRoutes:
         _mock_studio_modules["job_engine"]._submit_domino_job.side_effect = RuntimeError("fail")
         store = _mock_studio_modules["state"].domino_job_store
         store.create_job.return_value = "err-job"
+        store.get_user_jobs.return_value = []
         req = _make_request()
-        await routes["/run"](req)
+        result = await routes["/run"](req)
         store.update_job.assert_called()
+        body = json.loads(result.body)
+        assert body["ok"] is False
+        assert "fail" in body["error"]
 
     @pytest.mark.asyncio
     async def test_job_history(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = [
+            {"id": "j1", "status": "running", "branch": "main", "hardware_tier": "small"}
+        ]
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/job-history"](req)
-        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("test_user", "ds-test", "snap-test")
+        result = await routes["/job-history"](req)
+        body = json.loads(result.body)
+        assert "jobs" in body
+        assert len(body["jobs"]) == 1
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/cancel-queued-jobs"](req)
+        result = await routes["/cancel-queued-jobs"](req)
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("ds-test", "snap-test", "test_user")
-
-    @pytest.mark.asyncio
-    async def test_stop_job(self, _mock_studio_modules):
-        mod = _import_routes_job()
-        routes = _register(mod, "register_job_routes")
-        store = _mock_studio_modules["state"].domino_job_store
-        store.get_job.return_value = {
-            "id": "j1", "domino_run_id": "run-1", "project_id": "proj-123",
-            "owner_id": "test_user",
-        }
-        req = _make_request(form_data={"job_id": "j1"})
-        await routes["/stop-job-history"](req)
-        _mock_studio_modules["state"].domino_client.stop_job.assert_called_once()
-        store.update_job.assert_called_with("ds-test", "snap-test", "j1", status="cancelled")
+        body = json.loads(result.body)
+        assert body["ok"] is True
 
     @pytest.mark.asyncio
     async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules, monkeypatch):
@@ -517,9 +550,10 @@ class TestJobRoutes:
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/job-history"](req)
+        result = await routes["/job-history"](req)
         _mock_studio_modules["job_engine"].sync_jobs_for.assert_not_called()
-        _mock_studio_modules["ui"]._render_job_history_table.assert_called_with("", "ds-test", "snap-test")
+        body = json.loads(result.body)
+        assert body["jobs"] == []
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
@@ -527,8 +561,10 @@ class TestJobRoutes:
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/cancel-queued-jobs"](req)
+        result = await routes["/cancel-queued-jobs"](req)
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_not_called()
+        body = json.loads(result.body)
+        assert body["ok"] is False
 
     @pytest.mark.asyncio
     async def test_run_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
@@ -536,33 +572,11 @@ class TestJobRoutes:
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         req = _make_request()
-        await routes["/run"](req)
+        result = await routes["/run"](req)
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
         _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_stop_job_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
-        _drop_viewer(monkeypatch)
-        mod = _import_routes_job()
-        routes = _register(mod, "register_job_routes")
-        req = _make_request(form_data={"job_id": "j1"})
-        await routes["/stop-job-history"](req)
-        _mock_studio_modules["state"].domino_client.stop_job.assert_not_called()
-        _mock_studio_modules["state"].domino_job_store.get_job.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_stop_job_rejects_other_owner(self, _mock_studio_modules):
-        mod = _import_routes_job()
-        routes = _register(mod, "register_job_routes")
-        store = _mock_studio_modules["state"].domino_job_store
-        store.get_job.return_value = {
-            "id": "j1", "domino_run_id": "run-1", "project_id": "proj-123",
-            "owner_id": "someone_else",
-        }
-        req = _make_request(form_data={"job_id": "j1"})
-        await routes["/stop-job-history"](req)
-        _mock_studio_modules["state"].domino_client.stop_job.assert_not_called()
-        store.update_job.assert_not_called()
+        body = json.loads(result.body)
+        assert body["ok"] is False
 
 
 # ===========================================================================
@@ -574,39 +588,50 @@ class TestSpecRoutes:
     async def test_validate_spec_valid(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
-        fh = sys.modules["fasthtml.common"]
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = []
 
         mock_upload = MagicMock()
         mock_upload.read = AsyncMock(return_value=b"title: Test\nsections: []")
         req = _make_request(form_data={"spec_upload": mock_upload})
-        await routes["/validate-spec"](req)
+        result = await routes["/validate-spec"](req)
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.assert_called_once()
-        span_calls = fh.Span.call_args_list
-        assert any(call.kwargs.get("cls") == "spec-validation-success" for call in span_calls)
+        body = json.loads(result.body)
+        assert body["valid"] is True
+        assert body["errors"] == []
 
     @pytest.mark.asyncio
     async def test_validate_spec_with_errors(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
-        fh = sys.modules["fasthtml.common"]
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = ["Missing title"]
 
         mock_upload = MagicMock()
         mock_upload.read = AsyncMock(return_value=b"sections: []")
         req = _make_request(form_data={"spec_upload": mock_upload})
-        await routes["/validate-spec"](req)
-        assert any(call.kwargs.get("cls") == "spec-validation-error" for call in fh.Div.call_args_list)
-        assert any(call.kwargs.get("cls") == "spec-validation-error-list" for call in fh.Ul.call_args_list)
+        result = await routes["/validate-spec"](req)
+        body = json.loads(result.body)
+        assert body["valid"] is False
+        assert "Missing title" in body["errors"]
 
     @pytest.mark.asyncio
     async def test_validate_spec_empty_content(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
-        fh = sys.modules["fasthtml.common"]
         req = _make_request(form_data={})
-        await routes["/validate-spec"](req)
-        assert any(call.kwargs.get("cls") == "spec-validation-empty" for call in fh.Span.call_args_list)
+        result = await routes["/validate-spec"](req)
+        body = json.loads(result.body)
+        assert body["valid"] is False
+        assert len(body["errors"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_validate_spec_via_json_body(self, _mock_studio_modules):
+        mod = _import_routes_spec()
+        routes = _register(mod, "register_spec_routes")
+        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = []
+        req = _make_request(json_body={"spec_content": "title: Test\nsections: []"}, content_type="application/json")
+        result = await routes["/validate-spec"](req)
+        body = json.loads(result.body)
+        assert body["valid"] is True
 
     @pytest.mark.asyncio
     async def test_save_spec(self, _mock_studio_modules):
@@ -619,6 +644,8 @@ class TestSpecRoutes:
         })
         result = await routes["/save-spec"](req)
         store.save_spec.assert_called_once()
+        body = json.loads(result.body)
+        assert "saved" in body
 
     @pytest.mark.asyncio
     async def test_spec_list_with_specs(self, _mock_studio_modules):
@@ -629,13 +656,11 @@ class TestSpecRoutes:
             {"name": "spec1.yaml", "size_kb": "2.1"},
         ]
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/spec-list"](req)
+        result = await routes["/spec-list"](req)
         store.list_specs.assert_called_once()
-        fh = sys.modules["fasthtml.common"]
-        assert any(
-            c.args and c.args[0] == "spec1.yaml" and c.kwargs.get("cls") == "spec-list-item-name"
-            for c in fh.Span.call_args_list
-        )
+        body = json.loads(result.body)
+        assert len(body["specs"]) == 1
+        assert body["specs"][0]["name"] == "spec1.yaml"
 
     @pytest.mark.asyncio
     async def test_spec_list_empty(self, _mock_studio_modules):
@@ -643,7 +668,9 @@ class TestSpecRoutes:
         routes = _register(mod, "register_spec_routes")
         _mock_studio_modules["state"].spec_store.list_specs.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
-        await routes["/spec-list"](req)
+        result = await routes["/spec-list"](req)
+        body = json.loads(result.body)
+        assert body["specs"] == []
 
     # delete_spec and cleanup_specs routes removed — Domino Datasets API
     # does not support file-level deletion.

@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fasthtml.common import *
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
@@ -45,9 +44,11 @@ def register_api_routes(rt):
         if project_id:
             branches = domino_client.list_branches_api(project_id, search=search)
             if branches:
-                options = [Option(b["name"], value=b["name"]) for b in branches]
-                return Select(*options, name="branch", id="field-branch")
-        return Input(name="branch", id="field-branch", type="text", value="", placeholder="Default branch")
+                return Response(
+                    json.dumps([{"name": b["name"], "value": b["name"]} for b in branches]),
+                    media_type="application/json",
+                )
+        return Response(json.dumps([]), media_type="application/json")
 
     rt("/api/branches")(api_branches)
 
@@ -55,44 +56,28 @@ def register_api_routes(rt):
         project_id = req.query_params.get("projectId") or None
         tiers = domino_client.list_hardware_tiers(project_id=project_id)
         default_tier = domino_client.get_project_default_tier()
-        options = []
+        result = []
         for t in tiers:
             tid = t.get("id", "")
             tname = t.get("name") or tid
             label = t.get("option_label") or tname
             is_default = t.get("isDefault", False) or tid == default_tier
-            options.append(Option(label, value=tid, selected=is_default))
-        if not options:
-            options = [Option("(default)", value="")]
-        return Select(*options, name="hardware_tier", id="field-hardware_tier")
+            result.append({"id": tid, "label": label, "isDefault": is_default})
+        return Response(json.dumps(result), media_type="application/json")
 
     rt("/api/hardware-tiers")(api_hardware_tiers)
 
     async def api_environment_revisions(req: Request):
         env_id = (req.query_params.get("environmentId") or "").strip()
         if not env_id:
-            return Select(
-                Option("(select environment first)", value="", selected=True, disabled=True),
-                name="environment_revision_id",
-                id="field-environment_revision_id",
-                cls="env-revision-select",
-            )
+            return Response(json.dumps([]), media_type="application/json")
         revs = domino_client.list_environment_revisions(env_id)
-        options = []
+        result = []
         for i, r in enumerate(revs):
             rid = r.get("id", "")
             label = r.get("option_label") or rid
-            options.append(Option(label, value=rid, selected=(i == 0)))
-        if not options:
-            options = [
-                Option("(no revisions)", value="", selected=True, disabled=True),
-            ]
-        return Select(
-            *options,
-            name="environment_revision_id",
-            id="field-environment_revision_id",
-            cls="env-revision-select",
-        )
+            result.append({"id": rid, "label": label, "isDefault": i == 0})
+        return Response(json.dumps(result), media_type="application/json")
 
     rt("/api/environment-revisions")(api_environment_revisions)
 
