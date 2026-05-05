@@ -695,24 +695,6 @@ class TestSubmitDominoJob:
 
 
 # ---------------------------------------------------------------------------
-# _reconcile_stale_jobs
-# ---------------------------------------------------------------------------
-
-class TestReconcileStaleJobs:
-    def test_marks_stale_jobs_as_failed(self, _mock_studio):
-        je = _import_job_engine()
-        store = _mock_studio.domino_job_store
-
-        je._reconcile_stale_jobs("ds-1", "snap-1")
-        store.reconcile_stale_jobs.assert_called_once()
-
-    def test_handles_exception_gracefully(self, _mock_studio):
-        je = _import_job_engine()
-        _mock_studio.domino_job_store.reconcile_stale_jobs.side_effect = RuntimeError("error")
-        je._reconcile_stale_jobs("ds-1", "snap-1")
-
-
-# ---------------------------------------------------------------------------
 # sync_jobs_for (request-driven replacement for the background poller)
 # ---------------------------------------------------------------------------
 

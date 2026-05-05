@@ -2,7 +2,7 @@
 
 Tests the full request -> route handler -> response path with:
 - Real HTTP via httpx AsyncClient + Starlette app
-- Monkeypatched DatasetManager (in-memory) for job_store and spec_store I/O
+- Monkeypatched DatasetManager (in-memory) for spec_store and other dataset I/O
 - Real auth_context ContextVar propagation through middleware
 - Mocked Domino API client (no live API calls)
 
@@ -57,7 +57,7 @@ def _load_module(name: str, filename: str) -> ModuleType:
 def _build_test_app(tmp_path: Path, monkeypatch):
     """Construct a Starlette app wired with real route handlers.
 
-    Uses in-memory DatasetStore mock for job_store and spec_store,
+    Uses in-memory DatasetManager mock for spec_store (and paths that read specs),
     mocked domino_client, and real auth_context propagation.
     """
     import domino_job_store as store

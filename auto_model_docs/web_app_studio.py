@@ -32,7 +32,6 @@ from studio.state import (
     _STARTUP_WARNINGS,
     _get_default_spec_path,
     domino_client,
-    domino_job_store,
     log_buffer,
     logger,
 )

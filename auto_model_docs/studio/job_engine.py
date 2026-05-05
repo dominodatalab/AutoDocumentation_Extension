@@ -388,10 +388,3 @@ def sync_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
         _promote_queued_jobs_for(owner_id, dataset_id, snapshot_id)
     except Exception as exc:
         logger.warning("sync_jobs_for(%s) failed: %s", owner_id, exc)
-
-
-def _reconcile_stale_jobs(dataset_id: str, snapshot_id: str) -> None:
-    try:
-        domino_job_store.reconcile_stale_jobs(dataset_id, snapshot_id)
-    except Exception as exc:
-        logger.warning("Reconcile stale jobs failed: %s", exc)
