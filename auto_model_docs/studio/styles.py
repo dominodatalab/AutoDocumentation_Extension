@@ -115,8 +115,6 @@ a:hover { color: var(--primary-container); }
     flex-shrink: 0;
 }
 .domino-header-inner {
-    max-width: 1440px;
-    margin: 0 auto;
     width: 100%;
     display: flex;
     flex-direction: row;
@@ -167,13 +165,12 @@ a:hover { color: var(--primary-container); }
 
 /* ── Page Layout ──────────────────────────────────────────────────── */
 .page {
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 2rem 2rem 1.5rem;
+    padding: 2rem 1.5rem 1.5rem;
     width: 100%;
     min-height: calc(100vh - 100px);
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
 }
 .studio-footer-meta {
     margin-top: auto;
