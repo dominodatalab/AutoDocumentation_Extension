@@ -39,7 +39,6 @@ from studio.styles import STUDIO_CSS
 from studio.scripts import MAIN_DOM_JS
 from studio.ui_components import (
     _render_warnings_banner,
-    _render_job_history_table,
     _validate_environment,
 )
 from studio.routes_api import register_api_routes
@@ -61,8 +60,6 @@ from temporary_versioning import get_deploy_version_label
 app, rt = fast_app(
     pico=False,
     hdrs=(
-        # Load htmx synchronously to ensure it's ready before user interaction
-        Script(src="https://unpkg.com/htmx.org@1.9.10"),
         Style(STUDIO_CSS),
         # NOTE: output defaults script is injected per-request in index()
         # so it picks up the resolved target project name.
@@ -839,7 +836,6 @@ async def index(req: Request):
     right_col_children.append(
         Div(
             Div(
-                _render_job_history_table(owner_id, "", ""),
                 id="job-history-content",
             ),
             cls="output-panel",
@@ -883,11 +879,7 @@ async def index(req: Request):
                 ),
                 id="main-form",
                 data_execution_mode="domino",
-                hx_post="run",
                 data_app_rel="run",
-                hx_target="#job-history-content",
-                hx_swap="innerHTML",
-                hx_encoding="multipart/form-data",
                 enctype="multipart/form-data",
             ),
             Div(
@@ -947,7 +939,7 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["HX-Request", "HX-Target", "HX-Current-URL", "Content-Type"],
+    allow_headers=["Content-Type"],
 )
 
 

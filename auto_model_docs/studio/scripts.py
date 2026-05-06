@@ -24,7 +24,7 @@ MAIN_DOM_JS = r"""
         return _AD_APP_BASE + (rel.charAt(0) === '/' ? rel.slice(1) : rel);
     }
     // Rewrite any element with data-app-rel="path" to use the full prefix.
-    // Applies to <a href>, <form action>, and htmx hx-post/hx-get.
+    // Applies to <a href> and <form action>.
     function _adApplyPrefix(root) {
         var scope = root || document;
         scope.querySelectorAll('[data-app-rel]').forEach(function(el) {
@@ -33,8 +33,6 @@ MAIN_DOM_JS = r"""
             var full = _adUrl(rel);
             if (el.tagName === 'A') el.setAttribute('href', full);
             else if (el.tagName === 'FORM') el.setAttribute('action', full);
-            if (el.hasAttribute('hx-post')) el.setAttribute('hx-post', full);
-            if (el.hasAttribute('hx-get')) el.setAttribute('hx-get', full);
         });
     }
     document.addEventListener('DOMContentLoaded', function() { _adApplyPrefix(); });
@@ -241,8 +239,20 @@ MAIN_DOM_JS = r"""
             if (!pid) return;
             var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
                 + '&environmentId=' + encodeURIComponent(envId);
-            fetch(url).then(_checkResp).then(function(r) { return r.text(); })
-                .then(function(html) { slot.innerHTML = html; })
+            fetch(url).then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(revs) {
+                    var html = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">';
+                    if (!revs || !revs.length) {
+                        html += '<option value="" selected disabled>(no revisions)</option>';
+                    } else {
+                        for (var i = 0; i < revs.length; i++) {
+                            html += '<option value="' + revs[i].id + '"' + (revs[i].isDefault ? ' selected' : '') + '>'
+                                + revs[i].label + '</option>';
+                        }
+                    }
+                    html += '</select>';
+                    slot.innerHTML = html;
+                })
                 .catch(function() {});
         };
 
@@ -538,9 +548,12 @@ MAIN_DOM_JS = r"""
             });
         }
 
-        // Wire dataset select change
+        // Wire dataset select change; refresh job history when dataset changes
         if (specDatasetSelect) {
-            specDatasetSelect.addEventListener('change', onDatasetChange);
+            specDatasetSelect.addEventListener('change', function() {
+                onDatasetChange();
+                fetchJobHistory();
+            });
             loadDatasets();
         }
 
@@ -590,10 +603,19 @@ MAIN_DOM_JS = r"""
             var resultEl = document.getElementById('spec-validation-result');
             if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
             fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
-                .then(_checkResp).then(function(r) { return r.text(); })
-                .then(function(html) {
-                    if (resultEl) resultEl.outerHTML = html;
-                    window._specValid = html.indexOf('validation failed') === -1;
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(data) {
+                    window._specValid = data.valid;
+                    if (!resultEl) return;
+                    if (data.valid) {
+                        resultEl.innerHTML = '<span class="spec-validation-success">Spec is valid</span>';
+                    } else {
+                        var items = (data.errors || []).map(function(e) { return '<li>' + e + '</li>'; }).join('');
+                        resultEl.innerHTML = '<div class="spec-validation-error">'
+                            + '<span class="spec-selected-value">Spec validation failed</span>'
+                            + '<ul class="spec-validation-error-list">' + items + '</ul>'
+                            + '</div>';
+                    }
                 })
                 .catch(function() {
                     if (resultEl) resultEl.innerHTML = '';
@@ -704,95 +726,173 @@ MAIN_DOM_JS = r"""
             loadCodeRootOptions();
         })();
 
-        // Block form submission when no spec is selected
-        document.body.addEventListener('htmx:confirm', function(e) {
-            var form = e.detail.elt;
-            if (form.id !== 'main-form') return;
-            var specPath = document.getElementById('field-spec_path');
-            var specUpload = document.getElementById('spec-machine-upload');
-            var hasSpec = (specPath && specPath.value.trim()) ||
-                          (specUpload && specUpload.files && specUpload.files.length > 0);
-            if (!hasSpec) {
-                e.preventDefault();
-                var msg = 'Please select or upload a spec file before generating documentation.';
-                var existing = document.getElementById('spec-validation-msg');
-                if (!existing) {
-                    var indicator = document.getElementById('spec-selected-indicator');
-                    if (indicator) {
-                        var el = document.createElement('div');
-                        el.id = 'spec-validation-msg';
-                        el.className = 'spec-validation-msg';
-                        el.textContent = msg;
-                        indicator.parentNode.insertBefore(el, indicator.nextSibling);
-                    } else {
-                        alert(msg);
-                    }
-                }
-            } else {
-                var existing = document.getElementById('spec-validation-msg');
-                if (existing) existing.remove();
-            }
-        });
+        // ── Job history rendering ─────────────────────────────────────
+        var _ACTIVE_STATUSES = {queued: true, submitted: true, pending: true, running: true};
 
-        // Ensure every HTMX request carries projectId from the page URL so
-        // server handlers never fall back to process-global state that may
-        // belong to a different user.
-        document.body.addEventListener('htmx:configRequest', function(e) {
-            var pid = new URLSearchParams(window.location.search).get('projectId');
-            if (pid) {
-                var path = e.detail.path || '';
-                if (!/[?&]projectId=/.test(path)) {
-                    e.detail.path = path + (path.indexOf('?') >= 0 ? '&' : '?') +
-                        'projectId=' + encodeURIComponent(pid);
-                }
-            }
-            if (_specCurrentDatasetId) {
-                e.detail.parameters['datasetId'] = _specCurrentDatasetId;
-            }
-            if (_specCurrentSnapshotId) {
-                e.detail.parameters['snapshotId'] = _specCurrentSnapshotId;
-            }
-            if (_specCurrentDatasetPath) {
-                e.detail.parameters['datasetPath'] = _specCurrentDatasetPath;
-            }
-        });
+        function _esc(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
 
-        // Poll job history — pause while an HTMX request targets the history panel
-        var _htmxBusy = false;
-        document.body.addEventListener('htmx:beforeRequest', function(e) {
-            var tgt = e.detail && e.detail.target;
-            if (tgt && tgt.id === 'job-history-content') _htmxBusy = true;
-        });
-        document.body.addEventListener('htmx:afterRequest', function(e) {
-            var tgt = e.detail && e.detail.target;
-            if (tgt && tgt.id === 'job-history-content') _htmxBusy = false;
-        });
-        setInterval(function() {
-            if (_htmxBusy) return;
+        function _jobRow(j, pid) {
+            var status = j.status || 'queued';
+            var statusCls = 'history-status history-status-' + status;
+            var branch = j.branch || '—';
+            var tier = j.hardware_tier || '—';
+            var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
+            var linkCell = j.job_url
+                ? '<td><a href="' + _esc(j.job_url) + '" target="_blank">View →</a></td>'
+                : '<td>—</td>';
+            return '<tr>'
+                + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
+                + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
+                + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
+                + '<td>' + _esc(submitted) + '</td>'
+                + linkCell
+                + '</tr>';
+        }
+
+        function _maxJobsWarning(jobs) {
+            var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
+            if (!hasQueued) return '';
+            return '<div class="inline-callout inline-callout-warning" role="alert">'
+                + '<span>⚠ </span>'
+                + '<span>Job queued — a slot is occupied. It will start automatically when one opens. '
+                + 'To free a slot, stop a running job or use </span>'
+                + '<span class="spec-selected-value">Cancel queued</span>'
+                + '<span> below.</span>'
+                + '</div>';
+        }
+
+        function _tableHtml(jobs) {
+            var header = '<thead><tr><th>Branch</th><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
+            var rows = jobs.map(function(j) { return _jobRow(j, resolvedProjectId()); }).join('');
+            return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
+        }
+
+        function renderJobHistory(jobs) {
             var el = document.getElementById('job-history-content');
             if (!el) return;
-            // Preserve <details> open state; auto-open when completed count changes
-            var wasOpen = false;
-            var prevCount = 0;
+
+            var prevDetailsOpen = false;
+            var prevCompletedCount = 0;
             var details = el.querySelector('details');
             if (details) {
-                wasOpen = details.open;
-                prevCount = details.querySelectorAll('tbody tr').length;
+                prevDetailsOpen = details.open;
+                prevCompletedCount = details.querySelectorAll('tbody tr').length;
             }
+
+            if (!jobs || !jobs.length) {
+                el.innerHTML = '<p class="history-empty">No jobs submitted yet.</p>';
+                return;
+            }
+
+            var pid = resolvedProjectId();
+            var activeJobs = jobs.filter(function(j) { return _ACTIVE_STATUSES[j.status || 'queued']; });
+            var completedJobs = jobs.filter(function(j) { return !_ACTIVE_STATUSES[j.status || 'queued']; });
+            var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
+
+            var html = _maxJobsWarning(jobs);
+
+            if (activeJobs.length) {
+                html += '<div class="history-table-wrap">' + _tableHtml(activeJobs) + '</div>';
+            }
+            if (completedJobs.length) {
+                var n = completedJobs.length;
+                var label = 'Show ' + n + ' completed job' + (n !== 1 ? 's' : '');
+                var autoOpen = !activeJobs.length || prevDetailsOpen || completedJobs.length > prevCompletedCount;
+                html += '<details' + (autoOpen ? ' open' : '') + '>'
+                    + '<summary class="history-toggle">' + label + '</summary>'
+                    + '<div class="history-table-wrap">' + _tableHtml(completedJobs) + '</div>'
+                    + '</details>';
+            }
+
+            var actions = '<a class="terminal-action" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
+            if (hasQueued) {
+                actions += ' <a class="terminal-action" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
+            }
+            html += '<div class="history-actions">' + actions + '</div>';
+
+            el.innerHTML = html;
+
+            // Wire refresh button
+            var refreshBtn = el.querySelector('#job-history-refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    fetchJobHistory();
+                });
+            }
+
+            // Wire cancel queued button
+            var cancelBtn = el.querySelector('#job-cancel-queued-btn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
+                        .then(_checkResp).then(function(r) { return r.json(); })
+                        .then(function(data) { renderJobHistory(data.jobs || []); })
+                        .catch(function() {});
+                });
+            }
+        }
+
+        function fetchJobHistory() {
             fetch(_adUrl('job-history') + queryJobHistory())
-                .then(_checkResp).then(function(r) { return r.text(); })
-                .then(function(html) {
-                    if (!_htmxBusy) {
-                        el.innerHTML = html;
-                        var d = el.querySelector('details');
-                        if (d) {
-                            var newCount = d.querySelectorAll('tbody tr').length;
-                            if (wasOpen || newCount > prevCount) d.open = true;
-                        }
-                        if (window.htmx) htmx.process(el);
-                    }
-                })
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(data) { renderJobHistory(data.jobs || []); })
                 .catch(function() {});
-        }, 10000);
+        }
+
+        // Poll job history every 10 seconds
+        setInterval(fetchJobHistory, 10000);
+
+        // ── Form submission ───────────────────────────────────────────
+        var mainForm = document.getElementById('main-form');
+        if (mainForm) {
+            mainForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                var specPath = document.getElementById('field-spec_path');
+                var specUpload = document.getElementById('spec-machine-upload');
+                var hasSpec = (specPath && specPath.value.trim()) ||
+                              (specUpload && specUpload.files && specUpload.files.length > 0);
+                if (!hasSpec) {
+                    var msg = 'Please select or upload a spec file before generating documentation.';
+                    var existing = document.getElementById('spec-validation-msg');
+                    if (!existing) {
+                        var indicator = document.getElementById('spec-selected-indicator');
+                        if (indicator) {
+                            var msgEl = document.createElement('div');
+                            msgEl.id = 'spec-validation-msg';
+                            msgEl.className = 'spec-validation-msg';
+                            msgEl.textContent = msg;
+                            indicator.parentNode.insertBefore(msgEl, indicator.nextSibling);
+                        } else {
+                            alert(msg);
+                        }
+                    }
+                    return;
+                }
+                var existingMsg = document.getElementById('spec-validation-msg');
+                if (existingMsg) existingMsg.remove();
+
+                var fd = new FormData(mainForm);
+                var pid = resolvedProjectId();
+                if (pid && !fd.get('projectId')) fd.append('projectId', pid);
+                if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
+                if (_specCurrentSnapshotId && !fd.get('snapshotId')) fd.append('snapshotId', _specCurrentSnapshotId);
+                if (_specCurrentDatasetPath && !fd.get('datasetPath')) fd.append('datasetPath', _specCurrentDatasetPath);
+
+                var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+                var submitBtn = mainForm.querySelector('[type=submit]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                fetch(_adUrl('run') + qs, { method: 'POST', body: fd })
+                    .then(_checkResp).then(function(r) { return r.json(); })
+                    .then(function(data) { renderJobHistory(data.jobs || []); })
+                    .catch(function() {})
+                    .finally(function() { if (submitBtn) submitBtn.disabled = false; });
+            });
+        }
     });
 """

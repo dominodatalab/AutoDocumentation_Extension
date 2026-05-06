@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from fasthtml.common import *
 
@@ -14,7 +13,6 @@ from .state import (
     EnvironmentWarning,
     _get_default_code_root,
     _max_jobs,
-    domino_job_store,
 )
 
 
@@ -182,18 +180,6 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
     status = record.status
     badge_cls = f"terminal-status terminal-status-{status}"
 
-    # Stop button
-    stop_btn = None
-    if status in ("queued", "submitted", "running"):
-        stop_btn = A(
-            "Stop",
-            hx_post="stop-job-history",
-            hx_vals=json.dumps({"job_id": record.id}),
-            hx_target="#job-history-content",
-            hx_swap="innerHTML",
-            cls="terminal-action",
-        )
-
     # Job link
     job_link = None
     if record.job_url:
@@ -238,10 +224,6 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
     return Div(
         Div(
             H3("Domino job"),
-            Div(
-                stop_btn,
-                cls="terminal-actions",
-            ) if stop_btn else Div(cls="terminal-actions"),
             cls="terminal-header",
         ),
         Div(status.upper(), cls=badge_cls),
@@ -254,135 +236,3 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
     )
 
 
-# ---------------------------------------------------------------------------
-# Job history table
-# ---------------------------------------------------------------------------
-
-def _render_job_history_table(owner_id: str, dataset_id: str = "", snapshot_id: str = "") -> FT:
-    if not dataset_id or not snapshot_id:
-        return Div()
-    try:
-        jobs = domino_job_store.get_user_jobs(dataset_id, snapshot_id, owner_id, limit=50)
-    except RuntimeError:
-        return Div()
-    if not jobs:
-        return Div(
-            P("No jobs submitted yet.", cls="history-empty"),
-        )
-
-    _ACTIVE_STATUSES = {"queued", "submitted", "pending", "running"}
-
-    def _job_row(j):
-        status = j.get("status", "queued")
-        status_cls = f"history-status history-status-{status}"
-        job_url = j.get("job_url")
-        link_cell = Td(
-            A("View \u2192", href=job_url, target="_blank") if job_url else "\u2014"
-        )
-        branch_val = j.get("branch") or "\u2014"
-        tier_val = j.get("hardware_tier") or "\u2014"
-        action_cell = Td()
-        if status in _ACTIVE_STATUSES:
-            action_cell = Td(
-                A(
-                    "Stop",
-                    hx_post="stop-job-history",
-                    hx_vals=json.dumps({"job_id": j.get("id", "")}),
-                    hx_target="#job-history-content",
-                    hx_swap="innerHTML",
-                    cls="terminal-action",
-                    title="Stop this job",
-                ),
-            )
-        return Tr(
-            Td(branch_val, title=branch_val),
-            Td(tier_val, title=tier_val),
-            Td(Span(status.upper(), cls=status_cls)),
-            Td((j.get("submitted_at") or "\u2014")[:16].replace("T", " ")),
-            link_cell,
-            action_cell,
-        )
-
-    active_jobs = [j for j in jobs if j.get("status", "queued") in _ACTIVE_STATUSES]
-    completed_jobs = [j for j in jobs if j.get("status", "queued") not in _ACTIVE_STATUSES]
-
-    header = Thead(Tr(
-        Th("Branch"), Th("Tier"), Th("Status"), Th("Submitted"), Th("Link"), Th(""),
-    ))
-
-    # Queue-full warning when any job is queued
-    queue_banner = None
-    has_queued = any(j.get("status") == "queued" and not j.get("domino_run_id") for j in jobs)
-    if has_queued:
-        max_j = _max_jobs()
-        queue_banner = Div(
-            Span("\u26a0 "),
-            Span(f"Job queued \u2014 you already have {max_j} active job{'s' if max_j != 1 else ''}. "
-                 "It will start automatically when a slot opens. To free a slot, stop a running job or use "),
-            Span("Cancel queued", cls="spec-selected-value"),
-            Span(" below."),
-            cls="inline-callout inline-callout-warning",
-            role="alert",
-        )
-
-    sections = [queue_banner]
-
-    # Active jobs — always visible
-    if active_jobs:
-        sections.append(Div(
-            Table(header, Tbody(*[_job_row(j) for j in active_jobs]), cls="history-table"),
-            cls="history-table-wrap",
-        ))
-
-    # Completed jobs — collapsible
-    if completed_jobs:
-        n = len(completed_jobs)
-        label = f"Show {n} completed job{'s' if n != 1 else ''}"
-        sections.append(
-            Details(
-                Summary(label, cls="history-toggle"),
-                Div(
-                    Table(header, Tbody(*[_job_row(j) for j in completed_jobs]), cls="history-table"),
-                    cls="history-table-wrap",
-                ),
-                # Auto-open when there are no active jobs
-                open=not active_jobs,
-            )
-        )
-
-    # Actions row: manual Refresh (always), Cancel queued when relevant
-    action_children = [
-        A(
-            "Refresh",
-            hx_get="job-history",
-            hx_target="#job-history-content",
-            hx_swap="innerHTML",
-            cls="terminal-action",
-            title="Refresh job status from Domino",
-        ),
-    ]
-    if has_queued:
-        action_children.append(
-            A(
-                "Cancel queued",
-                hx_post="cancel-queued-jobs",
-                hx_target="#job-history-content",
-                hx_swap="innerHTML",
-                cls="terminal-action",
-                title="Cancel all queued jobs that haven't been submitted yet",
-            )
-        )
-    sections.append(Div(*action_children, cls="history-actions"))
-
-    # Auto-refresh every 30s only while there are active jobs. When idle,
-    # the refreshed fragment no longer has hx_trigger="every 30s" and
-    # polling stops on its own.
-    wrapper_kwargs: dict[str, Any] = {}
-    if active_jobs:
-        wrapper_kwargs.update(
-            hx_get="job-history",
-            hx_trigger="every 30s",
-            hx_target="#job-history-content",
-            hx_swap="innerHTML",
-        )
-    return Div(*sections, **wrapper_kwargs)

@@ -333,44 +333,6 @@ class TestRenderDominoStatus:
 # ---------------------------------------------------------------------------
 # _render_job_history_table
 # ---------------------------------------------------------------------------
-
-class TestRenderJobHistoryTable:
-    def test_renders_empty_message_when_no_jobs(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = []
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-    def test_renders_active_and_completed_jobs(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = [
-            {"id": "j1", "status": "running", "branch": "main",
-             "hardware_tier": "small", "submitted_at": "2026-01-01T00:00",
-             "job_url": "https://domino/j1", "domino_run_id": "r1"},
-            {"id": "j2", "status": "succeeded", "branch": "main",
-             "hardware_tier": "small", "submitted_at": "2025-12-31T00:00",
-             "job_url": "https://domino/j2"},
-        ]
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-    def test_shows_queue_banner_for_queued_jobs(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.return_value = [
-            {"id": "j1", "status": "queued", "branch": "main",
-             "hardware_tier": None, "submitted_at": "2026-01-01T00:00",
-             "job_url": None, "domino_run_id": None},
-        ]
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-    def test_handles_pre_bootstrap_runtime_error(self, _mock_dependencies):
-        ui = _import_ui()
-        _mock_dependencies["state"].domino_job_store.get_user_jobs.side_effect = RuntimeError("Not ready")
-        result = ui._render_job_history_table("alice")
-        assert result is not None
-
-
 class TestStudioPageInsightBanner:
     def test_insight_card_is_single_full_width_banner_before_grid(self):
         root = Path(__file__).resolve().parent.parent
