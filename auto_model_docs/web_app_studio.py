@@ -86,10 +86,7 @@ async def index(req: Request):
     # strips query params from the iframe URL, so if it's missing we serve
     # a bootstrap page whose JS extracts the ID from the parent frame,
     # hash fragment, or postMessage and reloads with it in the URL.
-    # Exception: ?mockJobs=1 bypasses the guard for local UI testing.
     project_id = req.query_params.get("projectId") or None
-    if not project_id and req.query_params.get("mockJobs") == "1":
-        project_id = "mock-project"
     if not project_id:
         return (
             Title("Auto Model Docs Studio — Domino"),

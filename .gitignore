@@ -127,9 +127,8 @@ tests/fixtures/llm_responses/*.json
 # Scratch files
 scratch/
 
-# Domino apps guidelines (moved from domino-apps-guidelines/)
+# Domino apps guidelines workspace files
 .cursor/
-domino-logo.svg
 example_domino_frontend_code/
 governance_swagger.json
 prototype_modules/
