@@ -841,7 +841,7 @@ async def index(req: Request):
         Div(
             Div(
                 Div(
-                    Span("history", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span("description", cls="material-symbols-outlined spec-file-empty-icon"),
                     Span("No autodocs generated yet.", cls="spec-file-list-empty"),
                     cls="spec-file-empty",
                 ),

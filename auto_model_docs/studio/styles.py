@@ -1306,6 +1306,16 @@ button.primary:disabled {
     padding: 1rem;
 }
 /* ── Job History ──────────────────────────────────────────────────── */
+#job-history-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+#job-history-content > .spec-file-empty {
+    flex: 1;
+    justify-content: center;
+}
 .job-history-section {
     margin-top: 1rem;
 }
