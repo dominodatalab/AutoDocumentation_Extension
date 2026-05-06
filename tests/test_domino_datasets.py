@@ -52,25 +52,6 @@ def _mock_response(status_code=200, json_data=None, text=""):
 
 
 # ---------------------------------------------------------------------------
-# _resolve_project_id
-# ---------------------------------------------------------------------------
-
-class TestResolveProjectId:
-    def test_uses_provided_id(self):
-        assert ds._resolve_project_id("proj-999") == "proj-999"
-
-    def test_raises_when_none(self):
-        """No longer falls back to env — raises when no ID given."""
-        with pytest.raises(RuntimeError, match="No project ID"):
-            ds._resolve_project_id(None)
-
-    def test_raises_when_empty(self):
-        with pytest.raises(RuntimeError, match="No project ID"):
-            ds._resolve_project_id("")
-
-
-
-# ---------------------------------------------------------------------------
 # list_datasets
 # ---------------------------------------------------------------------------
 
@@ -164,24 +145,24 @@ class TestGetRwSnapshotId:
                 {"id": "snap-active", "status": "Active"},
             ]
         })
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") == "snap-active"
+        assert ds.get_rw_snapshot_id("ds-1") == "snap-active"
 
     @patch.object(ds, "_api_request")
     def test_fallback_to_first(self, mock_req):
         mock_req.return_value = _mock_response(json_data={
             "snapshots": [{"id": "snap-only", "status": "Completed"}]
         })
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") == "snap-only"
+        assert ds.get_rw_snapshot_id("ds-1") == "snap-only"
 
     @patch.object(ds, "_api_request")
     def test_empty_snapshots(self, mock_req):
         mock_req.return_value = _mock_response(json_data={"snapshots": []})
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") is None
+        assert ds.get_rw_snapshot_id("ds-1") is None
 
     @patch.object(ds, "_api_request")
     def test_api_error_returns_none(self, mock_req):
         mock_req.side_effect = RuntimeError("network error")
-        assert ds.get_rw_snapshot_id("ds-1", project_id="proj-123") is None
+        assert ds.get_rw_snapshot_id("ds-1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +181,7 @@ class TestListFiles:
                 {"name": {"fileName": "README.md", "isDirectory": False}, "size": {"sizeInBytes": 200}},
             ]
         })
-        files = ds.list_files("snap-1", project_id="proj-123")
+        files = ds.list_files("snap-1")
         names = [f["fileName"] for f in files]
         assert "spec.yaml" in names
         assert "config.yml" in names
@@ -211,14 +192,14 @@ class TestListFiles:
     @patch.object(ds, "_api_request")
     def test_passes_path_param(self, mock_req):
         mock_req.return_value = _mock_response(json_data={"rows": []})
-        ds.list_files("snap-1", path="models/v2", project_id="proj-123")
+        ds.list_files("snap-1", "models/v2")
         call_kwargs = mock_req.call_args
         assert call_kwargs.kwargs["params"]["path"] == "models/v2"
 
     @patch.object(ds, "_api_request")
     def test_empty_directory(self, mock_req):
         mock_req.return_value = _mock_response(json_data={"rows": []})
-        assert ds.list_files("snap-1", project_id="proj-123") == []
+        assert ds.list_files("snap-1") == []
 
     @patch.object(ds, "_api_request")
     def test_case_insensitive_yaml(self, mock_req):
@@ -228,7 +209,7 @@ class TestListFiles:
                 {"name": {"fileName": "Config.YML", "isDirectory": False}, "size": {}},
             ]
         })
-        files = ds.list_files("snap-1", project_id="proj-123")
+        files = ds.list_files("snap-1")
         assert len(files) == 2
 
 
@@ -257,7 +238,7 @@ class TestUploadFile:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        await ds.upload_file("ds-1", "my_spec.yaml", b"title: My Model", project_id="proj-123")
+        await ds.upload_file("ds-1", "my_spec.yaml", b"title: My Model")
         assert mock_client.request.call_count == 3
 
         # Verify step 1: start

@@ -1,4 +1,4 @@
-"""Tests for domino_auth: host resolution, auth providers, project ID."""
+"""Tests for domino_auth: host resolution, auth providers."""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ from domino_auth import (
     get_user_token,
     reset_auth,
     resolve_api_host,
-    resolve_project_id,
     user_auth,
 )
 
@@ -191,16 +190,3 @@ class TestConfiguredProvider:
         with patch("domino_auth.get_request_auth_header", return_value=None):
             with pytest.raises(MissingAuthError):
                 current_auth()
-
-
-class TestResolveProjectId:
-    def test_returns_given_id(self):
-        assert resolve_project_id("abc123") == "abc123"
-
-    def test_raises_when_none(self):
-        with pytest.raises(RuntimeError, match="No project ID available"):
-            resolve_project_id(None)
-
-    def test_raises_when_empty_string(self):
-        with pytest.raises(RuntimeError, match="No project ID available"):
-            resolve_project_id("")

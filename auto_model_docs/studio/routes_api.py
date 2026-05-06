@@ -148,7 +148,7 @@ def register_api_routes(rt):
             )
 
         if not snapshot_id:
-            snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id, pid)
+            snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id)
         if not snapshot_id:
             return Response(
                 json.dumps({"error": "Could not resolve snapshot for dataset"}),
@@ -157,7 +157,7 @@ def register_api_routes(rt):
             )
 
         try:
-            files = domino_datasets.list_files(snapshot_id, path, pid)
+            files = domino_datasets.list_files(snapshot_id, path)
             return Response(json.dumps(files), media_type="application/json")
         except Exception as exc:
             return Response(

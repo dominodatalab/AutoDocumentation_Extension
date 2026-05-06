@@ -111,10 +111,3 @@ def resolve_api_host() -> str:
     """
     host = os.environ.get("DOMINO_API_PROXY") or os.environ.get("DOMINO_API_HOST") or ""
     return host.rstrip("/")
-
-
-def resolve_project_id(project_id: Optional[str] = None) -> str:
-    """Return the given project ID. Does not fall back to the app project."""
-    if not project_id:
-        raise RuntimeError("No project ID available")
-    return project_id
