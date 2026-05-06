@@ -578,7 +578,8 @@ input[type="file"] {
     background: transparent;
     border: 1px solid var(--primary);
     border-radius: var(--radius-sm);
-    padding: 0.625rem 1.25rem;
+    padding: 0 16px;
+    height: 32px;
     color: var(--primary);
     font-family: var(--font-body);
     font-size: 14px;
@@ -588,7 +589,6 @@ input[type="file"] {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    min-height: 36px;
     text-decoration: none;
     white-space: nowrap;
     box-sizing: border-box;
@@ -995,7 +995,8 @@ button.primary {
     background: #543fde;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    padding: 0.625rem 1.25rem;
+    padding: 0 16px;
+    height: 32px;
     color: #ffffff;
     font-family: var(--font-body);
     font-size: 14px;
@@ -1007,7 +1008,7 @@ button.primary {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    min-height: 36px;
+    box-sizing: border-box;
 }
 button.primary:hover {
     background: #3b23d1;
