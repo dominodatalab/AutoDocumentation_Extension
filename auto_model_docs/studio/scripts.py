@@ -782,7 +782,7 @@ MAIN_DOM_JS = r"""
             }
 
             if (!jobs || !jobs.length) {
-                el.innerHTML = '<p class="history-empty">No jobs submitted yet.</p>';
+                el.innerHTML = '<div class="spec-file-empty"><span class="material-symbols-outlined spec-file-empty-icon">description</span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
                 return;
             }
 

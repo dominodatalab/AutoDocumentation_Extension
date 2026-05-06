@@ -1350,12 +1350,6 @@ button.primary:disabled {
     border-radius: 0 0 var(--radius-sm) var(--radius-sm);
     padding: 1rem 1.25rem;
 }
-.history-empty {
-    color: var(--outline);
-    font-size: 13px;
-    margin: 0;
-}
-
 .spec-list-item-name {
     font-family: var(--font-body);
 }
