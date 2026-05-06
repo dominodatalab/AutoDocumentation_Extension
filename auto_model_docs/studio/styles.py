@@ -1491,8 +1491,7 @@ select.hw-tier-select option {
 
 /* ── Insight card ─────────────────────────────────────────────────── */
 .insight-card {
-    background: var(--surface-container-lowest);
-    border-left: 3px solid var(--primary);
+    background: #ffffff;
     border: 1px solid var(--outline-variant);
     border-left: 3px solid var(--primary);
     border-radius: var(--radius-md);

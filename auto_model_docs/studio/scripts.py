@@ -846,6 +846,53 @@ MAIN_DOM_JS = r"""
         // Poll job history every 10 seconds
         setInterval(fetchJobHistory, 10000);
 
+        // ── Mock data (append ?mockJobs=1 to URL to activate) ────────
+        if (new URLSearchParams(window.location.search).get('mockJobs') === '1') {
+            renderJobHistory([
+                {
+                    status: 'running',
+                    branch: 'main',
+                    hardware_tier: 'Small - 1 core',
+                    submitted_at: new Date(Date.now() - 3 * 60000).toISOString(),
+                    job_url: '#',
+                    domino_run_id: 'run-001'
+                },
+                {
+                    status: 'succeeded',
+                    branch: 'feature/new-model',
+                    hardware_tier: 'Small - 1 core',
+                    submitted_at: new Date(Date.now() - 25 * 60000).toISOString(),
+                    job_url: '#',
+                    domino_run_id: 'run-002',
+                    output_doc_url: '#'
+                },
+                {
+                    status: 'failed',
+                    branch: 'main',
+                    hardware_tier: 'Medium - 4 cores',
+                    submitted_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+                    job_url: '#',
+                    domino_run_id: 'run-003'
+                },
+                {
+                    status: 'queued',
+                    branch: 'hotfix/doc-fix',
+                    hardware_tier: 'Small - 1 core',
+                    submitted_at: new Date(Date.now() - 60000).toISOString(),
+                    job_url: null,
+                    domino_run_id: null
+                },
+                {
+                    status: 'cancelled',
+                    branch: 'main',
+                    hardware_tier: 'Small - 1 core',
+                    submitted_at: new Date(Date.now() - 5 * 3600000).toISOString(),
+                    job_url: '#',
+                    domino_run_id: 'run-004'
+                }
+            ]);
+        }
+
         // ── Form submission ───────────────────────────────────────────
         var mainForm = document.getElementById('main-form');
         if (mainForm) {
