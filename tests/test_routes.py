@@ -589,10 +589,7 @@ class TestSpecRoutes:
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = []
-
-        mock_upload = MagicMock()
-        mock_upload.read = AsyncMock(return_value=b"title: Test\nsections: []")
-        req = _make_request(form_data={"spec_upload": mock_upload})
+        req = _make_request(json_body={"spec_content": "title: Test\nsections: []"}, content_type="application/json")
         result = await routes["/validate-spec"](req)
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.assert_called_once()
         body = json.loads(result.body)
@@ -604,10 +601,7 @@ class TestSpecRoutes:
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
         _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = ["Missing title"]
-
-        mock_upload = MagicMock()
-        mock_upload.read = AsyncMock(return_value=b"sections: []")
-        req = _make_request(form_data={"spec_upload": mock_upload})
+        req = _make_request(json_body={"spec_content": "sections: []"}, content_type="application/json")
         result = await routes["/validate-spec"](req)
         body = json.loads(result.body)
         assert body["valid"] is False
@@ -617,35 +611,12 @@ class TestSpecRoutes:
     async def test_validate_spec_empty_content(self, _mock_studio_modules):
         mod = _import_routes_spec()
         routes = _register(mod, "register_spec_routes")
-        req = _make_request(form_data={})
+        req = _make_request(json_body={}, content_type="application/json")
         result = await routes["/validate-spec"](req)
         body = json.loads(result.body)
         assert body["valid"] is False
         assert len(body["errors"]) > 0
 
-    @pytest.mark.asyncio
-    async def test_validate_spec_via_json_body(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = []
-        req = _make_request(json_body={"spec_content": "title: Test\nsections: []"}, content_type="application/json")
-        result = await routes["/validate-spec"](req)
-        body = json.loads(result.body)
-        assert body["valid"] is True
-
-    @pytest.mark.asyncio
-    async def test_save_spec(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        store = _mock_studio_modules["state"].spec_store
-        store.save_spec.return_value = Path("/saved/spec.yaml")
-        req = _make_request(form_data={
-            "spec_filename": "my_spec.yaml", "spec_content": "title: Test",
-        })
-        result = await routes["/save-spec"](req)
-        store.save_spec.assert_called_once()
-        body = json.loads(result.body)
-        assert "saved" in body
 
     @pytest.mark.asyncio
     async def test_spec_list_with_specs(self, _mock_studio_modules):

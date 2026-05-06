@@ -209,7 +209,7 @@ async def test_parse_request_provider_base_url_preserved():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
             "provider_base_url": "https://a.example",
@@ -218,7 +218,7 @@ async def test_parse_request_provider_base_url_preserved():
     jr = await je._parse_request(req)
     assert jr.provider_base_url == "https://a.example"
 
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "openai",
             "provider_base_url": "https://ok/v1",
@@ -235,7 +235,7 @@ async def test_parse_request_verbose_checkbox():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
             "verbose": "true",
@@ -244,7 +244,7 @@ async def test_parse_request_verbose_checkbox():
     jr = await je._parse_request(req)
     assert jr.verbose is True
 
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
         }
@@ -260,7 +260,7 @@ async def test_parse_request_provider_defaults_to_openai_when_missing():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(return_value={})
+    req.json = AsyncMock(return_value={})
     jr = await je._parse_request(req)
     assert jr.provider == "openai"
 
@@ -272,7 +272,7 @@ async def test_parse_request_language_defaults_to_auto_when_missing():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
         }
@@ -288,7 +288,7 @@ async def test_parse_request_language_allowed_and_invalid():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
             "language": "sas",
@@ -297,7 +297,7 @@ async def test_parse_request_language_allowed_and_invalid():
     jr = await je._parse_request(req)
     assert jr.language == "sas"
 
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
             "language": "fortran",
@@ -314,7 +314,7 @@ async def test_parse_request_project_id_only_from_query():
 
     req = MagicMock()
     req.query_params = {"projectId": "from-query"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "target_project": "form-should-not-win",
             "project_id": "hidden-should-not-win",
@@ -336,7 +336,7 @@ async def test_parse_request_environment_fields():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
             "environment_id": "env123",
@@ -355,7 +355,7 @@ async def test_parse_request_raises_when_no_query_project_id():
 
     req = MagicMock()
     req.query_params = {}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "target_project": "only-form-not-enough",
             "provider": "anthropic",

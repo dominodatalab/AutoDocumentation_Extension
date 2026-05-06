@@ -598,11 +598,15 @@ MAIN_DOM_JS = r"""
         // ── Spec validation helper ────────────────────────────────────
         window._specValid = true;
         function validateSpecContent(file) {
-            var fd = new FormData();
-            fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
             if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
-            fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                fetch(_adUrl('validate-spec'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ spec_content: ev.target.result }),
+                })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(data) {
                     window._specValid = data.valid;
@@ -621,6 +625,8 @@ MAIN_DOM_JS = r"""
                     if (resultEl) resultEl.innerHTML = '';
                     window._specValid = true;
                 });
+            };
+            reader.readAsText(file);
         }
 
         // ── Code root prefix select + suffix sync / browseCode options ─────
@@ -877,18 +883,24 @@ MAIN_DOM_JS = r"""
                 var existingMsg = document.getElementById('spec-validation-msg');
                 if (existingMsg) existingMsg.remove();
 
-                var fd = new FormData(mainForm);
                 var pid = resolvedProjectId();
-                if (pid && !fd.get('projectId')) fd.append('projectId', pid);
-                if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
-                if (_specCurrentSnapshotId && !fd.get('snapshotId')) fd.append('snapshotId', _specCurrentSnapshotId);
-                if (_specCurrentDatasetPath && !fd.get('datasetPath')) fd.append('datasetPath', _specCurrentDatasetPath);
+                var fd = new FormData(mainForm);
+                var payload = {};
+                fd.forEach(function(v, k) { payload[k] = v; });
+                if (pid) payload['projectId'] = pid;
+                if (_specCurrentDatasetId) payload['datasetId'] = _specCurrentDatasetId;
+                if (_specCurrentSnapshotId) payload['snapshotId'] = _specCurrentSnapshotId;
+                if (_specCurrentDatasetPath) payload['datasetPath'] = _specCurrentDatasetPath;
 
                 var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
                 var submitBtn = mainForm.querySelector('[type=submit]');
                 if (submitBtn) submitBtn.disabled = true;
 
-                fetch(_adUrl('run') + qs, { method: 'POST', body: fd })
+                fetch(_adUrl('run') + qs, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                })
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(data) { renderJobHistory(data.jobs || []); })
                     .catch(function() {})

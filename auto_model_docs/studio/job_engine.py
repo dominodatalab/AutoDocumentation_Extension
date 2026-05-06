@@ -88,7 +88,12 @@ def _form_float(form: Any, key: str, default: float) -> float:
 # ---------------------------------------------------------------------------
 
 async def _parse_request(req: Request) -> JobRequest:
-    form = await req.form()
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
 
     project_id = (
         (req.query_params.get("projectId") or req.query_params.get("project_id") or "").strip()
@@ -97,37 +102,37 @@ async def _parse_request(req: Request) -> JobRequest:
     if not project_id:
         raise RuntimeError("No target project ID available. The app requires ?projectId= on the request URL.")
 
-    _prov = (_form_str(form, "provider") or DEFAULT_PROVIDER).strip().lower()
-    _lang_raw = (_form_str(form, "language") or DEFAULT_LANGUAGE).strip().lower()
+    _prov = (_form_str(body, "provider") or DEFAULT_PROVIDER).strip().lower()
+    _lang_raw = (_form_str(body, "language") or DEFAULT_LANGUAGE).strip().lower()
     _language = _lang_raw if _lang_raw in ALLOWED_LANGUAGES else DEFAULT_LANGUAGE
 
     return JobRequest(
-        spec_path=_form_str(form, "spec_path"),
+        spec_path=_form_str(body, "spec_path"),
         provider=_prov,
-        model=_form_str(form, "model"),
-        code_root=_form_str(form, "code_root"),
-        max_files=_form_int(form, "max_files", DEFAULT_MAX_FILES),
-        workers=_form_int(form, "workers", DEFAULT_GENERATION_WORKERS),
-        planning_workers=_form_int(form, "planning_workers", DEFAULT_PLANNING_WORKERS),
-        timeout=_form_float(form, "timeout", DEFAULT_TIMEOUT),
-        notebook=form.get("notebook") in ("on", "true", "1", "yes"),
-        notebook_path=_form_str(form, "notebook_path"),
-        filtered_experiment_names=_form_str(form, "filtered_experiment_names"),
-        filtered_model_names=_form_str(form, "filtered_model_names"),
-        latest_only=_checkbox_truthy(form.get("latest_only")),
-        verbose=_checkbox_truthy(form.get("verbose")),
-        branch=_form_str(form, "branch"),
-        hardware_tier=_form_str(form, "hardware_tier"),
-        environment_id=_form_str(form, "environment_id"),
-        environment_revision_id=_form_str(form, "environment_revision_id"),
+        model=_form_str(body, "model"),
+        code_root=_form_str(body, "code_root"),
+        max_files=_form_int(body, "max_files", DEFAULT_MAX_FILES),
+        workers=_form_int(body, "workers", DEFAULT_GENERATION_WORKERS),
+        planning_workers=_form_int(body, "planning_workers", DEFAULT_PLANNING_WORKERS),
+        timeout=_form_float(body, "timeout", DEFAULT_TIMEOUT),
+        notebook=_checkbox_truthy(body.get("notebook")),
+        notebook_path=_form_str(body, "notebook_path"),
+        filtered_experiment_names=_form_str(body, "filtered_experiment_names"),
+        filtered_model_names=_form_str(body, "filtered_model_names"),
+        latest_only=_checkbox_truthy(body.get("latest_only")),
+        verbose=_checkbox_truthy(body.get("verbose")),
+        branch=_form_str(body, "branch"),
+        hardware_tier=_form_str(body, "hardware_tier"),
+        environment_id=_form_str(body, "environment_id"),
+        environment_revision_id=_form_str(body, "environment_revision_id"),
         project_id=project_id,
-        provider_base_url=_form_str(form, "provider_base_url"),
+        provider_base_url=_form_str(body, "provider_base_url"),
         language=_language,
-        max_retries=_form_int(form, "max_retries", DEFAULT_LLM_MAX_RETRIES),
-        initial_backoff=_form_float(form, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
-        max_backoff=_form_float(form, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
-        backoff_jitter=_form_float(form, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
-        notebook_from_cache=_checkbox_truthy(form.get("notebook_from_cache")),
+        max_retries=_form_int(body, "max_retries", DEFAULT_LLM_MAX_RETRIES),
+        initial_backoff=_form_float(body, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
+        max_backoff=_form_float(body, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
+        backoff_jitter=_form_float(body, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
+        notebook_from_cache=_checkbox_truthy(body.get("notebook_from_cache")),
     )
 
 

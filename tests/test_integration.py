@@ -475,7 +475,7 @@ class TestApiRoutesIntegration:
 class TestSpecRoutesIntegration:
 
     def test_validate_spec_empty(self, client):
-        resp = client.post("/validate-spec", data={})
+        resp = client.post("/validate-spec", json={})
         assert resp.status_code == 200
         body = resp.json()
         assert body["valid"] is False
@@ -485,7 +485,7 @@ class TestSpecRoutesIntegration:
         integration_env["doc_spec"].validate_spec.return_value = []
         resp = client.post(
             "/validate-spec",
-            files={"spec_upload": ("spec.yaml", b"title: Test\n", "application/x-yaml")},
+            json={"spec_content": "title: Test\n"},
         )
         assert resp.status_code == 200
         integration_env["doc_spec"].validate_spec.assert_called()
@@ -497,7 +497,7 @@ class TestSpecRoutesIntegration:
         integration_env["doc_spec"].validate_spec.return_value = ["Missing title field"]
         resp = client.post(
             "/validate-spec",
-            files={"spec_upload": ("bad.yaml", b"sections: []\n", "application/x-yaml")},
+            json={"spec_content": "sections: []\n"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -509,15 +509,6 @@ class TestSpecRoutesIntegration:
         assert resp.status_code == 200
         body = resp.json()
         assert body["specs"] == []
-
-    def test_save_spec(self, client):
-        resp = client.post("/save-spec", data={
-            "spec_filename": "test.yaml",
-            "spec_content": "title: Test\n",
-        })
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "saved" in body
 
 
 # ===========================================================================
@@ -536,7 +527,7 @@ class TestJobRoutesIntegration:
 
         resp = client.post(
             "/run?projectId=proj-integration",
-            data={
+            json={
                 "spec_path": "dataset://autodoc-specs/spec.yaml",
                 "provider": "anthropic",
             },
@@ -567,7 +558,7 @@ class TestJobRoutesIntegration:
         """Jobs created via /run appear in /job-history."""
         client.post(
             "/run?projectId=proj-integration",
-            data={
+            json={
                 "spec_path": "dataset://autodoc-specs/spec.yaml",
                 "provider": "anthropic",
             },
@@ -594,7 +585,7 @@ class TestAuthorizationIntegration:
         self._deny(integration_env["authz"], "require_domino_job_start")
         resp = client.post(
             "/run?projectId=proj-integration",
-            data={
+            json={
                 "spec_path": "dataset://autodoc-specs/spec.yaml",
                 "provider": "anthropic",
             },
@@ -624,13 +615,6 @@ class TestAuthorizationIntegration:
         )
         assert resp.status_code == 403
 
-    def test_save_spec_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_project_write")
-        resp = client.post("/save-spec?projectId=proj-integration", data={
-            "spec_filename": "test.yaml",
-            "spec_content": "title: Test\n",
-        })
-        assert resp.status_code == 403
 
 
 class TestAuthMiddlewareIntegration:
@@ -675,19 +659,19 @@ class TestCrossCuttingIntegration:
 
         client.post(
             "/run?projectId=proj-integration",
-            data={
+            json={
                 "spec_path": "dataset://autodoc-specs/spec.yaml",
                 "provider": "anthropic",
                 "code_root": "/mnt/code",
-                "max_files": "50",
-                "workers": "4",
-                "planning_workers": "3",
-                "timeout": "120",
-                "max_retries": "5",
-                "initial_backoff": "10",
-                "max_backoff": "120",
-                "backoff_jitter": "0.2",
-                "verbose": "true",
+                "max_files": 50,
+                "workers": 4,
+                "planning_workers": 3,
+                "timeout": 120,
+                "max_retries": 5,
+                "initial_backoff": 10,
+                "max_backoff": 120,
+                "backoff_jitter": 0.2,
+                "verbose": True,
             },
         )
 
