@@ -1348,30 +1348,7 @@ button.primary:disabled {
     font-size: 13px;
     margin: 0;
 }
-.history-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 2.5rem 1.5rem;
-    gap: 0.5rem;
-    flex: 1;
-    min-height: 180px;
-}
-.history-empty-state-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--on-surface);
-    margin: 0;
-}
-.history-empty-state-desc {
-    font-size: 13px;
-    color: var(--on-surface-variant);
-    margin: 0;
-    max-width: 260px;
-    line-height: 1.5;
-}
+
 .spec-list-item-name {
     font-family: var(--font-body);
 }

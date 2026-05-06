@@ -841,13 +841,9 @@ async def index(req: Request):
         Div(
             Div(
                 Div(
-                    P("No documentation jobs yet", cls="history-empty-state-title"),
-                    P(
-                        "Complete steps 1 and 2, then click Generate documentation "
-                        "to run your first job. Results appear here.",
-                        cls="history-empty-state-desc",
-                    ),
-                    cls="history-empty-state",
+                    Span("history", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span("No autodocs generated yet.", cls="spec-file-list-empty"),
+                    cls="spec-file-empty",
                 ),
                 id="job-history-content",
             ),
