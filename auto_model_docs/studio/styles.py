@@ -994,7 +994,7 @@ input[type="file"] {
 /* ── Primary Button ───────────────────────────────────────────────── */
 button.primary {
     background: #543fde;
-    border: none;
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
     padding: 0.625rem 1.25rem;
     color: #ffffff;
