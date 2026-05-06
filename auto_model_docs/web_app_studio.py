@@ -379,25 +379,28 @@ async def index(req: Request):
                 cls="advanced-section",
                 open=False,
             ),
-            Div(
-                Label(
-                    "Upload spec",
-                    Input(
-                        type="file",
-                        accept=".yaml,.yml",
-                        id="spec-machine-upload",
-                        cls="hidden-upload",
-                    ),
-                    cls="upload-btn",
-                ),
-                Span(id="spec-upload-status", cls="spec-upload-status"),
-                cls="spec-actions-row",
-            ),
             cls="field",
         )
     )
 
     spec_card_children.append(Div(id="spec-validation-result"))
+
+    spec_card_children.append(
+        Div(
+            Label(
+                "Upload spec",
+                Input(
+                    type="file",
+                    accept=".yaml,.yml",
+                    id="spec-machine-upload",
+                    cls="hidden-upload",
+                ),
+                cls="upload-btn",
+            ),
+            Span(id="spec-upload-status", cls="spec-upload-status"),
+            cls="card-footer",
+        )
+    )
 
     left_col_children.append(Div(*spec_card_children, cls="bp-card"))
 

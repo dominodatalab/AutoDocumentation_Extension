@@ -261,11 +261,10 @@ a:hover { color: var(--primary-container); }
 .studio-col-mid > .bp-card {
     flex: 1 1 auto;
     min-height: 0;
-}
-.studio-col-mid > .bp-card {
     display: flex;
     flex-direction: column;
 }
+.studio-col-left > .bp-card > .card-footer,
 .studio-col-mid > .bp-card > .card-footer {
     margin-top: auto;
 }
@@ -1434,11 +1433,13 @@ details[open] > .history-toggle::before {
 .card-footer {
     display: flex;
     justify-content: stretch;
+    align-items: center;
+    gap: 0.75rem;
     padding-top: 1.25rem;
-    margin-top: 0.75rem;
+    margin-top: 2rem;
     border-top: 1px solid var(--outline-variant);
 }
-.card-footer button.primary {
+.studio-col-mid > .bp-card > .card-footer button.primary {
     flex: 1;
 }
 
