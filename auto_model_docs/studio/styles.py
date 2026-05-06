@@ -139,7 +139,7 @@ a:hover { color: var(--primary-container); }
 }
 .domino-header-subtitle {
     font-family: var(--font-body);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.5);
     margin: 0;
@@ -304,7 +304,7 @@ a:hover { color: var(--primary-container); }
 }
 .step-badge {
     font-family: var(--font-body);
-    font-size: 0.6875rem;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -448,7 +448,7 @@ input[type="file"] {
 }
 .field-hint-text {
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--outline);
     margin-top: 0.15rem;
     margin-bottom: 0.5rem;
@@ -541,7 +541,7 @@ input[type="file"] {
     padding: 0.5rem 0.75rem;
     background: var(--on-surface);
     color: var(--surface-container-lowest);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 400;
     white-space: normal;
     min-width: 200px;
@@ -605,7 +605,7 @@ input[type="file"] {
     display: none !important;
 }
 .upload-filename {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--primary);
     margin-top: 0.25rem;
 }
@@ -875,7 +875,7 @@ input[type="file"] {
 }
 .advanced-summary-desc {
     font-weight: 400;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--outline);
     letter-spacing: normal;
     text-transform: none;
@@ -941,7 +941,7 @@ input[type="file"] {
     margin-bottom: 0.75rem;
 }
 .filter-section-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--on-surface-variant);
     margin-bottom: 0.75rem;
     margin-top: -0.5rem;
@@ -965,7 +965,7 @@ input[type="file"] {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface);
     cursor: pointer;
 }
@@ -1204,7 +1204,7 @@ button.primary:disabled {
     border-radius: 0 0 12px 12px;
     padding: 1rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.65;
     color: #cbd5e1;
     min-height: 0;
@@ -1221,7 +1221,7 @@ button.primary:disabled {
     align-items: center;
     justify-content: center;
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
     border-radius: 12px;
 }
 .terminal-line-active {
@@ -1259,7 +1259,7 @@ button.primary:disabled {
     background: var(--success);
     color: white;
     border-radius: 2px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1369,13 +1369,13 @@ button.primary:disabled {
 .history-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 13px;
     min-width: 420px;
 }
 .history-table th {
     text-align: left;
     font-family: var(--font-body);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1411,7 +1411,7 @@ button.primary:disabled {
 .history-status-failed { background: var(--error-container); color: var(--on-surface); }
 .history-status-cancelled { background: var(--warning-container); color: var(--warning); }
 .history-toggle {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--primary);
     cursor: pointer;
@@ -1511,7 +1511,7 @@ select.hw-tier-select option {
     margin-bottom: 0.25rem;
 }
 .insight-card p {
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.6;
     color: var(--on-surface-variant);
     margin: 0;
@@ -1530,7 +1530,7 @@ select.hw-tier-select option {
 .header-version-text {
     margin: 0;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 12px;
     font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
@@ -1539,7 +1539,7 @@ select.hw-tier-select option {
 
 .header-logs-link {
     color: var(--primary);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-decoration: none;
 }
@@ -1703,7 +1703,7 @@ select.hw-tier-select option {
 .warning-banner-message {
     flex: 1;
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .warning-banner-close {
@@ -1720,7 +1720,7 @@ select.hw-tier-select option {
     border-radius: var(--radius-sm);
     padding: 0.625rem 1rem;
     margin-bottom: 0.75rem;
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface);
     line-height: 1.5;
     font-family: var(--font-body);
@@ -1734,7 +1734,7 @@ select.hw-tier-select option {
 .spec-validation-success {
     color: var(--success);
     font-weight: 500;
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .spec-validation-empty {
@@ -1743,7 +1743,7 @@ select.hw-tier-select option {
 
 .spec-validation-pending {
     color: var(--outline);
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .spec-validation-msg {
