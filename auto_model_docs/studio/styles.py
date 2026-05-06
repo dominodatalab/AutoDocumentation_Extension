@@ -264,9 +264,9 @@ a:hover { color: var(--primary-container); }
     display: flex;
     flex-direction: column;
 }
-.studio-col-left > .bp-card > .card-footer,
-.studio-col-mid > .bp-card > .card-footer {
-    margin-top: auto;
+.card-content-spacer {
+    flex: 1;
+    min-height: 2rem;
 }
 @media (max-width: 1200px) {
     .studio-grid {
@@ -1433,11 +1433,10 @@ details[open] > .history-toggle::before {
 /* ── Card Footer (Generate button) ────────────────────────────────── */
 .card-footer {
     display: flex;
-    justify-content: stretch;
+    justify-content: flex-start;
     align-items: center;
     gap: 0.75rem;
     padding-top: 1.25rem;
-    margin-top: 2rem;
     border-top: 1px solid var(--outline-variant);
 }
 .studio-col-mid > .bp-card > .card-footer button.primary {

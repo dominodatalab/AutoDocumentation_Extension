@@ -385,6 +385,8 @@ async def index(req: Request):
 
     spec_card_children.append(Div(id="spec-validation-result"))
 
+    spec_card_children.append(Div(cls="card-content-spacer"))
+
     spec_card_children.append(
         Div(
             Label(
@@ -821,6 +823,8 @@ async def index(req: Request):
             open=False,
         )
     )
+
+    run_card_children.append(Div(cls="card-content-spacer"))
 
     run_card_children.append(
         Div(
