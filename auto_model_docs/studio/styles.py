@@ -1437,6 +1437,10 @@ details[open] > .history-toggle::before {
     align-items: center;
     gap: 0.75rem;
     padding-top: 1.25rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
     border-top: 1px solid var(--outline-variant);
 }
 .studio-col-mid > .bp-card > .card-footer button.primary {
