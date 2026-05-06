@@ -419,6 +419,7 @@ class TestApiRoutes:
 
     @pytest.mark.asyncio
     async def test_code_root_options_no_project_id(self, _mock_studio_modules):
+        _mock_studio_modules["state"]._resolve_request_project_id.return_value = None
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={})

@@ -106,16 +106,12 @@ MAIN_DOM_JS = r"""
                 } catch (e) { /* ignore */ }
             }
             var pid = null;
-            // 1. Own query string (direct / non-proxied access)
             pid = new URLSearchParams(window.location.search).get('projectId');
-            // 2. Own hash fragment (#projectId=xxx — survives proxies)
             if (!pid && window.location.hash) {
                 var h = window.location.hash.substring(1);
                 if (h.charAt(0) === '?') h = h.substring(1);
                 pid = new URLSearchParams(h).get('projectId');
             }
-            // 3. Parent frame (same-origin deployments where parent
-            //    and iframe share the same host)
             if (!pid && window.parent !== window) {
                 try {
                     var pLoc = window.parent.location;
@@ -125,12 +121,11 @@ MAIN_DOM_JS = r"""
                         if (ph.charAt(0) === '?') ph = ph.substring(1);
                         pid = new URLSearchParams(ph).get('projectId');
                     }
-                } catch(e) { /* cross-origin — ignore */ }
+                } catch(e) { /* cross-origin */ }
             }
             if (pid) {
                 setProjectId(pid);
             }
-            // 4. Listen for postMessage from Domino parent frame
             window.addEventListener('message', function(e) {
                 if (e.data && typeof e.data === 'object' && e.data.projectId) {
                     setProjectId(e.data.projectId);
@@ -737,7 +732,7 @@ MAIN_DOM_JS = r"""
             return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
-        function _jobRow(j, pid) {
+        function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
             var branch = j.branch || '—';
@@ -769,7 +764,7 @@ MAIN_DOM_JS = r"""
 
         function _tableHtml(jobs) {
             var header = '<thead><tr><th>Branch</th><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
-            var rows = jobs.map(function(j) { return _jobRow(j, resolvedProjectId()); }).join('');
+            var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
 
@@ -790,7 +785,6 @@ MAIN_DOM_JS = r"""
                 return;
             }
 
-            var pid = resolvedProjectId();
             var activeJobs = jobs.filter(function(j) { return _ACTIVE_STATUSES[j.status || 'queued']; });
             var completedJobs = jobs.filter(function(j) { return !_ACTIVE_STATUSES[j.status || 'queued']; });
             var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
@@ -917,7 +911,6 @@ MAIN_DOM_JS = r"""
                 var existingMsg = document.getElementById('spec-validation-msg');
                 if (existingMsg) existingMsg.remove();
 
-                var pid = resolvedProjectId();
                 var rawSpec = (specPath && specPath.value || '').trim();
                 var resolvedSpec = rawSpec;
                 if (rawSpec.indexOf('dataset://') === 0 && _specCurrentDatasetPath) {
@@ -927,6 +920,7 @@ MAIN_DOM_JS = r"""
                     var base = _specCurrentDatasetPath.replace(/\/+$/, '');
                     resolvedSpec = rel ? (base + '/' + rel) : base;
                 }
+                var pid = resolvedProjectId();
                 var jsonPayload = runJobJsonPayloadFromMainForm(resolvedSpec);
 
                 var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';

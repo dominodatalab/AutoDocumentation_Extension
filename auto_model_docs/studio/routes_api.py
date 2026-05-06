@@ -39,7 +39,7 @@ def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
     async def api_branches(req: Request):
-        project_id = req.query_params.get("projectId") or None
+        project_id = _resolve_request_project_id(req)
         search = req.query_params.get("search", "")
         if project_id:
             branches = domino_client.list_branches_api(project_id, search=search)
@@ -53,7 +53,7 @@ def register_api_routes(rt):
     rt("/api/branches")(api_branches)
 
     async def api_hardware_tiers(req: Request):
-        project_id = req.query_params.get("projectId") or None
+        project_id = _resolve_request_project_id(req)
         tiers = domino_client.list_hardware_tiers(project_id=project_id)
         default_tier = domino_client.get_project_default_tier()
         result = []
@@ -234,7 +234,7 @@ def register_api_routes(rt):
     rt("/api/download-template")(api_download_template)
 
     async def api_code_root_options(req: Request):
-        pid = (req.query_params.get("projectId") or "").strip()
+        pid = (_resolve_request_project_id(req) or "").strip()
 
         def _error_payload(reason: str) -> dict:
             return {

@@ -28,6 +28,7 @@ from default_consts import (
 from .state import (
     JobRequest,
     _max_jobs,
+    _resolve_request_project_id,
     domino_client,
     domino_job_store,
     logger,
@@ -91,12 +92,11 @@ async def _parse_request(req: Request) -> JobRequest:
     if not isinstance(body, dict):
         body = {}
 
-    project_id = (
-        (req.query_params.get("projectId") or req.query_params.get("project_id") or "").strip()
-        or None
-    )
+    project_id = _resolve_request_project_id(req)
     if not project_id:
-        raise RuntimeError("No target project ID available. The app requires ?projectId= on the request URL.")
+        raise RuntimeError(
+            "No target project ID available. The app requires projectId (or project_id) on the request query string."
+        )
 
     _prov = _form_str(body, "provider").strip().lower()
     if not _prov:

@@ -172,14 +172,6 @@ a:hover { color: var(--primary-container); }
     flex-direction: column;
     box-sizing: border-box;
 }
-.studio-footer-meta {
-    margin-top: auto;
-    padding-top: 2.5rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-}
 .studio-page-insight {
     width: 100%;
     margin-bottom: 1.25rem;
@@ -1520,28 +1512,6 @@ select.hw-tier-select option {
 
 .app-link:hover {
     color: var(--primary-hover);
-}
-
-.header-version-text {
-    margin: 0;
-    color: var(--muted);
-    font-size: 12px;
-    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-    text-align: center;
-}
-
-.header-logs-link {
-    color: var(--primary);
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
-}
-
-.header-logs-link:hover {
-    color: var(--primary-hover);
-    text-decoration: none;
 }
 
 .bootstrap-status-wrap,

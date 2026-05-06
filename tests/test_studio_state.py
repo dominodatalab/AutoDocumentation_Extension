@@ -139,26 +139,6 @@ class TestDominoJobRecord:
         assert rec.project_id is None
 
 
-class TestLogBuffer:
-    def test_captures_log_records(self, state_module):
-        import logging
-        state_module.log_buffer.buffer.clear()
-        logging.getLogger("test.buffer").warning("hello-buffer-123")
-        snap = state_module.log_buffer.snapshot()
-        assert any("hello-buffer-123" in line for line in snap)
-
-    def test_respects_capacity(self, state_module):
-        import logging
-        state_module.log_buffer.buffer.clear()
-        cap = state_module.log_buffer.buffer.maxlen
-        logger = logging.getLogger("test.buffer")
-        logger.setLevel(logging.DEBUG)
-        for i in range(cap + 50):
-            logger.warning("line-%d", i)
-        snap = state_module.log_buffer.snapshot()
-        assert len(snap) == cap
-
-
 class TestEnvironmentWarning:
     def test_fields(self, state_module):
         w = state_module.EnvironmentWarning(

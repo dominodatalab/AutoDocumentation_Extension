@@ -133,6 +133,17 @@ def _build_mock_state():
     mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
     mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
+
+    def _resolve_request_project_id(req):
+        for key in ("projectId", "project_id"):
+            raw = req.query_params.get(key)
+            if raw:
+                s = str(raw).strip()
+                if s:
+                    return s
+        return None
+
+    mock_state._resolve_request_project_id = _resolve_request_project_id
     return mock_state
 
 

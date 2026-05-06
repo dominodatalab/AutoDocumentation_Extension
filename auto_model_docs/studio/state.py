@@ -7,10 +7,9 @@ import logging
 import os
 import sys
 import ctypes as _ctypes
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Deque, Optional
+from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -24,37 +23,6 @@ logging.basicConfig(
 )
 for _mod_name in ("domino_datasets", "domino_client", "auth_context"):
     logging.getLogger(_mod_name).setLevel(logging.INFO)
-
-
-class _RingBufferLogHandler(logging.Handler):
-    """In-process ring buffer that keeps the last N formatted log records.
-
-    Attached to the root logger so /logs can expose recent app output for
-    troubleshooting without reading container stdout.
-    """
-
-    def __init__(self, capacity: int = 2000):
-        super().__init__()
-        self.buffer: Deque[str] = deque(maxlen=capacity)
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            self.buffer.append(self.format(record))
-        except Exception:
-            self.handleError(record)
-
-    def snapshot(self) -> list[str]:
-        return list(self.buffer)
-
-
-log_buffer = _RingBufferLogHandler(capacity=2000)
-log_buffer.setLevel(logging.DEBUG)
-log_buffer.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-))
-_root = logging.getLogger()
-if not any(isinstance(h, _RingBufferLogHandler) for h in _root.handlers):
-    _root.addHandler(log_buffer)
 
 # ---------------------------------------------------------------------------
 # Sibling module imports  (domino_client, domino_job_store, etc.)
@@ -193,9 +161,11 @@ def _max_jobs() -> int:
 
 def _resolve_request_project_id(req) -> Optional[str]:
     for key in ("projectId", "project_id"):
-        pid = req.query_params.get(key)
-        if pid:
-            return pid
+        raw = req.query_params.get(key)
+        if raw:
+            s = str(raw).strip()
+            if s:
+                return s
     return None
 
 

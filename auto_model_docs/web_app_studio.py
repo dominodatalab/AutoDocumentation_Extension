@@ -34,10 +34,8 @@ from default_consts import (
 
 from studio.state import (
     _STARTUP_WARNINGS,
-    _get_default_spec_path,
+    _resolve_request_project_id,
     domino_client,
-    log_buffer,
-    logger,
 )
 from studio.styles import STUDIO_CSS
 from studio.scripts import MAIN_DOM_JS
@@ -50,11 +48,6 @@ from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
 from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
-
-from temporary_versioning import get_deploy_version_label
-
-
-# TEMP: remove deploy hint: import above, Div with get_deploy_version_label in index(), temporary_versioning.py
 
 
 # ---------------------------------------------------------------------------
@@ -82,11 +75,10 @@ async def index(req: Request):
     scheme = req.headers.get("x-forwarded-proto", "https")
     domino_client.set_ui_host(host, scheme)
 
-    # Guard: projectId query param is required.  Domino's reverse proxy
-    # strips query params from the iframe URL, so if it's missing we serve
-    # a bootstrap page whose JS extracts the ID from the parent frame,
-    # hash fragment, or postMessage and reloads with it in the URL.
-    project_id = req.query_params.get("projectId") or None
+    # projectId query param is required. Domino's reverse proxy may strip query params
+    # from the iframe URL, so if it's missing we serve a bootstrap page whose JS
+    # extracts the ID from the parent frame, hash fragment, or postMessage and reloads.
+    project_id = _resolve_request_project_id(req)
     if not project_id:
         return (
             Title("Auto Model Docs Studio — Domino"),
@@ -95,14 +87,12 @@ async def index(req: Request):
                 (function() {
                     var pid = null;
 
-                    // 1. Hash fragment (#projectId=xxx — survives proxies)
                     if (window.location.hash) {
                         var h = window.location.hash.substring(1);
                         if (h.charAt(0) === '?') h = h.substring(1);
                         pid = new URLSearchParams(h).get('projectId');
                     }
 
-                    // 2. Parent frame (same-origin deployments)
                     if (!pid && window.parent !== window) {
                         try {
                             var pLoc = window.parent.location;
@@ -115,7 +105,6 @@ async def index(req: Request):
                         } catch(e) { /* cross-origin */ }
                     }
 
-                    // 3. Referrer URL (Domino sets this on the outer page)
                     if (!pid && document.referrer) {
                         try {
                             pid = new URL(document.referrer).searchParams.get('projectId');
@@ -123,14 +112,12 @@ async def index(req: Request):
                     }
 
                     if (pid) {
-                        // Reload with projectId in the query string
                         var url = new URL(window.location.href);
                         url.searchParams.set('projectId', pid);
                         window.location.replace(url.toString());
                         return;
                     }
 
-                    // 4. Listen for postMessage from Domino parent frame
                     var allowedOrigin = window.location.origin;
                     window.addEventListener('message', function(e) {
                         if (e.origin !== allowedOrigin) return;
@@ -141,7 +128,6 @@ async def index(req: Request):
                         }
                     });
 
-                    // Show error after a short wait if nothing found
                     setTimeout(function() {
                         var el = document.getElementById('project-id-error');
                         if (el) el.style.display = '';
@@ -158,8 +144,7 @@ async def index(req: Request):
             Div(
                 Div(
                     Div(
-                        Span("Resolving project...",
-                             cls="bootstrap-status-text"),
+                        Span("Resolving project...", cls="bootstrap-status-text"),
                     ),
                     cls="bootstrap-status-wrap",
                 ),
@@ -193,8 +178,6 @@ async def index(req: Request):
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
 
-
-    default_spec = _get_default_spec_path()
     try:
         from autodoc.core.config import Settings as _StudioSettings
         _ss = _StudioSettings()
@@ -899,15 +882,6 @@ async def index(req: Request):
                 data_app_rel="run",
                 enctype="multipart/form-data",
             ),
-            Div(
-                P(
-                    get_deploy_version_label(),
-                    cls="header-version-text",
-                ),
-                A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
-                  cls="header-logs-link"),
-                cls="studio-footer-meta",
-            ),
             cls="page",
         ),
     )
@@ -920,15 +894,6 @@ async def index(req: Request):
 register_api_routes(rt)
 register_spec_routes(rt)
 register_job_routes(rt)
-
-
-@rt("/logs")
-def logs():
-    """Plain-text dump of the in-process log ring buffer for troubleshooting."""
-    from starlette.responses import PlainTextResponse
-    lines = log_buffer.snapshot()
-    body = "\n".join(lines) if lines else "(no log records buffered yet)"
-    return PlainTextResponse(body)
 
 
 # ---------------------------------------------------------------------------

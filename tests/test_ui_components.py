@@ -341,13 +341,6 @@ class TestStudioPageInsightBanner:
         assert "studio-page-insight" in src
         assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
 
-    def test_version_and_logs_footer_after_main_form_not_in_header(self):
-        root = Path(__file__).resolve().parent.parent
-        src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        assert "studio-footer-meta" in src
-        assert 'cls="header-meta"' not in src
-        assert src.index('id="main-form"') < src.index("studio-footer-meta")
-
 
 class TestInfoTooltipLayer:
     def test_floating_tooltip_layer_escapes_overflow(self):
