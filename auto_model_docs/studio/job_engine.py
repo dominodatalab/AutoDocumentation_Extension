@@ -22,7 +22,6 @@ from default_consts import (
     DEFAULT_LLM_MAX_RETRIES,
     DEFAULT_MAX_FILES,
     DEFAULT_PLANNING_WORKERS,
-    DEFAULT_PROVIDER,
     DEFAULT_TIMEOUT,
 )
 
@@ -99,7 +98,9 @@ async def _parse_request(req: Request) -> JobRequest:
     if not project_id:
         raise RuntimeError("No target project ID available. The app requires ?projectId= on the request URL.")
 
-    _prov = (_form_str(body, "provider") or DEFAULT_PROVIDER).strip().lower()
+    _prov = _form_str(body, "provider").strip().lower()
+    if not _prov:
+        raise RuntimeError("provider is required in the JSON body")
     _lang_raw = (_form_str(body, "language") or DEFAULT_LANGUAGE).strip().lower()
     _language = _lang_raw if _lang_raw in ALLOWED_LANGUAGES else DEFAULT_LANGUAGE
 

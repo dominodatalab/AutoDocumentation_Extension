@@ -115,7 +115,8 @@ def register_api_routes(rt):
     async def api_datasets(req: Request):
         """List writable datasets for the project.
 
-        Each dataset includes datasetPath from the detail API.
+        Each item includes datasetPath from Domino's datasets-v2 list response
+        (see domino_datasets.list_datasets; includeStorageInfo on that API).
         """
         pid = _resolve_request_project_id(req)
         require_project_write(pid)

@@ -377,6 +377,7 @@ class TestSpecFileBrowserUi:
         assert 'id="spec-file-list"' in web
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
+        assert "runJobJsonPayloadFromMainForm" in scripts
         assert 'Summary("Advanced settings"' in web
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web

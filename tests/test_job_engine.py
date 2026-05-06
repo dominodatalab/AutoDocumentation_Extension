@@ -256,15 +256,15 @@ async def test_parse_request_verbose_checkbox():
 
 
 @pytest.mark.asyncio
-async def test_parse_request_provider_defaults_to_openai_when_missing():
+async def test_parse_request_raises_when_provider_missing():
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
     req.json = AsyncMock(return_value={})
-    jr = await je._parse_request(req)
-    assert jr.provider == "openai"
+    with pytest.raises(RuntimeError, match="provider is required"):
+        await je._parse_request(req)
 
 
 @pytest.mark.asyncio

@@ -850,6 +850,44 @@ MAIN_DOM_JS = r"""
         // Poll job history every 10 seconds
         setInterval(fetchJobHistory, 10000);
 
+        function runJobJsonPayloadFromMainForm(resolvedSpecPath) {
+            function val(id) {
+                var el = document.getElementById(id);
+                return el ? String(el.value || '').trim() : '';
+            }
+            function chk(id) {
+                var el = document.getElementById(id);
+                return !!(el && el.checked);
+            }
+            return {
+                spec_path: resolvedSpecPath,
+                dataset_path: (_specCurrentDatasetPath || '').trim(),
+                provider: val('field-provider'),
+                model: val('field-model'),
+                code_root: val('field-code_root'),
+                max_files: val('field-max_files'),
+                workers: val('field-workers'),
+                planning_workers: val('field-planning_workers'),
+                timeout: val('field-timeout'),
+                notebook: chk('field-notebook'),
+                notebook_path: val('field-notebook_path'),
+                filtered_experiment_names: val('field-filtered_experiment_names'),
+                filtered_model_names: val('field-filtered_model_names'),
+                latest_only: chk('field-latest_only'),
+                verbose: chk('field-verbose'),
+                branch: val('field-branch'),
+                hardware_tier: val('field-hardware_tier'),
+                environment_id: val('field-environment_id'),
+                environment_revision_id: val('field-environment_revision_id'),
+                provider_base_url: val('field-provider_base_url'),
+                language: val('field-language'),
+                max_retries: val('field-max_retries'),
+                initial_backoff: val('field-initial_backoff'),
+                max_backoff: val('field-max_backoff'),
+                backoff_jitter: val('field-backoff_jitter'),
+                notebook_from_cache: chk('field-notebook_from_cache'),
+            };
+        }
 
         // ── Form submission ───────────────────────────────────────────
         var mainForm = document.getElementById('main-form');
@@ -858,9 +896,7 @@ MAIN_DOM_JS = r"""
                 e.preventDefault();
 
                 var specPath = document.getElementById('field-spec_path');
-                var specUpload = document.getElementById('spec-machine-upload');
-                var hasSpec = (specPath && specPath.value.trim()) ||
-                              (specUpload && specUpload.files && specUpload.files.length > 0);
+                var hasSpec = specPath && specPath.value.trim();
                 if (!hasSpec) {
                     var msg = 'Please select or upload a spec file before generating documentation.';
                     var existing = document.getElementById('spec-validation-msg');
@@ -882,10 +918,6 @@ MAIN_DOM_JS = r"""
                 if (existingMsg) existingMsg.remove();
 
                 var pid = resolvedProjectId();
-                var fd = new FormData(mainForm);
-                var payload = {};
-                fd.forEach(function(v, k) { payload[k] = v; });
-                if (pid) payload['projectId'] = pid;
                 var rawSpec = (specPath && specPath.value || '').trim();
                 var resolvedSpec = rawSpec;
                 if (rawSpec.indexOf('dataset://') === 0 && _specCurrentDatasetPath) {
@@ -895,8 +927,7 @@ MAIN_DOM_JS = r"""
                     var base = _specCurrentDatasetPath.replace(/\/+$/, '');
                     resolvedSpec = rel ? (base + '/' + rel) : base;
                 }
-                payload['spec_path'] = resolvedSpec;
-                payload['dataset_path'] = (_specCurrentDatasetPath || '').trim();
+                var jsonPayload = runJobJsonPayloadFromMainForm(resolvedSpec);
 
                 var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
                 var submitBtn = mainForm.querySelector('[type=submit]');
@@ -905,7 +936,7 @@ MAIN_DOM_JS = r"""
                 fetch(_adUrl('run') + qs, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify(jsonPayload),
                 })
                     .then(_checkResp)
                     .then(function() { fetchJobHistory(); })
