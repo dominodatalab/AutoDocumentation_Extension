@@ -110,6 +110,7 @@ class JobRequest:
     provider: str
     model: str
     code_root: str
+    dataset_path: str
     max_files: int
     workers: int
     planning_workers: int

@@ -28,17 +28,14 @@ from default_consts import (
 
 from .state import (
     JobRequest,
-    DominoJobRecord,
     _max_jobs,
     domino_client,
     domino_job_store,
-    domino_datasets,
     logger,
 )
 from .ui_components import (
     _sanitize_optional_int,
     _sanitize_optional_float,
-    _db_record_to_dataclass,
 )
 
 
@@ -111,6 +108,7 @@ async def _parse_request(req: Request) -> JobRequest:
         provider=_prov,
         model=_form_str(body, "model"),
         code_root=_form_str(body, "code_root"),
+        dataset_path=_form_str(body, "dataset_path"),
         max_files=_form_int(body, "max_files", DEFAULT_MAX_FILES),
         workers=_form_int(body, "workers", DEFAULT_GENERATION_WORKERS),
         planning_workers=_form_int(body, "planning_workers", DEFAULT_PLANNING_WORKERS),
@@ -205,21 +203,6 @@ def _build_job_command_str(req: JobRequest, spec_path: str, dataset_path: str = 
     return " ".join(shlex.quote(p) for p in parts)
 
 
-def _resolve_spec_field_to_cli_path(raw_from_field: str, dataset_path: str) -> str:
-    raw = (raw_from_field or "").strip()
-    if not raw:
-        return ""
-    if raw.startswith("dataset://"):
-        parts = raw[len("dataset://"):].split("/", 1)
-        dataset_name = parts[0]
-        file_path = parts[1] if len(parts) > 1 else ""
-        if (dataset_path or "").strip():
-            return f"{dataset_path}/{file_path}"
-        mount_prefix = domino_datasets.get_dataset_mount_prefix()
-        return f"{mount_prefix}/{dataset_name}/{file_path}"
-    return raw
-
-
 # ---------------------------------------------------------------------------
 # Domino job submission
 # ---------------------------------------------------------------------------
@@ -245,22 +228,9 @@ def launch_domino_job_run(
     return run_id, job_url
 
 
-async def _submit_domino_job(
-    req: JobRequest, owner_id: str, dataset_id: str, snapshot_id: str,
-) -> DominoJobRecord:
-    spec_path = ""
-    dataset_path = ""
-
-    if dataset_id:
-        try:
-            detail = domino_datasets.get_dataset_detail(dataset_id)
-            dataset_path = detail.get("datasetPath", "")
-        except Exception:
-            pass
-
-    field_raw = (req.spec_path or "").strip()
-    if field_raw:
-        spec_path = _resolve_spec_field_to_cli_path(field_raw, dataset_path)
+async def _submit_domino_job(req: JobRequest) -> None:
+    spec_path = (req.spec_path or "").strip()
+    dataset_path = (req.dataset_path or "").strip()
 
     if not spec_path:
         raise ValueError(
@@ -269,37 +239,10 @@ async def _submit_domino_job(
 
     _validate_job_inputs(req, dataset_path, spec_path)
 
-    if req.spec_path and req.spec_path.startswith("dataset://") and snapshot_id:
-        ds_relative = req.spec_path[len("dataset://"):].split("/", 1)
-        if len(ds_relative) > 1:
-            from dataset_manager import DatasetManager
-            if not DatasetManager.file_exists(snapshot_id, ds_relative[1]):
-                raise ValueError(
-                    "The selected spec file no longer exists in the dataset. "
-                    "It may have been deleted. Please select or upload a spec file and try again."
-                )
-
     command_str = _build_job_command_str(req, spec_path, dataset_path)
 
-    job_id = domino_job_store.create_job(
-        dataset_id, snapshot_id,
-        owner_id=owner_id,
-        branch=req.branch,
-        tier=req.hardware_tier,
-        spec_path=spec_path,
-        environment_id=_domino_id_str(req.environment_id),
-        environment_revision_id=_domino_id_str(req.environment_revision_id),
-        command=command_str,
-        project_id=req.project_id,
-    )
-
-    active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
-    if active > _max_jobs():
-        row = domino_job_store.get_job(dataset_id, snapshot_id, job_id)
-        return _db_record_to_dataclass(row)
-
     try:
-        run_id, job_url = launch_domino_job_run(
+        launch_domino_job_run(
             command_str,
             branch=req.branch or None,
             tier_id=_domino_id_str(req.hardware_tier),
@@ -307,33 +250,20 @@ async def _submit_domino_job(
             environment_id=_domino_id_str(req.environment_id),
             environment_revision_id=_domino_id_str(req.environment_revision_id),
         )
-        domino_job_store.update_job(
-            dataset_id, snapshot_id, job_id,
-            status="submitted",
-            domino_run_id=run_id,
-            job_url=job_url,
-        )
     except Exception as exc:
-        domino_job_store.update_job(
-            dataset_id, snapshot_id, job_id,
-            status="failed",
-            domino_status=str(exc),
-        )
         logger.error("Domino job submission failed: %s", exc, exc_info=True)
-
-    row = domino_job_store.get_job(dataset_id, snapshot_id, job_id)
-    return _db_record_to_dataclass(row)
+        raise
 
 
 # ---------------------------------------------------------------------------
 # Request-driven job sync
 # ---------------------------------------------------------------------------
 
-def _refresh_active_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
+def _refresh_active_jobs_for(owner_id: str) -> None:
     from datetime import datetime, timezone
 
     active_jobs = [
-        j for j in domino_job_store.get_active_jobs(dataset_id, snapshot_id)
+        j for j in domino_job_store.get_active_jobs("", "")
         if j.get("owner_id") == owner_id
     ]
     for row in active_jobs:
@@ -352,16 +282,16 @@ def _refresh_active_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -
             if mapped in ("succeeded", "failed", "cancelled"):
                 updates["completed_at"] = datetime.now(tz=timezone.utc).isoformat()
             if updates:
-                domino_job_store.update_job(dataset_id, snapshot_id, row["id"], **updates)
+                domino_job_store.update_job("", "", row["id"], **updates)
         except Exception as exc:
             logger.warning("Status sync failed for run %s: %s", run_id, exc)
 
 
-def _promote_queued_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
-    active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
+def _promote_queued_jobs_for(owner_id: str) -> None:
+    active = domino_job_store.count_active_jobs("", "", owner_id)
     if active > _max_jobs():
         return
-    oldest = domino_job_store.get_oldest_queued_job(dataset_id, snapshot_id, owner_id)
+    oldest = domino_job_store.get_oldest_queued_job("", "", owner_id)
     if not oldest or oldest.get("domino_run_id"):
         return
     try:
@@ -378,7 +308,7 @@ def _promote_queued_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -
             run_id, project_id=_domino_id_str(oldest.get("project_id")),
         )
         domino_job_store.update_job(
-            dataset_id, snapshot_id, oldest["id"],
+            "", "", oldest["id"],
             status="submitted",
             domino_run_id=run_id,
             job_url=job_url,
@@ -387,9 +317,9 @@ def _promote_queued_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -
         logger.warning("Failed to promote queued job %s: %s", oldest["id"], exc)
 
 
-def sync_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
+def sync_jobs_for(owner_id: str) -> None:
     try:
-        _refresh_active_jobs_for(owner_id, dataset_id, snapshot_id)
-        _promote_queued_jobs_for(owner_id, dataset_id, snapshot_id)
+        _refresh_active_jobs_for(owner_id)
+        _promote_queued_jobs_for(owner_id)
     except Exception as exc:
         logger.warning("sync_jobs_for(%s) failed: %s", owner_id, exc)

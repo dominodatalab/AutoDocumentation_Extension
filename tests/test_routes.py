@@ -33,6 +33,7 @@ class _MockJobRequest:
     model: str = ""
     api_key: Optional[str] = None
     code_root: str = ""
+    dataset_path: str = ""
     max_files: int = 50
     workers: int = 4
     planning_workers: int = 4
@@ -501,9 +502,19 @@ class TestJobRoutes:
         req = _make_request()
         result = await routes["/run"](req)
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_called_once()
-        body = json.loads(result.body)
-        assert body["ok"] is True
-        assert "jobs" in body
+        assert result.status_code == 204
+        assert not result.body
+
+    @pytest.mark.asyncio
+    async def test_run_validation_error_returns_400(self, _mock_studio_modules):
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["job_engine"]._submit_domino_job.side_effect = ValueError("bad input")
+        req = _make_request()
+        result = await routes["/run"](req)
+        assert result.status_code == 400
+        assert not result.body
+        _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_run_handles_submission_error(self, _mock_studio_modules):
@@ -515,10 +526,10 @@ class TestJobRoutes:
         store.get_user_jobs.return_value = []
         req = _make_request()
         result = await routes["/run"](req)
-        store.update_job.assert_called()
-        body = json.loads(result.body)
-        assert body["ok"] is False
-        assert "fail" in body["error"]
+        store.create_job.assert_not_called()
+        store.update_job.assert_not_called()
+        assert result.status_code == 500
+        assert not result.body
 
     @pytest.mark.asyncio
     async def test_job_history(self, _mock_studio_modules):
@@ -540,7 +551,7 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/cancel-queued-jobs"](req)
-        _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("ds-test", "snap-test", "test_user")
+        _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with("", "", "test_user")
         body = json.loads(result.body)
         assert body["ok"] is True
 
@@ -575,8 +586,8 @@ class TestJobRoutes:
         result = await routes["/run"](req)
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
         _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
-        body = json.loads(result.body)
-        assert body["ok"] is False
+        assert result.status_code == 401
+        assert not result.body
 
 
 # ===========================================================================

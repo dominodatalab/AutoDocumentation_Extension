@@ -171,6 +171,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         api_key: Optional[str] = None
         base_url: Optional[str] = None
         code_root: str = ""
+        dataset_path: str = ""
         max_files: int = 50
         workers: int = 4
         planning_workers: int = 4
@@ -521,28 +522,29 @@ class TestJobRoutesIntegration:
         resp = client.get("/job-history")
         assert resp.status_code == 200
 
-    def test_submit_job_creates_record(self, client, integration_env):
-        """Submit via HTTP, verify record appears in job index."""
+    def test_submit_job_calls_domino(self, client, integration_env):
+        """POST /run submits to Domino and does not write the in-process job store."""
         store = integration_env["store"]
+        mock_client = integration_env["domino_client"]
 
         resp = client.post(
             "/run?projectId=proj-integration",
             json={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
+                "dataset_path": "/domino/datasets/local/autodoc",
                 "provider": "anthropic",
+                "code_root": "/mnt/code",
             },
         )
-        assert resp.status_code == 200
-
-        jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
-        assert len(jobs) >= 1
-        assert jobs[0]["owner_id"] == "integration_user"
+        assert resp.status_code == 204
+        mock_client.submit_job.assert_called()
+        assert store.get_user_jobs("", "", "integration_user") == []
 
     def test_cancel_queued_jobs(self, client, integration_env):
         """Cancel via HTTP, verify status change in job index."""
         store = integration_env["store"]
         job_id = store.create_job(
-            "ds-integration", "snap-integration",
+            "", "",
             "integration_user", "main", "small", "/spec.yaml",
             "", "",
             project_id="proj-integration",
@@ -551,22 +553,22 @@ class TestJobRoutesIntegration:
         resp = client.post("/cancel-queued-jobs")
         assert resp.status_code == 200
 
-        job = store.get_job("ds-integration", "snap-integration", job_id)
+        job = store.get_job("", "", job_id)
         assert job["status"] == "cancelled"
 
-    def test_job_history_returns_submitted_jobs(self, client, integration_env):
-        """Jobs created via /run appear in /job-history."""
-        client.post(
-            "/run?projectId=proj-integration",
-            json={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
-                "provider": "anthropic",
-            },
+    def test_job_history_lists_store_only(self, client, integration_env):
+        """Job history reads the in-process store; /run does not populate it."""
+        store = integration_env["store"]
+        store.create_job(
+            "", "",
+            "integration_user", "main", "small", "/spec.yaml",
+            "", "",
+            project_id="proj-integration",
         )
-
         resp = client.get("/job-history")
         assert resp.status_code == 200
-        assert len(resp.text) > 50  # not empty
+        body = resp.json()
+        assert len(body.get("jobs", [])) >= 1
 
 
 # ===========================================================================
@@ -586,8 +588,10 @@ class TestAuthorizationIntegration:
         resp = client.post(
             "/run?projectId=proj-integration",
             json={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
+                "dataset_path": "/domino/datasets/local/autodoc",
                 "provider": "anthropic",
+                "code_root": "/mnt/code",
             },
         )
         assert resp.status_code == 403
@@ -643,24 +647,15 @@ class TestAuthMiddlewareIntegration:
 
 class TestCrossCuttingIntegration:
 
-    def test_max_jobs_enforced(self, client, integration_env):
-        """Jobs beyond the limit should be queued, not submitted."""
-        store = integration_env["store"]
-
-        # Create 2 active jobs (AUTODOC_MAX_JOBS=2)
-        for i in range(2):
-            jid = store.create_job(
-                "ds-integration", "snap-integration",
-                "integration_user", "main", "small", "/spec.yaml",
-                "", "",
-                project_id="proj-integration",
-            )
-            store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
-
-        client.post(
+    def test_run_always_submits_to_domino(self, client, integration_env):
+        """POST /run always calls Domino submit; no local queue on the /run path."""
+        mock_client = integration_env["domino_client"]
+        before = mock_client.submit_job.call_count
+        resp = client.post(
             "/run?projectId=proj-integration",
             json={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
+                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
+                "dataset_path": "/domino/datasets/local/autodoc",
                 "provider": "anthropic",
                 "code_root": "/mnt/code",
                 "max_files": 50,
@@ -674,16 +669,14 @@ class TestCrossCuttingIntegration:
                 "verbose": True,
             },
         )
-
-        jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
-        newest = jobs[0]
-        assert newest["status"] == "queued"
+        assert resp.status_code == 204
+        assert mock_client.submit_job.call_count == before + 1
 
     def test_cancel_then_history_reflects_change(self, client, integration_env):
         """Cancel a job, then verify history endpoint shows updated status."""
         store = integration_env["store"]
         job_id = store.create_job(
-            "ds-integration", "snap-integration",
+            "", "",
             "integration_user", "main", "small", "/spec.yaml",
             "", "",
             project_id="proj-integration",

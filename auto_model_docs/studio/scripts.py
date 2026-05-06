@@ -275,8 +275,6 @@ MAIN_DOM_JS = r"""
             var parts = [];
             var pid = resolvedProjectId();
             if (pid) parts.push('projectId=' + encodeURIComponent(pid));
-            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
-            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
             return parts.length ? ('?' + parts.join('&')) : '';
         }
 
@@ -888,9 +886,17 @@ MAIN_DOM_JS = r"""
                 var payload = {};
                 fd.forEach(function(v, k) { payload[k] = v; });
                 if (pid) payload['projectId'] = pid;
-                if (_specCurrentDatasetId) payload['datasetId'] = _specCurrentDatasetId;
-                if (_specCurrentSnapshotId) payload['snapshotId'] = _specCurrentSnapshotId;
-                if (_specCurrentDatasetPath) payload['datasetPath'] = _specCurrentDatasetPath;
+                var rawSpec = (specPath && specPath.value || '').trim();
+                var resolvedSpec = rawSpec;
+                if (rawSpec.indexOf('dataset://') === 0 && _specCurrentDatasetPath) {
+                    var rest = rawSpec.slice('dataset://'.length);
+                    var si = rest.indexOf('/');
+                    var rel = si >= 0 ? rest.slice(si + 1) : '';
+                    var base = _specCurrentDatasetPath.replace(/\/+$/, '');
+                    resolvedSpec = rel ? (base + '/' + rel) : base;
+                }
+                payload['spec_path'] = resolvedSpec;
+                payload['dataset_path'] = (_specCurrentDatasetPath || '').trim();
 
                 var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
                 var submitBtn = mainForm.querySelector('[type=submit]');
@@ -901,8 +907,8 @@ MAIN_DOM_JS = r"""
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(data) { renderJobHistory(data.jobs || []); })
+                    .then(_checkResp)
+                    .then(function() { fetchJobHistory(); })
                     .catch(function() {})
                     .finally(function() { if (submitBtn) submitBtn.disabled = false; });
             });
