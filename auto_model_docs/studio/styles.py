@@ -107,7 +107,7 @@ a:hover { color: var(--primary-container); }
 .domino-header {
     background: #2e2e38;
     width: 100%;
-    height: 88px;
+    height: 44px;
     padding: 0 1.5rem;
     display: flex;
     align-items: center;
@@ -124,7 +124,7 @@ a:hover { color: var(--primary-container); }
     gap: 0.75rem;
 }
 .domino-header-inner svg {
-    height: 56px;
+    height: 32px;
     width: auto;
     display: block;
     flex-shrink: 0;
