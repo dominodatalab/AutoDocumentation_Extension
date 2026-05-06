@@ -151,7 +151,6 @@ async def index(req: Request):
             Div(
                 Div(
                     NotStr(_LOGO_SVG),
-                    H1("Auto Model Docs Studio", cls="domino-header-title"),
                     cls="domino-header-inner",
                 ),
                 cls="domino-header",
@@ -862,7 +861,6 @@ async def index(req: Request):
         Div(
             Div(
                 NotStr(_LOGO_SVG),
-                H1("Auto Model Docs Studio", cls="domino-header-title"),
                 cls="domino-header-inner",
             ),
             cls="domino-header",

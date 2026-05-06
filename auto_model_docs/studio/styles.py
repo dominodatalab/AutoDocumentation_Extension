@@ -129,15 +129,6 @@ a:hover { color: var(--primary-container); }
     display: block;
     flex-shrink: 0;
 }
-.domino-header-inner::after {
-    content: '';
-    display: block;
-    width: 1px;
-    height: 18px;
-    background: rgba(255, 255, 255, 0.2);
-    flex-shrink: 0;
-    order: 1;
-}
 .domino-header-title {
     color: #ffffff;
     font-family: var(--font-headline);
@@ -145,7 +136,6 @@ a:hover { color: var(--primary-container); }
     font-weight: 600;
     letter-spacing: -0.01em;
     margin: 0;
-    order: 2;
 }
 .domino-header-subtitle {
     font-family: var(--font-body);
