@@ -126,3 +126,16 @@ tests/fixtures/llm_responses/*.json
 
 # Scratch files
 scratch/
+
+# Domino apps guidelines (moved from domino-apps-guidelines/)
+.cursor/
+domino-logo.svg
+example_domino_frontend_code/
+governance_swagger.json
+prototype_modules/
+swagger.json
+DOMINO_APPS_README.md
+domino-apps-guidelines/
+
+# FastHTML session key (generated at runtime)
+auto_model_docs/.sesskey
