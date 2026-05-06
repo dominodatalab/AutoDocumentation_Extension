@@ -73,7 +73,7 @@ html, body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    background: #ffffff;
+    background: var(--surface);
     color: var(--on-surface);
     font-family: var(--font-body);
     font-size: 14px;
