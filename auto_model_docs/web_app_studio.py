@@ -8,6 +8,7 @@ assembles the application.
 from __future__ import annotations
 
 import os
+import pathlib
 from typing import Optional
 
 from fasthtml.common import *
@@ -16,6 +17,9 @@ from starlette.requests import Request
 from domino_auth import configure_auth, user_auth
 
 configure_auth(user_auth)
+
+# Inline SVG logo — white paths, designed for dark backgrounds
+_LOGO_SVG = (pathlib.Path(__file__).parent.parent / "domino-logo.svg").read_text()
 
 from default_consts import (
     DEFAULT_GENERATION_WORKERS,
@@ -146,6 +150,7 @@ async def index(req: Request):
             """),
             Div(
                 Div(
+                    NotStr(_LOGO_SVG),
                     H1("Auto Model Docs Studio", cls="domino-header-title"),
                     cls="domino-header-inner",
                 ),
@@ -856,6 +861,7 @@ async def index(req: Request):
         # Header
         Div(
             Div(
+                NotStr(_LOGO_SVG),
                 H1("Auto Model Docs Studio", cls="domino-header-title"),
                 cls="domino-header-inner",
             ),
