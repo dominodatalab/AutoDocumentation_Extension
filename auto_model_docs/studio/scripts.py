@@ -848,6 +848,25 @@ MAIN_DOM_JS = r"""
 
         // ── Mock data (append ?mockJobs=1 to URL to activate) ────────
         if (new URLSearchParams(window.location.search).get('mockJobs') === '1') {
+
+            // Mock datasets
+            var mockDatasets = [
+                { id: 'ds-001', name: 'fraud-detection-specs', rwSnapshotId: 'snap-001', datasetPath: '/domino/datasets/local/fraud-detection-specs' },
+                { id: 'ds-002', name: 'churn-model-docs',      rwSnapshotId: 'snap-002', datasetPath: '/domino/datasets/local/churn-model-docs' },
+                { id: 'ds-003', name: 'shared-templates',      rwSnapshotId: 'snap-003', datasetPath: '/domino/datasets/local/shared-templates' },
+            ];
+            var mockSelect = document.getElementById('field-spec_dataset');
+            if (mockSelect) {
+                var mockHtml = '<option value="">Select a dataset…</option>';
+                mockDatasets.forEach(function(d) {
+                    mockHtml += '<option value="' + d.id + '" data-name="' + d.name
+                        + '" data-snapshot="' + d.rwSnapshotId
+                        + '" data-path="' + d.datasetPath + '">' + d.name + '</option>';
+                });
+                mockSelect.innerHTML = mockHtml;
+            }
+
+            // Mock job history (all statuses)
             renderJobHistory([
                 {
                     status: 'running',
