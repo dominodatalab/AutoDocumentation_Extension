@@ -1,4 +1,4 @@
-"""Domino job submission, command building, and background polling."""
+"""Domino job submission and command building."""
 
 from __future__ import annotations
 
@@ -27,10 +27,8 @@ from default_consts import (
 
 from .state import (
     JobRequest,
-    _max_jobs,
     _resolve_request_project_id,
     domino_client,
-    domino_job_store,
     logger,
 )
 from .ui_components import (
@@ -254,73 +252,3 @@ async def _submit_domino_job(req: JobRequest) -> None:
     except Exception as exc:
         logger.error("Domino job submission failed: %s", exc, exc_info=True)
         raise
-
-
-# ---------------------------------------------------------------------------
-# Request-driven job sync
-# ---------------------------------------------------------------------------
-
-def _refresh_active_jobs_for(owner_id: str) -> None:
-    from datetime import datetime, timezone
-
-    active_jobs = [
-        j for j in domino_job_store.get_active_jobs("", "")
-        if j.get("owner_id") == owner_id
-    ]
-    for row in active_jobs:
-        run_id = row.get("domino_run_id")
-        if not run_id:
-            continue
-        try:
-            status_info = domino_client.get_job_status(run_id)
-            domino_status = status_info.get("domino_status", "")
-            mapped = status_info.get("local_status", "submitted")
-            updates: dict[str, Any] = {}
-            if domino_status != row.get("domino_status"):
-                updates["domino_status"] = domino_status
-            if mapped != row.get("status"):
-                updates["status"] = mapped
-            if mapped in ("succeeded", "failed", "cancelled"):
-                updates["completed_at"] = datetime.now(tz=timezone.utc).isoformat()
-            if updates:
-                domino_job_store.update_job("", "", row["id"], **updates)
-        except Exception as exc:
-            logger.warning("Status sync failed for run %s: %s", run_id, exc)
-
-
-def _promote_queued_jobs_for(owner_id: str) -> None:
-    active = domino_job_store.count_active_jobs("", "", owner_id)
-    if active > _max_jobs():
-        return
-    oldest = domino_job_store.get_oldest_queued_job("", "", owner_id)
-    if not oldest or oldest.get("domino_run_id"):
-        return
-    try:
-        cmd = oldest.get("command", "")
-        run_id = domino_client.submit_job(
-            cmd,
-            branch=oldest.get("branch"),
-            tier_id=_domino_id_str(oldest.get("hardware_tier")),
-            project_id=_domino_id_str(oldest.get("project_id")),
-            environment_id=_domino_id_str(oldest.get("environment_id")),
-            environment_revision_id=_domino_id_str(oldest.get("environment_revision_id")),
-        )
-        job_url = domino_client.build_job_url(
-            run_id, project_id=_domino_id_str(oldest.get("project_id")),
-        )
-        domino_job_store.update_job(
-            "", "", oldest["id"],
-            status="submitted",
-            domino_run_id=run_id,
-            job_url=job_url,
-        )
-    except Exception as exc:
-        logger.warning("Failed to promote queued job %s: %s", oldest["id"], exc)
-
-
-def sync_jobs_for(owner_id: str) -> None:
-    try:
-        _refresh_active_jobs_for(owner_id)
-        _promote_queued_jobs_for(owner_id)
-    except Exception as exc:
-        logger.warning("sync_jobs_for(%s) failed: %s", owner_id, exc)

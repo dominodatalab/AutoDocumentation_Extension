@@ -519,11 +519,12 @@ class TestSpecRoutesIntegration:
 class TestJobRoutesIntegration:
 
     def test_job_history_empty(self, client):
-        resp = client.get("/job-history")
+        resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
+        assert resp.json().get("jobs") == []
 
     def test_submit_job_calls_domino(self, client, integration_env):
-        """POST /run submits to Domino and does not write the in-process job store."""
+        """POST /run submits to Domino; there is no local job store."""
         store = integration_env["store"]
         mock_client = integration_env["domino_client"]
 
@@ -540,35 +541,12 @@ class TestJobRoutesIntegration:
         mock_client.submit_job.assert_called()
         assert store.get_user_jobs("", "", "integration_user") == []
 
-    def test_cancel_queued_jobs(self, client, integration_env):
-        """Cancel via HTTP, verify status change in job index."""
-        store = integration_env["store"]
-        job_id = store.create_job(
-            "", "",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-
-        resp = client.post("/cancel-queued-jobs")
-        assert resp.status_code == 200
-
-        job = store.get_job("", "", job_id)
-        assert job["status"] == "cancelled"
-
-    def test_job_history_lists_store_only(self, client, integration_env):
-        """Job history reads the in-process store; /run does not populate it."""
-        store = integration_env["store"]
-        store.create_job(
-            "", "",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-        resp = client.get("/job-history")
+    def test_cancel_queued_jobs(self, client):
+        resp = client.post("/cancel-queued-jobs?projectId=proj-integration")
         assert resp.status_code == 200
         body = resp.json()
-        assert len(body.get("jobs", [])) >= 1
+        assert body.get("ok") is True
+        assert body.get("jobs") == []
 
 
 # ===========================================================================
@@ -672,20 +650,8 @@ class TestCrossCuttingIntegration:
         assert resp.status_code == 204
         assert mock_client.submit_job.call_count == before + 1
 
-    def test_cancel_then_history_reflects_change(self, client, integration_env):
-        """Cancel a job, then verify history endpoint shows updated status."""
-        store = integration_env["store"]
-        job_id = store.create_job(
-            "", "",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-
-        client.post("/cancel-queued-jobs")
-
-        # History should show cancelled
-        resp = client.get("/job-history")
+    def test_cancel_then_history_empty_without_storage(self, client):
+        client.post("/cancel-queued-jobs?projectId=proj-integration")
+        resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
-        body = resp.text.upper()
-        assert "CANCELLED" in body
+        assert resp.json().get("jobs") == []

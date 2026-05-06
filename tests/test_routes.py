@@ -157,7 +157,6 @@ def _mock_studio_modules(monkeypatch):
         spec_path="/spec.yaml", project_id="proj-123",
     ))
     mock_job_engine._submit_domino_job = AsyncMock()
-    mock_job_engine.sync_jobs_for = MagicMock()
 
     # fasthtml.common — provide real Response import + FT component stubs
     from starlette.responses import Response as StarletteResponse, FileResponse as StarletteFileResponse
@@ -563,7 +562,6 @@ class TestJobRoutes:
         routes = _register(mod, "register_job_routes")
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/job-history"](req)
-        _mock_studio_modules["job_engine"].sync_jobs_for.assert_not_called()
         body = json.loads(result.body)
         assert body["jobs"] == []
 

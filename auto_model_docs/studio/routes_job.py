@@ -20,7 +20,6 @@ from .state import (
 from .job_engine import (
     _parse_request,
     _submit_domino_job,
-    sync_jobs_for,
 )
 
 
@@ -78,7 +77,6 @@ def register_job_routes(rt):
         if not project_id:
             return _json({"jobs": []})
         require_domino_job_list(project_id)
-        sync_jobs_for(owner_id)
         return _json({"jobs": _jobs_payload(owner_id)})
 
     rt("/job-history")(job_history)
