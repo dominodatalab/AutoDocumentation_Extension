@@ -73,7 +73,7 @@ html, body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    background: #ffffff;
+    background: var(--surface);
     color: var(--on-surface);
     font-family: var(--font-body);
     font-size: 14px;
@@ -105,37 +105,41 @@ a:hover { color: var(--primary-container); }
 
 /* ── Header ───────────────────────────────────────────────────────── */
 .domino-header {
-    background: #ffffff;
+    background: #2e2e38;
     width: 100%;
-    padding: 2rem 2rem 0.5rem;
+    height: 44px;
+    padding: 0 1.5rem;
     display: flex;
-    justify-content: center;
     align-items: center;
     box-sizing: border-box;
+    flex-shrink: 0;
 }
 .domino-header-inner {
-    max-width: 1440px;
-    margin: 0 auto;
     width: 100%;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    text-align: center;
-    gap: 0.35rem;
+    gap: 0.75rem;
+}
+.domino-header-inner svg {
+    height: 32px;
+    width: auto;
+    display: block;
+    flex-shrink: 0;
 }
 .domino-header-title {
-    color: var(--on-surface);
+    color: #ffffff;
     font-family: var(--font-headline);
-    font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     margin: 0;
 }
 .domino-header-subtitle {
     font-family: var(--font-body);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--on-surface-variant);
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.5);
     margin: 0;
 }
 .domino-header-version {
@@ -150,15 +154,23 @@ a:hover { color: var(--primary-container); }
     border-radius: var(--radius-sm);
 }
 
+/* ── Page title (H1 inside content, below the nav bar) ───────────── */
+.page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--on-surface);
+    letter-spacing: -0.02em;
+    margin: 0 0 1.25rem 0;
+}
+
 /* ── Page Layout ──────────────────────────────────────────────────── */
 .page {
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 2rem 2rem 1.5rem;
+    padding: 2rem 1.5rem 1.5rem;
     width: 100%;
     min-height: calc(100vh - 100px);
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
 }
 .studio-footer-meta {
     margin-top: auto;
@@ -180,7 +192,7 @@ a:hover { color: var(--primary-container); }
 }
 .hero-tagline {
     font-family: var(--font-body);
-    font-size: 0.9375rem;
+    font-size: 14px;
     font-weight: 400;
     color: var(--on-surface-variant);
     margin: 0;
@@ -201,12 +213,12 @@ a:hover { color: var(--primary-container); }
 }
 .target-project-label-prefix {
     color: var(--on-surface);
-    font-size: 1.0625rem;
-    font-weight: 600;
+    font-size: inherit;
+    font-weight: inherit;
 }
 .target-project-display {
-    font-size: 1.25rem;
-    font-weight: 700;
+    font-size: inherit;
+    font-weight: inherit;
     color: var(--primary);
     letter-spacing: -0.01em;
 }
@@ -249,13 +261,12 @@ a:hover { color: var(--primary-container); }
 .studio-col-mid > .bp-card {
     flex: 1 1 auto;
     min-height: 0;
-}
-.studio-col-mid > .bp-card {
     display: flex;
     flex-direction: column;
 }
-.studio-col-mid > .bp-card > .card-footer {
-    margin-top: auto;
+.card-content-spacer {
+    flex: 1;
+    min-height: 2rem;
 }
 @media (max-width: 1200px) {
     .studio-grid {
@@ -275,25 +286,35 @@ a:hover { color: var(--primary-container); }
 .col-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
     margin-bottom: 0.875rem;
     padding: 0 0.125rem;
 }
 .col-header h2 {
     font-family: var(--font-headline);
-    font-size: 1.125rem;
+    font-size: 16px;
     font-weight: 700;
     color: var(--on-surface);
     letter-spacing: -0.01em;
 }
 .step-badge {
     font-family: var(--font-body);
-    font-size: 0.6875rem;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--muted);
-    order: -1;
+    flex-shrink: 0;
+}
+
+/* ── Card section headings (H3) ───────────────────────────────────── */
+.bp-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--on-surface);
+    margin: 0 0 0.625rem 0;
+    letter-spacing: -0.01em;
 }
 
 /* ── Cards (No-Line Rule: tonal layering, not borders) ───────────── */
@@ -423,9 +444,10 @@ input[type="file"] {
 }
 .field-hint-text {
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--outline);
     margin-top: 0.15rem;
+    margin-bottom: 0.5rem;
 }
 
 /* Code root combo */
@@ -515,7 +537,7 @@ input[type="file"] {
     padding: 0.5rem 0.75rem;
     background: var(--on-surface);
     color: var(--surface-container-lowest);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 400;
     white-space: normal;
     min-width: 200px;
@@ -553,33 +575,33 @@ input[type="file"] {
     min-width: 0;
 }
 .upload-btn {
-    background: #543fde;
-    border: none;
+    background: transparent;
+    border: 1px solid var(--primary);
     border-radius: var(--radius-sm);
-    padding: 0.625rem 1.25rem;
-    color: #ffffff;
+    padding: 0 16px;
+    height: 32px;
+    color: var(--primary);
     font-family: var(--font-body);
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    min-height: 36px;
     text-decoration: none;
     white-space: nowrap;
     box-sizing: border-box;
 }
 .upload-btn:hover {
-    background: #3b23d1;
-    color: #ffffff;
+    background: var(--primary-fixed);
+    color: var(--primary-active);
 }
 .hidden-upload {
     display: none !important;
 }
 .upload-filename {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--primary);
     margin-top: 0.25rem;
 }
@@ -610,7 +632,7 @@ input[type="file"] {
     margin-bottom: 0.5rem;
 }
 .drop-zone-text {
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 600;
     color: var(--on-surface);
 }
@@ -627,7 +649,7 @@ input[type="file"] {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.8125rem;
+    font-size: 12px;
     color: var(--outline);
     padding: 4px 0;
     flex-wrap: wrap;
@@ -669,7 +691,7 @@ input[type="file"] {
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    font-size: 0.8125rem;
+    font-size: 13px;
     cursor: pointer;
     transition: background 0.1s;
     min-height: var(--spec-file-row);
@@ -693,12 +715,21 @@ input[type="file"] {
 }
 .spec-file-icon { flex-shrink: 0; width: 18px; text-align: center; }
 .spec-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.spec-file-size { color: var(--outline); font-size: 0.75rem; flex-shrink: 0; }
+.spec-file-size { color: var(--outline); font-size: 12px; flex-shrink: 0; }
 .spec-file-empty {
     padding: 24px 12px;
     text-align: center;
     color: var(--on-surface);
-    font-size: 0.8125rem;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+}
+.spec-file-empty-icon {
+    font-size: 1.75rem;
+    color: var(--surface-dim);
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
 .spec-actions-row {
     display: flex;
@@ -708,7 +739,7 @@ input[type="file"] {
     flex-wrap: wrap;
 }
 .spec-upload-status {
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface);
 }
 .spec-validation-error {
@@ -717,14 +748,14 @@ input[type="file"] {
     border-radius: var(--radius-sm);
     padding: 0.5rem 0.75rem;
     margin-top: 0.375rem;
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface);
 }
 .spec-validation-error ul { color: var(--on-surface); }
 .spec-validation-error-list {
     margin: 0.25rem 0 0 0;
     padding-left: 1.25rem;
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 /* Spec info rows */
@@ -738,7 +769,7 @@ input[type="file"] {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 .spec-info-label {
     color: var(--outline);
@@ -773,7 +804,7 @@ input[type="file"] {
     gap: 0.625rem;
     margin-bottom: 1rem;
     cursor: pointer;
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 400;
     color: var(--on-surface);
     text-transform: none;
@@ -789,7 +820,7 @@ input[type="file"] {
 }
 .checkbox-field span {
     color: var(--on-surface);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 400;
 }
 .field-hint {
@@ -809,7 +840,7 @@ input[type="file"] {
 }
 .advanced-section summary {
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: normal;
@@ -840,7 +871,7 @@ input[type="file"] {
 }
 .advanced-summary-desc {
     font-weight: 400;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--outline);
     letter-spacing: normal;
     text-transform: none;
@@ -873,7 +904,7 @@ input[type="file"] {
 }
 .advanced-subsection-title {
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 15px;
     font-weight: 600;
     color: var(--on-surface);
     margin: 0 0 0.625rem 0;
@@ -886,6 +917,10 @@ input[type="file"] {
     margin-top: 1rem;
     padding-top: 0.35rem;
 }
+.advanced-grid + .field,
+.advanced-checkbox-row + .field {
+    margin-top: 1rem;
+}
 
 /* Filter section */
 .filter-section {
@@ -894,7 +929,7 @@ input[type="file"] {
 }
 .filter-section-title {
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: normal;
@@ -902,7 +937,7 @@ input[type="file"] {
     margin-bottom: 0.75rem;
 }
 .filter-section-desc {
-    font-size: 0.8rem;
+    font-size: 13px;
     color: var(--on-surface-variant);
     margin-bottom: 0.75rem;
     margin-top: -0.5rem;
@@ -926,7 +961,7 @@ input[type="file"] {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface);
     cursor: pointer;
 }
@@ -939,7 +974,7 @@ input[type="file"] {
     border-left: 3px solid var(--warning);
     border-radius: var(--radius-sm);
     padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
+    font-size: 13px;
     color: var(--on-surface);
     margin-top: 0.5rem;
     display: none;
@@ -950,7 +985,7 @@ input[type="file"] {
     margin-bottom: 0.5rem;
 }
 .domino-job-link {
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 600;
     color: var(--primary);
 }
@@ -958,12 +993,13 @@ input[type="file"] {
 /* ── Primary Button ───────────────────────────────────────────────── */
 button.primary {
     background: #543fde;
-    border: none;
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    padding: 0.625rem 1.25rem;
+    padding: 0 16px;
+    height: 32px;
     color: #ffffff;
     font-family: var(--font-body);
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.15s ease;
@@ -972,7 +1008,7 @@ button.primary {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    min-height: 36px;
+    box-sizing: border-box;
 }
 button.primary:hover {
     background: #3b23d1;
@@ -1004,7 +1040,7 @@ button.primary:disabled {
 }
 .terminal-header h3 {
     font-family: var(--font-headline);
-    font-size: 0.875rem;
+    font-size: 13px;
     font-weight: 700;
 }
 .terminal-actions {
@@ -1013,7 +1049,7 @@ button.primary:disabled {
 }
 .terminal-action {
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 500;
     color: #ffffff;
     text-decoration: none;
@@ -1165,7 +1201,7 @@ button.primary:disabled {
     border-radius: 0 0 12px 12px;
     padding: 1rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.65;
     color: #cbd5e1;
     min-height: 0;
@@ -1182,7 +1218,7 @@ button.primary:disabled {
     align-items: center;
     justify-content: center;
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
     border-radius: 12px;
 }
 .terminal-line-active {
@@ -1220,7 +1256,7 @@ button.primary:disabled {
     background: var(--success);
     color: white;
     border-radius: 2px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1267,12 +1303,22 @@ button.primary:disabled {
     padding: 1rem;
 }
 /* ── Job History ──────────────────────────────────────────────────── */
+#job-history-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+#job-history-content > .spec-file-empty {
+    flex: 1;
+    justify-content: center;
+}
 .job-history-section {
     margin-top: 1rem;
 }
 .job-history-section summary {
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: normal;
@@ -1304,11 +1350,6 @@ button.primary:disabled {
     border-radius: 0 0 var(--radius-sm) var(--radius-sm);
     padding: 1rem 1.25rem;
 }
-.history-empty {
-    color: var(--outline);
-    font-size: 0.8125rem;
-    margin: 0;
-}
 .spec-list-item-name {
     font-family: var(--font-body);
 }
@@ -1319,13 +1360,13 @@ button.primary:disabled {
 .history-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.75rem;
+    font-size: 13px;
     min-width: 420px;
 }
 .history-table th {
     text-align: left;
     font-family: var(--font-body);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1361,7 +1402,7 @@ button.primary:disabled {
 .history-status-failed { background: var(--error-container); color: var(--on-surface); }
 .history-status-cancelled { background: var(--warning-container); color: var(--warning); }
 .history-toggle {
-    font-size: 0.75rem;
+    font-size: 13px;
     font-weight: 500;
     color: var(--primary);
     cursor: pointer;
@@ -1392,10 +1433,18 @@ details[open] > .history-toggle::before {
 /* ── Card Footer (Generate button) ────────────────────────────────── */
 .card-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.75rem;
     padding-top: 1.25rem;
-    margin-top: 0.75rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
     border-top: 1px solid var(--outline-variant);
+}
+.studio-col-mid > .bp-card > .card-footer button.primary {
+    flex: 1;
 }
 
 .section-divider {
@@ -1435,30 +1484,29 @@ select.hw-tier-select {
     max-width: 100%;
 }
 select.hw-tier-select option {
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.35;
     padding: 0.25rem 0;
 }
 
 /* ── Insight card ─────────────────────────────────────────────────── */
 .insight-card {
-    background: var(--surface-container-lowest);
-    border-left: 3px solid var(--primary);
+    background: #ffffff;
     border: 1px solid var(--outline-variant);
     border-left: 3px solid var(--primary);
     border-radius: var(--radius-md);
     padding: 1rem 1.25rem;
     margin-top: 1rem;
 }
-.insight-card h4 {
+.insight-card h3 {
     font-family: var(--font-headline);
-    font-size: 0.8125rem;
+    font-size: 14px;
     font-weight: 700;
     color: var(--on-surface);
     margin-bottom: 0.25rem;
 }
 .insight-card p {
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.6;
     color: var(--on-surface-variant);
     margin: 0;
@@ -1466,7 +1514,7 @@ select.hw-tier-select option {
 
 .app-link {
     color: var(--primary);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 500;
 }
 
@@ -1477,7 +1525,7 @@ select.hw-tier-select option {
 .header-version-text {
     margin: 0;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 12px;
     font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
@@ -1486,7 +1534,7 @@ select.hw-tier-select option {
 
 .header-logs-link {
     color: var(--primary);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-decoration: none;
 }
@@ -1508,7 +1556,7 @@ select.hw-tier-select option {
 
 .bootstrap-status-text {
     color: var(--on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
 }
 
 .bootstrap-error-wrap {
@@ -1534,7 +1582,7 @@ select.hw-tier-select option {
 
 .spec-file-list-empty {
     color: var(--outline);
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .spec-selected-indicator {
@@ -1542,7 +1590,7 @@ select.hw-tier-select option {
     flex-direction: column;
     align-items: stretch;
     padding: 8px 0;
-    font-size: 0.8125rem;
+    font-size: 13px;
     gap: 6px;
 }
 
@@ -1558,7 +1606,7 @@ select.hw-tier-select option {
 .lang-detection-row {
     display: none;
     padding: 8px 0;
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface-variant);
     align-items: center;
     flex-wrap: wrap;
@@ -1650,7 +1698,7 @@ select.hw-tier-select option {
 .warning-banner-message {
     flex: 1;
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .warning-banner-close {
@@ -1667,7 +1715,7 @@ select.hw-tier-select option {
     border-radius: var(--radius-sm);
     padding: 0.625rem 1rem;
     margin-bottom: 0.75rem;
-    font-size: 0.8125rem;
+    font-size: 13px;
     color: var(--on-surface);
     line-height: 1.5;
     font-family: var(--font-body);
@@ -1681,7 +1729,7 @@ select.hw-tier-select option {
 .spec-validation-success {
     color: var(--success);
     font-weight: 500;
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .spec-validation-empty {
@@ -1690,7 +1738,7 @@ select.hw-tier-select option {
 
 .spec-validation-pending {
     color: var(--outline);
-    font-size: 0.8125rem;
+    font-size: 13px;
 }
 
 .spec-validation-msg {

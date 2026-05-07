@@ -8,6 +8,7 @@ assembles the application.
 from __future__ import annotations
 
 import os
+import pathlib
 from typing import Optional
 
 from fasthtml.common import *
@@ -16,6 +17,9 @@ from starlette.requests import Request
 from domino_auth import configure_auth, user_auth
 
 configure_auth(user_auth)
+
+# Inline SVG logo — white paths, designed for dark backgrounds
+_LOGO_SVG = (pathlib.Path(__file__).parent.parent / "domino-logo.svg").read_text()
 
 from default_consts import (
     DEFAULT_GENERATION_WORKERS,
@@ -85,7 +89,7 @@ async def index(req: Request):
     project_id = req.query_params.get("projectId") or None
     if not project_id:
         return (
-            Title("Auto Model Docs Studio"),
+            Title("Auto Model Docs Studio — Domino"),
             Style(STUDIO_CSS),
             Script(r"""
                 (function() {
@@ -146,8 +150,7 @@ async def index(req: Request):
             """),
             Div(
                 Div(
-                    H1("Auto Model Docs Studio", cls="domino-header-title"),
-                    P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
+                    NotStr(_LOGO_SVG),
                     cls="domino-header-inner",
                 ),
                 cls="domino-header",
@@ -281,7 +284,7 @@ async def index(req: Request):
     left_col_children = [
         Div(
             H2("Documentation specification"),
-            Span("Section 01", cls="step-badge"),
+            Span("Step 1", cls="step-badge"),
             cls="col-header",
         ),
     ]
@@ -292,7 +295,8 @@ async def index(req: Request):
     # Dataset browser + upload
     spec_card_children.append(
         Div(
-            Label("Spec file selection"),
+            H3("Spec file selection"),
+            P("To browse for spec files, select a dataset and a spec file in the navigator below.", cls="field-hint-text"),
             A(
                 "Download reference template",
                 href="api/download-template",
@@ -301,8 +305,8 @@ async def index(req: Request):
                 cls="app-link",
             ),
             Hr(cls="section-divider"),
-            Label("To browse for specfiles, select a dataset and a spec file in the navigator below", Span(" *", cls="required-star")),
             Div(
+                Label("Dataset", Span(" *", cls="required-star")),
                 Select(
                     Option("Loading datasets...", value="", disabled=True, selected=True),
                     id="spec-dataset-select",
@@ -311,7 +315,11 @@ async def index(req: Request):
             ),
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),           
             Div(
-                Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
+                Div(
+                    Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
+                    cls="spec-file-empty",
+                ),
                 id="spec-file-list",
                 cls="spec-file-list",
             ),
@@ -330,19 +338,46 @@ async def index(req: Request):
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
             ),
-            Div(
-                Label(
-                    "Upload spec",
-                    Input(
-                        type="file",
-                        accept=".yaml,.yml",
-                        id="spec-machine-upload",
-                        cls="hidden-upload",
+            Details(
+                Summary("Filters", cls="advanced-section-summary"),
+                Div(
+                    Div(
+                        Div(
+                            Label("Model names", for_="field-filtered_model_names"),
+                            Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
+                            cls="label-row",
+                        ),
+                        Input(
+                            name="filtered_model_names",
+                            id="field-filtered_model_names",
+                            type="text",
+                            placeholder="model1, churn*, fraud-*",
+                        ),
+                        cls="field",
                     ),
-                    cls="upload-btn",
+                    Div(
+                        Div(
+                            Label("Experiment names", for_="field-filtered_experiment_names"),
+                            Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
+                            cls="label-row",
+                        ),
+                        Input(
+                            name="filtered_experiment_names",
+                            id="field-filtered_experiment_names",
+                            type="text",
+                            placeholder="exp1, exp2, my-experiment*",
+                        ),
+                        cls="field",
+                    ),
+                    Label(
+                        Input(type="checkbox", name="latest_only", id="field-latest_only", checked=True),
+                        Span("Latest version only"),
+                        cls="checkbox-field",
+                    ),
+                    cls="advanced-content",
                 ),
-                Span(id="spec-upload-status", cls="spec-upload-status"),
-                cls="spec-actions-row",
+                cls="advanced-section",
+                open=False,
             ),
             cls="field",
         )
@@ -350,48 +385,22 @@ async def index(req: Request):
 
     spec_card_children.append(Div(id="spec-validation-result"))
 
-    # Filters section
+    spec_card_children.append(Div(cls="card-content-spacer"))
+
     spec_card_children.append(
-        Details(
-            Summary("Filters", cls="advanced-section-summary"),
-            Div(
-                Div(
-                    Div(
-                        Label("Model names", for_="field-filtered_model_names"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="filtered_model_names",
-                        id="field-filtered_model_names",
-                        type="text",
-                        placeholder="model1, churn*, fraud-*",
-                    ),
-                    cls="field",
+        Div(
+            Label(
+                "Upload spec",
+                Input(
+                    type="file",
+                    accept=".yaml,.yml",
+                    id="spec-machine-upload",
+                    cls="hidden-upload",
                 ),
-                Div(
-                    Div(
-                        Label("Experiment names", for_="field-filtered_experiment_names"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Comma-separated. Supports wildcards: * and ?"),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="filtered_experiment_names",
-                        id="field-filtered_experiment_names",
-                        type="text",
-                        placeholder="exp1, exp2, my-experiment*",
-                    ),
-                    cls="field",
-                ),
-                Label(
-                    Input(type="checkbox", name="latest_only", id="field-latest_only", checked=True),
-                    Span("Latest version only"),
-                    cls="checkbox-field",
-                ),
-                cls="advanced-content",
+                cls="upload-btn",
             ),
-            cls="advanced-section",
-            open=False,
+            Span(id="spec-upload-status", cls="spec-upload-status"),
+            cls="card-footer",
         )
     )
 
@@ -400,8 +409,8 @@ async def index(req: Request):
     # MIDDLE COLUMN: Configuration & Run
     mid_col_children = [
         Div(
-            H2("Configuration & Run"),
-            Span("Section 02", cls="step-badge"),
+            H2("Configure and run"),
+            Span("Step 2", cls="step-badge"),
             cls="col-header",
         ),
     ]
@@ -411,7 +420,7 @@ async def index(req: Request):
 
     run_card_children.append(
         Div(
-            Div(
+            H3(
                 Span("Target project: ", cls="target-project-label-prefix"),
                 Span(
                     project_display_name or project_id or "",
@@ -815,6 +824,8 @@ async def index(req: Request):
         )
     )
 
+    run_card_children.append(Div(cls="card-content-spacer"))
+
     run_card_children.append(
         Div(
             Button("Generate Documentation", type="submit", id="generate-btn", cls="primary"),
@@ -828,7 +839,7 @@ async def index(req: Request):
     right_col_children = [
         Div(
             H2("History"),
-            Span("Section 03", cls="step-badge"),
+            Span("Step 3", cls="step-badge"),
             cls="col-header",
         ),
     ]
@@ -836,6 +847,11 @@ async def index(req: Request):
     right_col_children.append(
         Div(
             Div(
+                Div(
+                    Span("description", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span("No autodocs generated yet.", cls="spec-file-list-empty"),
+                    cls="spec-file-empty",
+                ),
                 id="job-history-content",
             ),
             cls="output-panel",
@@ -843,24 +859,25 @@ async def index(req: Request):
     )
 
     return (
-        Title("Auto Model Docs Studio"),
+        Title("Auto Model Docs Studio — Domino"),
         # Header
         Div(
             Div(
-                H1("Auto Model Docs Studio", cls="domino-header-title"),
-                P("Enterprise Architectural Documentation Suite", cls="domino-header-subtitle"),
+                NotStr(_LOGO_SVG),
                 cls="domino-header-inner",
             ),
             cls="domino-header",
         ),
         # Page content
         Div(
+            H1("Auto Model Docs Studio", cls="page-title"),
             Div(
                 Div(
-                    H4("Auto Model Docs Studio"),
+                    H3("How it works"),
                     P(
-                        "Upload a YAML spec file to define which sections to include in your model documentation. "
-                        "The system will parse the code and identify endpoints and data models automatically.",
+                        "Select a spec file to define your documentation structure, configure project settings, "
+                        "then click Generate documentation. Auto Model Docs scans your codebase and MLflow "
+                        "experiments to produce a structured Word document.",
                     ),
                     cls="insight-card",
                 ),
