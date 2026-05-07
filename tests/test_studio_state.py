@@ -87,7 +87,7 @@ class TestJobRequest:
         field_names = {f.name for f in fields(jr)}
         expected = {
             "spec_path", "provider", "model",
-            "code_root", "dataset_path", "max_files", "workers",
+            "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
             "filtered_experiment_names", "filtered_model_names", "latest_only", "verbose",
             "branch", "hardware_tier",
@@ -104,7 +104,6 @@ class TestJobRequest:
             provider="anthropic",
             model="",
             code_root="",
-            dataset_path="",
             max_files=50,
             workers=4,
             planning_workers=4,

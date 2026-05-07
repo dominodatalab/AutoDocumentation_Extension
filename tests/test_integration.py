@@ -136,6 +136,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_datasets.list_datasets.return_value = [
         {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
     ]
+    mock_datasets.ensure_dataset = MagicMock(
+        return_value={"id": "ds-1", "name": "autodoc-specs", "datasetPath": "/domino/datasets/local/autodoc"},
+    )
+    mock_datasets.resolve_dataset_mount_path = MagicMock(
+        side_effect=lambda e: (e.get("datasetPath") or "").strip() or "/domino/datasets/local/autodoc",
+    )
     mock_datasets.AUTODOC_SPECS_DATASET = "autodoc-specs"
     mock_datasets.build_spec_mount_path.return_value = "/mnt/data/autodoc-specs/spec.yaml"
     mock_datasets.get_rw_snapshot_id.return_value = "snap-1"
@@ -171,7 +177,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         api_key: Optional[str] = None
         base_url: Optional[str] = None
         code_root: str = ""
-        dataset_path: str = ""
         max_files: int = 50
         workers: int = 4
         planning_workers: int = 4
@@ -512,12 +517,18 @@ class TestJobRoutesIntegration:
             "/run?projectId=proj-integration",
             json={
                 "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
-                "dataset_path": "/domino/datasets/local/autodoc",
                 "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
                 "code_root": "/mnt/code",
+                "hardware_tier": "small",
+                "environment_id": "env-int",
+                "environment_revision_id": "rev-int",
             },
         )
-        assert resp.status_code == 204
+        assert resp.status_code == 200
+        assert resp.json().get("ok") is True
+        integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
+        integration_env["domino_datasets"].resolve_dataset_mount_path.assert_called_once()
         mock_client.submit_job.assert_called()
         assert store.get_user_jobs("", "", "integration_user") == []
 
@@ -547,12 +558,17 @@ class TestAuthorizationIntegration:
             "/run?projectId=proj-integration",
             json={
                 "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
-                "dataset_path": "/domino/datasets/local/autodoc",
                 "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
                 "code_root": "/mnt/code",
+                "hardware_tier": "small",
+                "environment_id": "env-int",
+                "environment_revision_id": "rev-int",
             },
         )
         assert resp.status_code == 403
+        assert resp.json().get("error")
+        integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
 
     def test_job_history_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_list")
@@ -613,9 +629,12 @@ class TestCrossCuttingIntegration:
             "/run?projectId=proj-integration",
             json={
                 "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
-                "dataset_path": "/domino/datasets/local/autodoc",
                 "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
                 "code_root": "/mnt/code",
+                "hardware_tier": "small",
+                "environment_id": "env-int",
+                "environment_revision_id": "rev-int",
                 "max_files": 50,
                 "workers": 4,
                 "planning_workers": 3,
@@ -627,7 +646,8 @@ class TestCrossCuttingIntegration:
                 "verbose": True,
             },
         )
-        assert resp.status_code == 204
+        assert resp.status_code == 200
+        assert resp.json().get("ok") is True
         assert mock_client.submit_job.call_count == before + 1
 
     def test_cancel_then_history_empty_without_storage(self, client):

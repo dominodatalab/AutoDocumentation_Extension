@@ -30,10 +30,9 @@ for p in (_repo_root, _pkg_dir):
 class _MockJobRequest:
     spec_path: str = ""
     provider: str = "anthropic"
-    model: str = ""
+    model: str = "gpt-4"
     api_key: Optional[str] = None
     code_root: str = ""
-    dataset_path: str = ""
     max_files: int = 50
     workers: int = 4
     planning_workers: int = 4
@@ -126,6 +125,19 @@ def _mock_studio_modules(monkeypatch):
     mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
     mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
+    mock_state.domino_datasets.ensure_dataset.return_value = {
+        "id": "ds-test",
+        "name": "autodoc",
+        "datasetPath": "/domino/datasets/local/autodoc",
+    }
+
+    def _resolve_mount_path(ensured):
+        if not isinstance(ensured, dict):
+            return "/domino/datasets/local/autodoc"
+        p = (ensured.get("datasetPath") or "").strip()
+        return p if p else "/domino/datasets/local/autodoc"
+
+    mock_state.domino_datasets.resolve_dataset_mount_path = MagicMock(side_effect=_resolve_mount_path)
 
     # ui_components module
     mock_ui = ModuleType("studio.ui_components")
@@ -154,7 +166,12 @@ def _mock_studio_modules(monkeypatch):
     # job_engine module
     mock_job_engine = ModuleType("studio.job_engine")
     mock_job_engine._parse_request = AsyncMock(return_value=_MockJobRequest(
-        spec_path="/spec.yaml", project_id="proj-123",
+        spec_path="/spec.yaml",
+        project_id="proj-123",
+        code_root="/mnt/code",
+        hardware_tier="tier-small",
+        environment_id="env-1",
+        environment_revision_id="rev-1",
     ))
     mock_job_engine._submit_domino_job = AsyncMock()
 
@@ -521,11 +538,14 @@ class TestJobRoutes:
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
+        ds = _mock_studio_modules["state"].domino_datasets
         req = _make_request()
         result = await routes["/run"](req)
+        ds.ensure_dataset.assert_called_once_with("proj-123")
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_called_once()
-        assert result.status_code == 204
-        assert not result.body
+        assert result.status_code == 200
+        body = json.loads(result.body.decode())
+        assert body.get("ok") is True
 
     @pytest.mark.asyncio
     async def test_run_validation_error_returns_400(self, _mock_studio_modules):
@@ -535,7 +555,8 @@ class TestJobRoutes:
         req = _make_request()
         result = await routes["/run"](req)
         assert result.status_code == 400
-        assert not result.body
+        body = json.loads(result.body.decode())
+        assert body.get("error") == "bad input"
         _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio
@@ -548,10 +569,35 @@ class TestJobRoutes:
         store.get_user_jobs.return_value = []
         req = _make_request()
         result = await routes["/run"](req)
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.assert_called_once()
         store.create_job.assert_not_called()
         store.update_job.assert_not_called()
         assert result.status_code == 500
-        assert not result.body
+        body = json.loads(result.body.decode())
+        assert "error" in body
+
+    @pytest.mark.asyncio
+    async def test_run_ensure_dataset_failure_returns_500(self, _mock_studio_modules):
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.side_effect = RuntimeError("datasets api down")
+        req = _make_request()
+        result = await routes["/run"](req)
+        assert result.status_code == 500
+        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
+        _mock_studio_modules["authz"].require_domino_job_start.assert_not_called()
+        _mock_studio_modules["state"].domino_datasets.resolve_dataset_mount_path.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_resolve_mount_failure_returns_500(self, _mock_studio_modules):
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["state"].domino_datasets.resolve_dataset_mount_path.side_effect = RuntimeError("no mount")
+        req = _make_request()
+        result = await routes["/run"](req)
+        assert result.status_code == 500
+        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
+        _mock_studio_modules["authz"].require_domino_job_start.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_job_history(self, _mock_studio_modules):
@@ -606,9 +652,11 @@ class TestJobRoutes:
         req = _make_request()
         result = await routes["/run"](req)
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.assert_not_called()
         _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
         assert result.status_code == 401
-        assert not result.body
+        body = json.loads(result.body.decode())
+        assert body.get("error")
 
 
 class TestSanitizeDatasetSubpath:

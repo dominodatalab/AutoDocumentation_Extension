@@ -14,6 +14,7 @@ if str(_root) not in sys.path:
 
 from default_consts import (
     ALLOWED_LANGUAGES,
+    ALLOWED_PROVIDERS,
     DEFAULT_GENERATION_WORKERS,
     DEFAULT_LANGUAGE,
     DEFAULT_LLM_BACKOFF_JITTER,
@@ -25,6 +26,10 @@ from default_consts import (
     DEFAULT_TIMEOUT,
 )
 
+_MAX_JOB_MAX_FILES = 1_000_000
+_MAX_JOB_WORKERS = 512
+_MAX_JOB_TIMEOUT_SEC = 7 * 24 * 3600
+_MAX_JOB_MAX_RETRIES = 100
 from .state import (
     JobRequest,
     _resolve_request_project_id,
@@ -35,17 +40,6 @@ from .ui_components import (
     _sanitize_optional_int,
     _sanitize_optional_float,
 )
-
-
-def _validate_job_inputs(req: JobRequest, dataset_path: str, spec_path: str) -> None:
-    if not spec_path or not str(spec_path).strip():
-        raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
-    if not (dataset_path or "").strip():
-        raise ValueError("Dataset mount path is required. Ensure a dataset is selected.")
-    if not (req.code_root or "").strip():
-        raise ValueError("Code root is required. Choose a source code root path before generating documentation.")
-    if not (req.provider or "").strip():
-        raise ValueError("Provider is required.")
 
 
 def _checkbox_truthy(raw: Any) -> bool:
@@ -66,6 +60,49 @@ def _domino_id_str(raw: Any) -> str:
     if not isinstance(raw, str):
         return ""
     return raw.strip()
+
+
+def _validate_job_inputs(req: JobRequest, spec_path: str) -> None:
+    if not spec_path or not str(spec_path).strip():
+        raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
+    if not (req.code_root or "").strip():
+        raise ValueError("Code root is required. Choose a source code root path before generating documentation.")
+    if not _domino_id_str(req.project_id):
+        raise ValueError("Project ID is required.")
+    prov = (req.provider or "").strip().lower()
+    if not prov:
+        raise ValueError("Provider is required.")
+    if prov not in ALLOWED_PROVIDERS:
+        raise ValueError("Provider must be anthropic or openai.")
+    if not (req.model or "").strip():
+        raise ValueError("Model is required. Choose a model before generating documentation.")
+    if not _domino_id_str(req.hardware_tier):
+        raise ValueError("Hardware tier is required. Select a hardware tier before generating documentation.")
+    if not _domino_id_str(req.environment_id):
+        raise ValueError("Environment is required. Select an environment before generating documentation.")
+    if not _domino_id_str(req.environment_revision_id):
+        raise ValueError("Environment revision is required. Select an environment revision before generating documentation.")
+    lang = (req.language or "").strip().lower()
+    if lang not in ALLOWED_LANGUAGES:
+        raise ValueError("Language is not supported.")
+    if req.max_files < 1 or req.max_files > _MAX_JOB_MAX_FILES:
+        raise ValueError(f"max_files must be between 1 and {_MAX_JOB_MAX_FILES}.")
+    if req.workers < 1 or req.workers > _MAX_JOB_WORKERS:
+        raise ValueError(f"generation workers must be between 1 and {_MAX_JOB_WORKERS}.")
+    if req.planning_workers < 1 or req.planning_workers > _MAX_JOB_WORKERS:
+        raise ValueError(f"planning workers must be between 1 and {_MAX_JOB_WORKERS}.")
+    if req.timeout <= 0 or req.timeout > _MAX_JOB_TIMEOUT_SEC:
+        raise ValueError(f"timeout must be positive and at most {_MAX_JOB_TIMEOUT_SEC} seconds.")
+    if req.max_retries < 0 or req.max_retries > _MAX_JOB_MAX_RETRIES:
+        raise ValueError(f"max_retries must be between 0 and {_MAX_JOB_MAX_RETRIES}.")
+    if req.initial_backoff < 0:
+        raise ValueError("initial_backoff must be non-negative.")
+    if req.max_backoff < 0:
+        raise ValueError("max_backoff must be non-negative.")
+    if req.max_backoff < req.initial_backoff:
+        raise ValueError("max_backoff must be greater than or equal to initial_backoff.")
+    if req.backoff_jitter < 0:
+        raise ValueError("backoff_jitter must be non-negative.")
 
 
 def _form_int(form: Any, key: str, default: int) -> int:
@@ -99,21 +136,30 @@ async def _parse_request(req: Request) -> JobRequest:
     _prov = _form_str(body, "provider").strip().lower()
     if not _prov:
         raise RuntimeError("provider is required in the JSON body")
+    _model = _form_str(body, "model").strip()
+    if not _model:
+        raise RuntimeError("model is required in the JSON body")
     _lang_raw = (_form_str(body, "language") or DEFAULT_LANGUAGE).strip().lower()
     _language = _lang_raw if _lang_raw in ALLOWED_LANGUAGES else DEFAULT_LANGUAGE
+
+    notebook = _checkbox_truthy(body.get("notebook"))
+    notebook_path = _form_str(body, "notebook_path")
+    notebook_from_cache = _checkbox_truthy(body.get("notebook_from_cache"))
+    if not notebook:
+        notebook_path = ""
+        notebook_from_cache = False
 
     return JobRequest(
         spec_path=_form_str(body, "spec_path"),
         provider=_prov,
-        model=_form_str(body, "model"),
+        model=_model,
         code_root=_form_str(body, "code_root"),
-        dataset_path=_form_str(body, "dataset_path"),
         max_files=_form_int(body, "max_files", DEFAULT_MAX_FILES),
         workers=_form_int(body, "workers", DEFAULT_GENERATION_WORKERS),
         planning_workers=_form_int(body, "planning_workers", DEFAULT_PLANNING_WORKERS),
         timeout=_form_float(body, "timeout", DEFAULT_TIMEOUT),
-        notebook=_checkbox_truthy(body.get("notebook")),
-        notebook_path=_form_str(body, "notebook_path"),
+        notebook=notebook,
+        notebook_path=notebook_path,
         filtered_experiment_names=_form_str(body, "filtered_experiment_names"),
         filtered_model_names=_form_str(body, "filtered_model_names"),
         latest_only=_checkbox_truthy(body.get("latest_only")),
@@ -129,7 +175,7 @@ async def _parse_request(req: Request) -> JobRequest:
         initial_backoff=_form_float(body, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
         max_backoff=_form_float(body, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
         backoff_jitter=_form_float(body, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
-        notebook_from_cache=_checkbox_truthy(body.get("notebook_from_cache")),
+        notebook_from_cache=notebook_from_cache,
     )
 
 
@@ -174,9 +220,9 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
         str(req.max_backoff),
         "--backoff-jitter",
         str(req.backoff_jitter),
+        "--model",
+        (req.model or "").strip(),
     ]
-    if req.model:
-        command += ["--model", req.model]
     if req.provider_base_url:
         command += ["--provider-base-url", req.provider_base_url]
     if (req.filtered_experiment_names or "").strip():
@@ -227,18 +273,20 @@ def launch_domino_job_run(
     return run_id, job_url
 
 
-async def _submit_domino_job(req: JobRequest) -> None:
+async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> None:
     spec_path = (req.spec_path or "").strip()
-    dataset_path = (req.dataset_path or "").strip()
+    mount = (dataset_mount_path or "").strip()
 
     if not spec_path:
         raise ValueError(
             "A spec file is required. Set the spec path field (select a file in the browser or enter a path) before running."
         )
+    if not mount:
+        raise ValueError("Dataset mount path could not be resolved for this project.")
 
-    _validate_job_inputs(req, dataset_path, spec_path)
+    _validate_job_inputs(req, spec_path)
 
-    command_str = _build_job_command_str(req, spec_path, dataset_path)
+    command_str = _build_job_command_str(req, spec_path, mount)
 
     try:
         launch_domino_job_run(

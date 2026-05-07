@@ -150,6 +150,7 @@ def _create_dataset(
                 "id": ds.get("datasetId") or ds.get("id", ""),
                 "name": ds.get("datasetName") or ds.get("name", name),
                 "rwSnapshotId": ds.get("readWriteSnapshotId") or (snapshot_ids[0] if snapshot_ids else None),
+                "datasetPath": (ds.get("datasetPath") or "").strip(),
             }
         except httpx.HTTPStatusError as exc:
             last_error = exc.response.text if exc.response else str(exc)
@@ -192,6 +193,35 @@ def get_dataset_detail(dataset_id: str) -> dict[str, Any]:
     """Fetch full dataset metadata including datasetPath (mount location)."""
     resp = _api_request("GET", f"/v4/datasetrw/datasets/{dataset_id}")
     return resp.json()
+
+
+def _dataset_path_from_detail_payload(detail: Any) -> str:
+    if not isinstance(detail, dict):
+        return ""
+    path = (detail.get("datasetPath") or "").strip()
+    if path:
+        return path
+    for key in ("datasetRwDto", "dataset"):
+        inner = detail.get(key)
+        if isinstance(inner, dict):
+            path = (inner.get("datasetPath") or "").strip()
+            if path:
+                return path
+    return ""
+
+
+def resolve_dataset_mount_path(ensured: dict[str, Any]) -> str:
+    path = (ensured.get("datasetPath") or "").strip()
+    if path:
+        return path
+    ds_id = (ensured.get("id") or "").strip()
+    if not ds_id:
+        raise RuntimeError("Cannot resolve dataset mount path: missing dataset id from ensure_dataset")
+    detail = get_dataset_detail(ds_id)
+    path = _dataset_path_from_detail_payload(detail)
+    if not path:
+        raise RuntimeError(f"Cannot resolve dataset mount path for dataset {ds_id}")
+    return path
 
 
 # ---------------------------------------------------------------------------

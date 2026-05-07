@@ -381,7 +381,6 @@ def _make_job_request(**overrides) -> Any:
         provider="anthropic",
         model="",
         code_root="/mnt/code",
-        dataset_path="/domino/datasets/local/autodoc",
         max_files=50,
         workers=4,
         planning_workers=3,

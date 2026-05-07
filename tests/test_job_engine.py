@@ -31,7 +31,6 @@ class JobRequest:
     provider: str
     model: str
     code_root: str
-    dataset_path: str
     max_files: int
     workers: int
     planning_workers: int
@@ -59,9 +58,8 @@ class JobRequest:
 _JR_DEFAULTS = {
     "spec_path": "",
     "provider": "anthropic",
-    "model": "",
+    "model": "gpt-4",
     "code_root": "/mnt/code",
-    "dataset_path": "/domino/datasets/local/autodoc",
     "max_files": 50,
     "workers": 4,
     "planning_workers": 3,
@@ -73,9 +71,9 @@ _JR_DEFAULTS = {
     "latest_only": False,
     "verbose": False,
     "branch": "",
-    "hardware_tier": "",
-    "environment_id": "",
-    "environment_revision_id": "",
+    "hardware_tier": "tier-default",
+    "environment_id": "env-default",
+    "environment_revision_id": "rev-default",
     "project_id": "",
     "provider_base_url": "",
     "language": "auto",
@@ -225,6 +223,7 @@ async def test_parse_request_provider_base_url_preserved():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20240620",
             "provider_base_url": "https://a.example",
         }
     )
@@ -234,6 +233,7 @@ async def test_parse_request_provider_base_url_preserved():
     req.json = AsyncMock(
         return_value={
             "provider": "openai",
+            "model": "gpt-4o",
             "provider_base_url": "https://ok/v1",
         }
     )
@@ -251,6 +251,7 @@ async def test_parse_request_verbose_checkbox():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
             "verbose": "true",
         }
     )
@@ -260,10 +261,66 @@ async def test_parse_request_verbose_checkbox():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     jr2 = await je._parse_request(req)
     assert jr2.verbose is False
+
+
+@pytest.mark.asyncio
+async def test_parse_request_notebook_off_clears_path_and_from_cache():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+            "notebook_path": "/out/x.ipynb",
+            "notebook_from_cache": True,
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.notebook is False
+    assert jr.notebook_path == ""
+    assert jr.notebook_from_cache is False
+
+
+@pytest.mark.asyncio
+async def test_parse_request_notebook_on_keeps_path_and_from_cache():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+            "notebook": True,
+            "notebook_path": "/out/x.ipynb",
+            "notebook_from_cache": True,
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.notebook is True
+    assert jr.notebook_path == "/out/x.ipynb"
+    assert jr.notebook_from_cache is True
+
+
+@pytest.mark.asyncio
+async def test_parse_request_raises_when_model_missing():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(return_value={"provider": "anthropic"})
+    with pytest.raises(RuntimeError, match="model is required"):
+        await je._parse_request(req)
 
 
 @pytest.mark.asyncio
@@ -288,6 +345,7 @@ async def test_parse_request_language_defaults_to_auto_when_missing():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     jr = await je._parse_request(req)
@@ -304,6 +362,7 @@ async def test_parse_request_language_allowed_and_invalid():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
             "language": "sas",
         }
     )
@@ -313,6 +372,7 @@ async def test_parse_request_language_allowed_and_invalid():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
             "language": "fortran",
         }
     )
@@ -332,6 +392,7 @@ async def test_parse_request_project_id_only_from_query():
             "target_project": "form-should-not-win",
             "project_id": "hidden-should-not-win",
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     jr = await je._parse_request(req)
@@ -352,6 +413,7 @@ async def test_parse_request_environment_fields():
     req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
             "environment_id": "env123",
             "environment_revision_id": "rev456",
         }
@@ -359,23 +421,6 @@ async def test_parse_request_environment_fields():
     jr = await je._parse_request(req)
     assert jr.environment_id == "env123"
     assert jr.environment_revision_id == "rev456"
-
-
-@pytest.mark.asyncio
-async def test_parse_request_dataset_path():
-    je = _import_job_engine()
-    from unittest.mock import MagicMock
-
-    req = MagicMock()
-    req.query_params = {"projectId": "proj-x"}
-    req.json = AsyncMock(
-        return_value={
-            "provider": "anthropic",
-            "dataset_path": "/mnt/data/specs-root",
-        }
-    )
-    jr = await je._parse_request(req)
-    assert jr.dataset_path == "/mnt/data/specs-root"
 
 
 @pytest.mark.asyncio
@@ -389,6 +434,7 @@ async def test_parse_request_raises_when_no_query_project_id():
         return_value={
             "target_project": "only-form-not-enough",
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     with pytest.raises(RuntimeError, match="project ID"):
@@ -429,6 +475,8 @@ class TestBuildJobCommand:
         assert "--max-retries" in cmd
         assert cmd[cmd.index("--max-retries") + 1] == "5"
         assert "--backoff-jitter" in cmd
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "gpt-4"
 
     def test_notebook_unchecked_omits_flag(self):
         je = _import_job_engine()
@@ -549,6 +597,119 @@ class TestBuildJobCommand:
 
 
 # ---------------------------------------------------------------------------
+# _validate_job_inputs
+# ---------------------------------------------------------------------------
+
+
+class TestValidateJobInputs:
+    def test_accepts_defaults(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+        )
+        je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_unknown_provider(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="google",
+            project_id="proj-123",
+            code_root="/mnt/code",
+        )
+        with pytest.raises(ValueError, match="anthropic or openai"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_empty_model(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            model="",
+        )
+        with pytest.raises(ValueError, match="Model is required"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_bad_language(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            language="cobol",
+        )
+        with pytest.raises(ValueError, match="Language is not supported"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_max_files_out_of_range(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            max_files=0,
+        )
+        with pytest.raises(ValueError, match="max_files"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_workers_zero(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            workers=0,
+        )
+        with pytest.raises(ValueError, match="generation workers"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_timeout_non_positive(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            timeout=0.0,
+        )
+        with pytest.raises(ValueError, match="timeout"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_max_backoff_below_initial(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            initial_backoff=50.0,
+            max_backoff=10.0,
+        )
+        with pytest.raises(ValueError, match="max_backoff"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_negative_backoff_jitter(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            backoff_jitter=-0.1,
+        )
+        with pytest.raises(ValueError, match="backoff_jitter"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+
+# ---------------------------------------------------------------------------
 # _submit_domino_job
 # ---------------------------------------------------------------------------
 
@@ -566,8 +727,10 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        assert await je._submit_domino_job(req) is None
+        assert await je._submit_domino_job(req, "/domino/datasets/local/autodoc") is None
         client.submit_job.assert_called_once()
+        cmd = client.submit_job.call_args[0][0]
+        assert "/domino/datasets/local/autodoc" in cmd
         client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
         _mock_studio.domino_job_store.create_job.assert_not_called()
 
@@ -576,7 +739,7 @@ class TestSubmitDominoJob:
         je = _import_job_engine()
         req = _jr(provider="anthropic", project_id="proj-123")
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req)
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
 
     @pytest.mark.asyncio
     async def test_launch_failure_propagates(self, _mock_studio):
@@ -591,7 +754,60 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
         )
         with pytest.raises(RuntimeError, match="API down"):
-            await je._submit_domino_job(req)
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_missing_hardware_tier(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            hardware_tier="",
+        )
+        with pytest.raises(ValueError, match="Hardware tier"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_missing_environment(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            environment_id="",
+        )
+        with pytest.raises(ValueError, match="Environment is required"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_missing_environment_revision(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            environment_revision_id="",
+        )
+        with pytest.raises(ValueError, match="Environment revision"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_mount_path_empty(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+        )
+        with pytest.raises(ValueError, match="mount path"):
+            await je._submit_domino_job(req, "")
+        with pytest.raises(ValueError, match="mount path"):
+            await je._submit_domino_job(req, "   ")
 
     @pytest.mark.asyncio
     async def test_absolute_spec_path_in_command(self, _mock_studio):
@@ -606,7 +822,7 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        await je._submit_domino_job(req)
+        await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
         cmd = client.submit_job.call_args[0][0]
         assert "doc_spec.yaml" in cmd
 
@@ -622,7 +838,7 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
         )
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req)
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
         spec_store.save_spec.assert_not_called()
 
 

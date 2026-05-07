@@ -133,6 +133,41 @@ class TestEnsureDataset:
 
 
 # ---------------------------------------------------------------------------
+# resolve_dataset_mount_path
+# ---------------------------------------------------------------------------
+
+
+class TestResolveDatasetMountPath:
+    def test_uses_path_from_ensured_when_present(self):
+        assert ds.resolve_dataset_mount_path(
+            {"id": "ds-1", "datasetPath": " /mnt/autodoc "},
+        ) == "/mnt/autodoc"
+
+    @patch.object(ds, "get_dataset_detail")
+    def test_fetches_detail_when_path_missing(self, mock_detail):
+        mock_detail.return_value = {"datasetPath": "/from/detail"}
+        assert ds.resolve_dataset_mount_path({"id": "ds-1", "name": "autodoc"}) == "/from/detail"
+        mock_detail.assert_called_once_with("ds-1")
+
+    @patch.object(ds, "get_dataset_detail")
+    def test_detail_nested_dataset_rw_dto(self, mock_detail):
+        mock_detail.return_value = {
+            "datasetRwDto": {"datasetPath": "/nested/path"},
+        }
+        assert ds.resolve_dataset_mount_path({"id": "ds-2"}) == "/nested/path"
+
+    def test_raises_without_id_and_without_path(self):
+        with pytest.raises(RuntimeError, match="missing dataset id"):
+            ds.resolve_dataset_mount_path({"name": "x"})
+
+    @patch.object(ds, "get_dataset_detail")
+    def test_raises_when_detail_has_no_path(self, mock_detail):
+        mock_detail.return_value = {}
+        with pytest.raises(RuntimeError, match="Cannot resolve"):
+            ds.resolve_dataset_mount_path({"id": "ds-1"})
+
+
+# ---------------------------------------------------------------------------
 # get_rw_snapshot_id
 # ---------------------------------------------------------------------------
 

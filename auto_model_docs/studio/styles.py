@@ -1717,6 +1717,16 @@ select.hw-tier-select option {
     margin-top: 6px;
 }
 
+.generate-run-message {
+    font-size: 13px;
+    margin-top: 8px;
+    min-height: 1.2em;
+}
+
+.generate-run-message.generate-run-message--error {
+    color: var(--error);
+}
+
 .lang-empty-state {
     color: var(--outline);
 }

@@ -15,7 +15,9 @@ from authorization import (
 
 from .state import (
     _resolve_request_project_id,
+    domino_datasets,
     domino_job_store,
+    logger,
 )
 from .job_engine import (
     _parse_request,
@@ -34,6 +36,17 @@ def _json(data, status_code: int = 200) -> Response:
     return Response(json.dumps(data), status_code=status_code, media_type="application/json")
 
 
+def _error_body(exc: HTTPException) -> str:
+    d = exc.detail
+    if isinstance(d, str):
+        return d
+    if isinstance(d, dict):
+        inner = d.get("detail")
+        if isinstance(inner, str):
+            return inner
+    return "Request failed."
+
+
 def _jobs_payload(owner_id: str) -> list:
     if not owner_id:
         return []
@@ -48,24 +61,33 @@ def register_job_routes(rt):
     async def run(req: Request):
         owner_id = _current_owner_id()
         if not owner_id:
-            return Response(status_code=401)
+            return _json({"error": "Not authenticated."}, 401)
         try:
             job_request = await _parse_request(req)
-        except RuntimeError:
-            return Response(status_code=400)
+        except RuntimeError as e:
+            return _json({"error": str(e)}, 400)
         if not job_request.project_id:
-            return Response(status_code=400)
+            return _json({"error": "Project ID is required."}, 400)
+        try:
+            ensured = domino_datasets.ensure_dataset(job_request.project_id)
+            dataset_mount_path = domino_datasets.resolve_dataset_mount_path(ensured)
+        except Exception:
+            logger.exception("ensure_dataset or mount path resolution failed for project %s", job_request.project_id)
+            return _json(
+                {"error": "Could not prepare the documentation dataset. Try again later."},
+                500,
+            )
         try:
             require_domino_job_start(job_request.project_id)
         except HTTPException as e:
-            return Response(status_code=e.status_code)
+            return _json({"error": _error_body(e)}, e.status_code)
         try:
-            await _submit_domino_job(job_request)
-        except ValueError:
-            return Response(status_code=400)
+            await _submit_domino_job(job_request, dataset_mount_path)
+        except ValueError as e:
+            return _json({"error": str(e)}, 400)
         except Exception:
-            return Response(status_code=500)
-        return Response(status_code=204)
+            return _json({"error": "Job submission failed. Try again later."}, 500)
+        return _json({"ok": True}, 200)
 
     rt("/run")(run)
 

@@ -811,6 +811,7 @@ async def index(req: Request):
     run_card_children.append(
         Div(
             Button("Generate Documentation", type="submit", id="generate-btn", cls="primary"),
+            P("", id="generate-run-message", cls="generate-run-message"),
             cls="card-footer",
         )
     )

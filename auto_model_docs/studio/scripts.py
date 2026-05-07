@@ -847,7 +847,6 @@ MAIN_DOM_JS = r"""
             }
             return {
                 spec_path: resolvedSpecPath,
-                dataset_path: (_specCurrentDatasetPath || '').trim(),
                 provider: val('field-provider'),
                 model: val('field-model'),
                 code_root: val('field-code_root'),
@@ -917,6 +916,17 @@ MAIN_DOM_JS = r"""
 
                 var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
                 var submitBtn = mainForm.querySelector('[type=submit]');
+                var runMsgEl = document.getElementById('generate-run-message');
+                function setRunMessage(text, isError) {
+                    if (!runMsgEl) return;
+                    runMsgEl.textContent = text || '';
+                    if (isError) {
+                        runMsgEl.classList.add('generate-run-message--error');
+                    } else {
+                        runMsgEl.classList.remove('generate-run-message--error');
+                    }
+                }
+                setRunMessage('', false);
                 if (submitBtn) submitBtn.disabled = true;
 
                 fetch(_adUrl('run') + qs, {
@@ -924,7 +934,21 @@ MAIN_DOM_JS = r"""
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(jsonPayload),
                 })
-                    .then(_checkResp)
+                    .then(function(r) {
+                        return r.text().then(function(text) {
+                            var data = null;
+                            try {
+                                data = text ? JSON.parse(text) : null;
+                            } catch (e) {}
+                            if (!r.ok) {
+                                var err = (data && data.error) ? data.error : ('Request failed (' + r.status + ')');
+                                setRunMessage(err, true);
+                                throw new Error(err);
+                            }
+                            setRunMessage('', false);
+                            return data;
+                        });
+                    })
                     .then(function() { fetchJobHistory(); })
                     .catch(function() {})
                     .finally(function() { if (submitBtn) submitBtn.disabled = false; });
