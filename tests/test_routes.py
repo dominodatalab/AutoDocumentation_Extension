@@ -1,4 +1,4 @@
-"""Tests for studio route handlers — routes_api.py, routes_job.py, routes_spec.py."""
+"""Tests for studio route handlers — routes_api.py, routes_job.py."""
 
 from __future__ import annotations
 
@@ -172,7 +172,7 @@ def _mock_studio_modules(monkeypatch):
     mock_fh = ModuleType("fasthtml")
     mock_fh.common = mock_fh_common
 
-    # autodoc.core.models — for routes_spec
+    # autodoc.core.models — DocumentSpec on routes_api (upload validation)
     mock_autodoc_models = ModuleType("autodoc.core.models")
     mock_autodoc_models.DocumentSpec = MagicMock()
     mock_autodoc_models.detect_language = MagicMock()
@@ -193,7 +193,7 @@ def _mock_studio_modules(monkeypatch):
     saved = {}
     mod_keys = (
         "studio", "studio.state", "studio.ui_components", "studio.job_engine",
-        "studio.routes_api", "studio.routes_job", "studio.routes_spec",
+        "studio.routes_api", "studio.routes_job",
         "fasthtml", "fasthtml.common",
         "autodoc", "autodoc.core", "autodoc.core.models",
         "authorization",
@@ -263,12 +263,6 @@ def _import_routes_job():
     sys.modules.pop("studio.routes_job", None)
     path = os.path.join(_pkg_dir, "studio", "routes_job.py")
     return _load_module("studio.routes_job", path)
-
-
-def _import_routes_spec():
-    sys.modules.pop("studio.routes_spec", None)
-    path = os.path.join(_pkg_dir, "studio", "routes_spec.py")
-    return _load_module("studio.routes_spec", path)
 
 
 def _register(mod, register_fn_name="register_api_routes"):
@@ -415,6 +409,34 @@ class TestApiRoutes:
         result = routes["/api/download-template"]()
         # Either FileResponse (exists) or Response(404)
         assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_upload_spec_rejects_invalid_yaml(self, _mock_studio_modules, monkeypatch):
+        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = ["missing title"]
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        uf = MagicMock()
+        uf.filename = "spec.yaml"
+
+        async def _read():
+            return b"sections: []\n"
+
+        uf.read = _read
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            form_data={"file": uf, "datasetId": "ds-1", "relativeDir": ""},
+        )
+        result = await routes["/api/upload-spec-to-dataset"](req)
+        assert result.status_code == 400
+        body = json.loads(result.body)
+        assert body["valid"] is False
+        assert "missing title" in body["errors"]
+        mock_write.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_code_root_options_no_project_id(self, _mock_studio_modules):
@@ -587,74 +609,6 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_job_store.create_job.assert_not_called()
         assert result.status_code == 401
         assert not result.body
-
-
-# ===========================================================================
-# routes_spec.py
-# ===========================================================================
-
-class TestSpecRoutes:
-    @pytest.mark.asyncio
-    async def test_validate_spec_valid(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = []
-        req = _make_request(json_body={"spec_content": "title: Test\nsections: []"}, content_type="application/json")
-        result = await routes["/validate-spec"](req)
-        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.assert_called_once()
-        body = json.loads(result.body)
-        assert body["valid"] is True
-        assert body["errors"] == []
-
-    @pytest.mark.asyncio
-    async def test_validate_spec_with_errors(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = ["Missing title"]
-        req = _make_request(json_body={"spec_content": "sections: []"}, content_type="application/json")
-        result = await routes["/validate-spec"](req)
-        body = json.loads(result.body)
-        assert body["valid"] is False
-        assert "Missing title" in body["errors"]
-
-    @pytest.mark.asyncio
-    async def test_validate_spec_empty_content(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        req = _make_request(json_body={}, content_type="application/json")
-        result = await routes["/validate-spec"](req)
-        body = json.loads(result.body)
-        assert body["valid"] is False
-        assert len(body["errors"]) > 0
-
-
-    @pytest.mark.asyncio
-    async def test_spec_list_with_specs(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        store = _mock_studio_modules["state"].spec_store
-        store.list_specs.return_value = [
-            {"name": "spec1.yaml", "size_kb": "2.1"},
-        ]
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/spec-list"](req)
-        store.list_specs.assert_called_once()
-        body = json.loads(result.body)
-        assert len(body["specs"]) == 1
-        assert body["specs"][0]["name"] == "spec1.yaml"
-
-    @pytest.mark.asyncio
-    async def test_spec_list_empty(self, _mock_studio_modules):
-        mod = _import_routes_spec()
-        routes = _register(mod, "register_spec_routes")
-        _mock_studio_modules["state"].spec_store.list_specs.return_value = []
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/spec-list"](req)
-        body = json.loads(result.body)
-        assert body["specs"] == []
-
-    # delete_spec and cleanup_specs routes removed — Domino Datasets API
-    # does not support file-level deletion.
 
 
 class TestSanitizeDatasetSubpath:

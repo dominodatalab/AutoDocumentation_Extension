@@ -497,8 +497,6 @@ MAIN_DOM_JS = r"""
                 if (!file) return;
                 console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
                 if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
-                // Validate spec content before uploading
-                if (typeof validateSpecContent === 'function') validateSpecContent(file);
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
@@ -511,8 +509,31 @@ MAIN_DOM_JS = r"""
                 fd.append('relativeDir', _specCurrentPath || '');
                 fd.append('file', file);
                 fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(result) {
+                    .then(function(r) {
+                        return r.json().catch(function() { return {}; }).then(function(j) {
+                            return { ok: r.ok, j: j };
+                        });
+                    })
+                    .then(function(o) {
+                        var resultEl = document.getElementById('spec-validation-result');
+                        if (!o.ok) {
+                            if (o.j && o.j.errors && o.j.errors.length && resultEl) {
+                                var verr = o.j.errors.map(function(e) { return '<li>' + e + '</li>'; }).join('');
+                                resultEl.innerHTML = '<div class="spec-validation-error">'
+                                    + '<span class="spec-selected-value">Spec validation failed</span>'
+                                    + '<ul class="spec-validation-error-list">' + verr + '</ul>'
+                                    + '</div>';
+                            } else if (resultEl) {
+                                resultEl.innerHTML = '';
+                            }
+                            var em = (o.j && o.j.error) ? o.j.error : 'Upload failed';
+                            if (specUploadStatus) { specUploadStatus.textContent = em; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                            var ev = new Error(em);
+                            ev._uploadUiDone = true;
+                            throw ev;
+                        }
+                        if (resultEl) resultEl.innerHTML = '<span class="spec-validation-success">Spec is valid</span>';
+                        var result = o.j;
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
@@ -533,7 +554,12 @@ MAIN_DOM_JS = r"""
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                        if (err._uploadUiDone) return;
+                        if (specUploadStatus) {
+                            specUploadStatus.textContent = 'Upload failed: ' + err.message;
+                            specUploadStatus.className = 'spec-upload-status spec-validation-empty';
+                            specUploadStatus.style.color = '';
+                        }
                     })
                     .finally(function() {
                         specMachineUpload.value = '';
@@ -587,40 +613,6 @@ MAIN_DOM_JS = r"""
             if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
             syncNotebookPathEnabled();
         })();
-
-        // ── Spec validation helper ────────────────────────────────────
-        window._specValid = true;
-        function validateSpecContent(file) {
-            var resultEl = document.getElementById('spec-validation-result');
-            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
-            var reader = new FileReader();
-            reader.onload = function(ev) {
-                fetch(_adUrl('validate-spec'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ spec_content: ev.target.result }),
-                })
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
-                    window._specValid = data.valid;
-                    if (!resultEl) return;
-                    if (data.valid) {
-                        resultEl.innerHTML = '<span class="spec-validation-success">Spec is valid</span>';
-                    } else {
-                        var items = (data.errors || []).map(function(e) { return '<li>' + e + '</li>'; }).join('');
-                        resultEl.innerHTML = '<div class="spec-validation-error">'
-                            + '<span class="spec-selected-value">Spec validation failed</span>'
-                            + '<ul class="spec-validation-error-list">' + items + '</ul>'
-                            + '</div>';
-                    }
-                })
-                .catch(function() {
-                    if (resultEl) resultEl.innerHTML = '';
-                    window._specValid = true;
-                });
-            };
-            reader.readAsText(file);
-        }
 
         // ── Code root prefix select + suffix sync / browseCode options ─────
         (function() {

@@ -44,7 +44,6 @@ from studio.ui_components import (
     _validate_environment,
 )
 from studio.routes_api import register_api_routes
-from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
 from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
@@ -892,7 +891,6 @@ async def index(req: Request):
 # ---------------------------------------------------------------------------
 
 register_api_routes(rt)
-register_spec_routes(rt)
 register_job_routes(rt)
 
 

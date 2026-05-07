@@ -10,6 +10,7 @@ from typing import Optional
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
+from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
 
 from .state import (
@@ -204,12 +205,42 @@ def register_api_routes(rt):
                 media_type="application/json",
             )
 
+        fn_low = filename.lower()
+        if fn_low.endswith((".yaml", ".yml")):
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                return Response(
+                    json.dumps({
+                        "error": "Spec file must be valid UTF-8",
+                        "valid": False,
+                        "errors": ["File is not valid UTF-8"],
+                    }),
+                    status_code=400,
+                    media_type="application/json",
+                )
+            val_errors = DocumentSpec.validate_spec(text)
+            if val_errors:
+                return Response(
+                    json.dumps({
+                        "error": "Spec validation failed",
+                        "valid": False,
+                        "errors": val_errors,
+                    }),
+                    status_code=400,
+                    media_type="application/json",
+                )
+
         try:
             from dataset_manager import DatasetManager
             upload_path = f"{rel_dir}/{filename}" if rel_dir else filename
             DatasetManager.write_file(dataset_id, upload_path, content)
             return Response(
-                json.dumps({"path": upload_path, "fileName": filename}),
+                json.dumps({
+                    "path": upload_path,
+                    "fileName": filename,
+                    "valid": True,
+                }),
                 media_type="application/json",
             )
         except Exception as exc:

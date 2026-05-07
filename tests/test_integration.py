@@ -262,7 +262,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     sys.modules["fasthtml"] = ModuleType("fasthtml")
     sys.modules["fasthtml.common"] = mock_fh
 
-    # Mock autodoc.core.models for routes_spec
+    # Mock autodoc.core.models (routes_api upload validation, etc.)
     mock_models = ModuleType("autodoc.core.models")
     mock_doc_spec = MagicMock()
     mock_doc_spec.validate_spec.return_value = []
@@ -285,13 +285,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     # Load route modules fresh
     for mod_name in ("studio.ui_components", "studio.job_engine",
-                     "studio.routes_api", "studio.routes_job", "studio.routes_spec"):
+                     "studio.routes_api", "studio.routes_job"):
         sys.modules.pop(mod_name, None)
 
     ui_mod = _load_module("studio.ui_components", "ui_components.py")
     je_mod = _load_module("studio.job_engine", "job_engine.py")
     api_mod = _load_module("studio.routes_api", "routes_api.py")
-    spec_mod = _load_module("studio.routes_spec", "routes_spec.py")
     job_mod = _load_module("studio.routes_job", "routes_job.py")
 
     # Collect route handlers
@@ -304,7 +303,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         return decorator
 
     api_mod.register_api_routes(fake_rt)
-    spec_mod.register_spec_routes(fake_rt)
     job_mod.register_job_routes(fake_rt)
 
     # Build Starlette routes from collected handlers
@@ -392,7 +390,7 @@ def integration_env(tmp_path, monkeypatch):
 
     saved_modules = {}
     for key in ("studio", "studio.state", "studio.ui_components", "studio.job_engine",
-                "studio.routes_api", "studio.routes_job", "studio.routes_spec",
+                "studio.routes_api", "studio.routes_job",
                 "fasthtml", "fasthtml.common", "autodoc", "autodoc.core", "autodoc.core.models"):
         saved_modules[key] = sys.modules.get(key)
 
@@ -470,46 +468,28 @@ class TestApiRoutesIntegration:
 
 
 # ===========================================================================
-# Spec route integration tests
+# Spec upload validation (via /api/upload-spec-to-dataset)
 # ===========================================================================
 
-class TestSpecRoutesIntegration:
+class TestSpecUploadIntegration:
 
-    def test_validate_spec_empty(self, client):
-        resp = client.post("/validate-spec", json={})
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["valid"] is False
-        assert len(body["errors"]) > 0
-
-    def test_validate_spec_valid(self, client, integration_env):
-        integration_env["doc_spec"].validate_spec.return_value = []
-        resp = client.post(
-            "/validate-spec",
-            json={"spec_content": "title: Test\n"},
+    def test_upload_invalid_yaml_returns_400(self, client, integration_env, monkeypatch):
+        integration_env["doc_spec"].validate_spec.return_value = ["bad spec"]
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
         )
-        assert resp.status_code == 200
-        integration_env["doc_spec"].validate_spec.assert_called()
-        body = resp.json()
-        assert body["valid"] is True
-        assert body["errors"] == []
-
-    def test_validate_spec_with_errors(self, client, integration_env):
-        integration_env["doc_spec"].validate_spec.return_value = ["Missing title field"]
         resp = client.post(
-            "/validate-spec",
-            json={"spec_content": "sections: []\n"},
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("spec.yaml", b"foo: bar\n", "application/x-yaml")},
+            data={"datasetId": "ds-integration", "relativeDir": ""},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         body = resp.json()
-        assert body["valid"] is False
-        assert "Missing title field" in body["errors"]
-
-    def test_spec_list_empty(self, client):
-        resp = client.get("/spec-list?projectId=proj-integration")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["specs"] == []
+        assert body.get("valid") is False
+        assert "bad spec" in body.get("errors", [])
+        mock_write.assert_not_called()
 
 
 # ===========================================================================
