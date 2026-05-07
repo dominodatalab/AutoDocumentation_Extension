@@ -1425,18 +1425,10 @@ details[open] > .history-toggle::before {
 /* ── Card Footer (Generate button) ────────────────────────────────── */
 .card-footer {
     display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 0.75rem;
+    justify-content: flex-end;
     padding-top: 1.25rem;
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    margin-left: -1.5rem;
-    margin-right: -1.5rem;
+    margin-top: 0.75rem;
     border-top: 1px solid var(--outline-variant);
-}
-.studio-col-mid > .bp-card > .card-footer button.primary {
-    flex: 1;
 }
 
 .section-divider {
@@ -1719,8 +1711,10 @@ select.hw-tier-select option {
 
 .generate-run-message {
     font-size: 13px;
-    margin-top: 8px;
+    margin-top: 0;
     min-height: 1.2em;
+    width: 100%;
+    text-align: right;
 }
 
 .generate-run-message.generate-run-message--error {

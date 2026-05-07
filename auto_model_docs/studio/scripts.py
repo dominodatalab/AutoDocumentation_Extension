@@ -592,7 +592,14 @@ MAIN_DOM_JS = r"""
             }
             var modelInput = document.getElementById('field-model');
             if (modelInput) {
-                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                var ph = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                modelInput.placeholder = ph;
+                var cur = (modelInput.value || '').trim();
+                if (!cur) {
+                    modelInput.value = ph;
+                } else if (cur === OPENAI_DEFAULT_MODEL || cur === ANTHROPIC_DEFAULT_MODEL) {
+                    modelInput.value = ph;
+                }
             }
         }
 

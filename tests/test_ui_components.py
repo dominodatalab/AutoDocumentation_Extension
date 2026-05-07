@@ -374,4 +374,5 @@ class TestSpecFileBrowserUi:
         assert 'Summary("Advanced settings"' in web
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web
-        assert 'id="field-model", type="text", value=""' in web
+        assert 'id="field-model"' in web
+        assert "DEFAULT_OPENAI_MODEL" in web

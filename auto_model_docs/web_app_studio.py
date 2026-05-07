@@ -28,6 +28,7 @@ from default_consts import (
     DEFAULT_LLM_MAX_BACKOFF,
     DEFAULT_LLM_MAX_RETRIES,
     DEFAULT_MAX_FILES,
+    DEFAULT_OPENAI_MODEL,
     DEFAULT_PLANNING_WORKERS,
     DEFAULT_TIMEOUT,
 )
@@ -751,10 +752,15 @@ async def index(req: Request):
                 ),
                 cls="label-row",
             ),
-            Input(name="model", id="field-model", type="text", value="", placeholder=""),
+            Input(
+                name="model",
+                id="field-model",
+                type="text",
+                value=DEFAULT_OPENAI_MODEL,
+                placeholder=DEFAULT_OPENAI_MODEL,
+            ),
             cls="field",
             id="model-name-field",
-            style="display: none;",
         ),
         Div(
             Label(
