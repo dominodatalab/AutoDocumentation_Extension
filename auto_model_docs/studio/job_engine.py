@@ -193,7 +193,7 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
 
     command = [
         "python",
-        "/mnt/code/auto_model_docs/main.py",
+        "/repos/AutoDocumentation_Extension/auto_model_docs/main.py", #TODO: Change this to the correct path
         "--spec",
         spec_path,
         "--dataset-path",
