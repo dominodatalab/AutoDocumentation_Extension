@@ -1430,6 +1430,18 @@ details[open] > .history-toggle::before {
     margin-top: 0.75rem;
     border-top: 1px solid var(--outline-variant);
 }
+.card-footer.generate-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+#generate-btn {
+    white-space: nowrap;
+    padding-left: 28px;
+    padding-right: 28px;
+    min-width: 280px;
+    box-sizing: border-box;
+}
 
 .section-divider {
     display: block;
@@ -1558,6 +1570,14 @@ select.hw-tier-select option {
 
 .spec-selected-label {
     color: var(--outline);
+}
+
+.spec-upload-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 2px;
 }
 
 #field-spec_path {

@@ -376,3 +376,7 @@ class TestSpecFileBrowserUi:
         assert "gear-popover" not in web
         assert 'id="field-model"' in web
         assert "DEFAULT_OPENAI_MODEL" in web
+        assert 'cls="spec-upload-footer"' in web
+        assert "generate-actions" in web
+        assert web.index('id="field-spec_path"') < web.index("spec-machine-upload")
+        assert "#generate-btn" in styles

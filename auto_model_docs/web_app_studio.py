@@ -321,6 +321,20 @@ async def index(req: Request):
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
             ),
+            Div(
+                Label(
+                    "Upload spec",
+                    Input(
+                        type="file",
+                        accept=".yaml,.yml",
+                        id="spec-machine-upload",
+                        cls="hidden-upload",
+                    ),
+                    cls="upload-btn",
+                ),
+                Span(id="spec-upload-status", cls="spec-upload-status"),
+                cls="spec-upload-footer",
+            ),
             Details(
                 Summary("Filters", cls="advanced-section-summary"),
                 Div(
@@ -367,25 +381,6 @@ async def index(req: Request):
     )
 
     spec_card_children.append(Div(id="spec-validation-result"))
-
-    spec_card_children.append(Div(cls="card-content-spacer"))
-
-    spec_card_children.append(
-        Div(
-            Label(
-                "Upload spec",
-                Input(
-                    type="file",
-                    accept=".yaml,.yml",
-                    id="spec-machine-upload",
-                    cls="hidden-upload",
-                ),
-                cls="upload-btn",
-            ),
-            Span(id="spec-upload-status", cls="spec-upload-status"),
-            cls="card-footer",
-        )
-    )
 
     left_col_children.append(Div(*spec_card_children, cls="bp-card"))
 
@@ -818,7 +813,7 @@ async def index(req: Request):
         Div(
             Button("Generate Documentation", type="submit", id="generate-btn", cls="primary"),
             P("", id="generate-run-message", cls="generate-run-message"),
-            cls="card-footer",
+            cls="card-footer generate-actions",
         )
     )
 
