@@ -727,12 +727,13 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        assert await je._submit_domino_job(req, "/domino/datasets/local/autodoc") is None
+        rid, url = await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+        assert rid == "run-abc"
+        assert url == "https://domino/jobs/run-abc"
         client.submit_job.assert_called_once()
         cmd = client.submit_job.call_args[0][0]
         assert "/domino/datasets/local/autodoc" in cmd
         client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
-        _mock_studio.domino_job_store.create_job.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_raises_when_no_spec(self, _mock_studio):

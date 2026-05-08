@@ -385,6 +385,7 @@ def integration_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DOMINO_API_HOST", "https://domino.test")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
     monkeypatch.setenv("AUTODOC_MAX_JOBS", "2")
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(tmp_path / "domino_datasets"))
 
     import auth_context as _auth_ctx
     from auth_context import User
@@ -509,7 +510,7 @@ class TestJobRoutesIntegration:
         assert resp.json().get("jobs") == []
 
     def test_submit_job_calls_domino(self, client, integration_env):
-        """POST /run submits to Domino; there is no local job store."""
+        """POST /run submits to Domino and records the run for the current user."""
         store = integration_env["store"]
         mock_client = integration_env["domino_client"]
 
@@ -530,7 +531,9 @@ class TestJobRoutesIntegration:
         integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
         integration_env["domino_datasets"].resolve_dataset_mount_path.assert_called_once()
         mock_client.submit_job.assert_called()
-        assert store.get_user_jobs("", "", "integration_user") == []
+        jobs = store.get_user_jobs("proj-integration", "integration_user", limit=50)
+        assert len(jobs) == 1
+        assert jobs[0]["domino_run_id"] == "run-integration"
 
     def test_cancel_queued_jobs(self, client):
         resp = client.post("/cancel-queued-jobs?projectId=proj-integration")

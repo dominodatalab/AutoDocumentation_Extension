@@ -273,7 +273,7 @@ def launch_domino_job_run(
     return run_id, job_url
 
 
-async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> None:
+async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> tuple[str, str]:
     spec_path = (req.spec_path or "").strip()
     mount = (dataset_mount_path or "").strip()
 
@@ -289,7 +289,7 @@ async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> None:
     command_str = _build_job_command_str(req, spec_path, mount)
 
     try:
-        launch_domino_job_run(
+        run_id, job_url = launch_domino_job_run(
             command_str,
             branch=req.branch or None,
             tier_id=_domino_id_str(req.hardware_tier),
@@ -297,6 +297,7 @@ async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> None:
             environment_id=_domino_id_str(req.environment_id),
             environment_revision_id=_domino_id_str(req.environment_revision_id),
         )
+        return run_id, job_url or ""
     except Exception as exc:
         logger.error("Domino job submission failed: %s", exc, exc_info=True)
         raise

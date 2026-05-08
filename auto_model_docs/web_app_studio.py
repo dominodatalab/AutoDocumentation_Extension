@@ -7,6 +7,7 @@ assembles the application.
 
 from __future__ import annotations
 
+import logging
 import os
 import pathlib
 from typing import Optional
@@ -63,6 +64,11 @@ app, rt = fast_app(
         Script(MAIN_DOM_JS),
     )
 )
+
+_log = logging.getLogger(__name__)
+for _k in sorted(os.environ):
+    if "domino" in _k.lower():
+        _log.info("env %s=%s", _k, os.environ[_k])
 
 
 # ---------------------------------------------------------------------------

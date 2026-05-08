@@ -47,11 +47,11 @@ def _error_body(exc: HTTPException) -> str:
     return "Request failed."
 
 
-def _jobs_payload(owner_id: str) -> list:
-    if not owner_id:
+def _jobs_payload(project_id: str, owner_id: str) -> list:
+    if not owner_id or not project_id:
         return []
     try:
-        return domino_job_store.get_user_jobs("", "", owner_id, limit=50)
+        return domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
     except RuntimeError:
         return []
 
@@ -82,11 +82,20 @@ def register_job_routes(rt):
         except HTTPException as e:
             return _json({"error": _error_body(e)}, e.status_code)
         try:
-            await _submit_domino_job(job_request, dataset_mount_path)
+            run_id, job_url = await _submit_domino_job(job_request, dataset_mount_path)
         except ValueError as e:
             return _json({"error": str(e)}, 400)
         except Exception:
             return _json({"error": "Job submission failed. Try again later."}, 500)
+        domino_job_store.record_job(
+            owner_id,
+            job_request.project_id,
+            domino_run_id=run_id,
+            job_url=job_url,
+            branch=(job_request.branch or "").strip(),
+            hardware_tier=(job_request.hardware_tier or "").strip(),
+            spec_path=(job_request.spec_path or "").strip(),
+        )
         return _json({"ok": True}, 200)
 
     rt("/run")(run)
@@ -99,7 +108,7 @@ def register_job_routes(rt):
         if not project_id:
             return _json({"jobs": []})
         require_domino_job_list(project_id)
-        return _json({"jobs": _jobs_payload(owner_id)})
+        return _json({"jobs": _jobs_payload(project_id, owner_id)})
 
     rt("/job-history")(job_history)
 
@@ -111,8 +120,8 @@ def register_job_routes(rt):
         if not project_id:
             return _json({"ok": False, "error": "missing project_id", "jobs": []})
         require_domino_job_list(project_id)
-        domino_job_store.cancel_queued_jobs("", "", owner_id)
-        return _json({"ok": True, "jobs": _jobs_payload(owner_id)})
+        domino_job_store.cancel_queued_jobs(project_id, owner_id)
+        return _json({"ok": True, "jobs": _jobs_payload(project_id, owner_id)})
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
 
