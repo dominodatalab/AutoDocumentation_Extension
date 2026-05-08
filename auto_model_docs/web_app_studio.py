@@ -50,6 +50,8 @@ from studio.routes_job import register_job_routes
 
 from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
 
+from domino_job_store import ensure_database
+
 
 # ---------------------------------------------------------------------------
 # Create FastHTML app with styles and scripts
@@ -69,6 +71,8 @@ _log = logging.getLogger(__name__)
 for _k in sorted(os.environ):
     if "domino" in _k.lower():
         _log.info("env %s=%s", _k, os.environ[_k])
+
+ensure_database()
 
 
 # ---------------------------------------------------------------------------

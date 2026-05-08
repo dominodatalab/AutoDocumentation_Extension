@@ -1,4 +1,4 @@
-"""SQLite-backed job history for Studio (WAL, shared DB under DOMINO_DATASETS_DIR)."""
+"""SQLite-backed job history for Studio (WAL, under DOMINO_DATASETS_DIR / DOMINO_PROJECT_NAME)."""
 
 from __future__ import annotations
 
@@ -14,11 +14,20 @@ logger = logging.getLogger(__name__)
 _ACTIVE_REFRESH_STATUSES = frozenset({"queued", "submitted", "pending", "running"})
 
 
+def _job_db_not_configured_msg() -> str | None:
+    if not (os.environ.get("DOMINO_DATASETS_DIR") or "").strip():
+        return "DOMINO_DATASETS_DIR is not set"
+    if not (os.environ.get("DOMINO_PROJECT_NAME") or "").strip():
+        return "DOMINO_PROJECT_NAME is not set"
+    return None
+
+
 def _db_path() -> Path | None:
     root = (os.environ.get("DOMINO_DATASETS_DIR") or "").strip()
-    if not root:
+    name = (os.environ.get("DOMINO_PROJECT_NAME") or "").strip()
+    if not root or not name:
         return None
-    return Path(root) / "autodoc-extension" / ".data" / "jobs.sqlite"
+    return Path(root) / name / ".data" / "jobs.sqlite"
 
 
 def _connect(db_file: Path) -> sqlite3.Connection:
@@ -67,6 +76,24 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_database() -> None:
+    db_file = _db_path()
+    if db_file is None:
+        msg = _job_db_not_configured_msg()
+        if msg:
+            logger.warning("%s; job database was not created", msg)
+        return
+    try:
+        conn = _connect(db_file)
+        try:
+            _ensure_schema(conn)
+        finally:
+            conn.close()
+        logger.info("Job history database initialized at %s", db_file)
+    except Exception:
+        logger.exception("Failed to initialize job history database at %s", db_file)
+
+
 def _domino_client():
     import domino_client
 
@@ -110,7 +137,9 @@ def record_job(
         return
     db_file = _db_path()
     if db_file is None:
-        logger.warning("DOMINO_DATASETS_DIR is not set; job history not persisted")
+        msg = _job_db_not_configured_msg()
+        if msg:
+            logger.warning("%s; job history not persisted", msg)
         return
     submitted_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     try:

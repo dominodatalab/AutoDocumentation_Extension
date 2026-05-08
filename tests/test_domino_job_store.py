@@ -35,10 +35,21 @@ def test_cancel_queued_jobs_noop():
     store.cancel_queued_jobs("proj", "alice")
 
 
+def test_ensure_database_creates_files(monkeypatch, tmp_path):
+    root = tmp_path / "mnt"
+    root.mkdir()
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+    store.ensure_database()
+    db = root / "studio-app" / ".data" / "jobs.sqlite"
+    assert db.is_file()
+
+
 def test_roundtrip_and_refresh(monkeypatch, tmp_path):
     root = tmp_path / "ds"
     root.mkdir()
     monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
 
     mock_client = MagicMock()
     mock_client.get_job_status.return_value = {"local_status": "succeeded", "domino_status": "Succeeded"}
@@ -64,6 +75,7 @@ def test_no_cross_user_leak(monkeypatch, tmp_path):
     root = tmp_path / "ds"
     root.mkdir()
     monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
     mock_client = MagicMock()
     mock_client.get_job_status.return_value = {"local_status": "running", "domino_status": "Running"}
     monkeypatch.setattr(store, "_domino_client", lambda: mock_client)

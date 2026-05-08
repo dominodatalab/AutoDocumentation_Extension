@@ -386,6 +386,7 @@ def integration_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
     monkeypatch.setenv("AUTODOC_MAX_JOBS", "2")
     monkeypatch.setenv("DOMINO_DATASETS_DIR", str(tmp_path / "domino_datasets"))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "autodoc-extension")
 
     import auth_context as _auth_ctx
     from auth_context import User
