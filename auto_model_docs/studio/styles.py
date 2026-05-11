@@ -190,6 +190,17 @@ a:hover { color: var(--primary-container); }
 .studio-page-insight .insight-card {
     margin-top: 0;
 }
+.studio-errors-panel {
+    display: none;
+    width: 100%;
+    margin-top: 0.75rem;
+}
+.studio-errors-panel.studio-errors-panel--visible {
+    display: block;
+}
+.studio-errors-panel .spec-validation-error + .spec-validation-error {
+    margin-top: 0.5rem;
+}
 .hero {
     padding: 0.25rem 0 1rem 0;
 }

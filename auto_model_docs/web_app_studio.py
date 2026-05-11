@@ -397,8 +397,6 @@ async def index(req: Request):
         )
     )
 
-    spec_card_children.append(Div(id="spec-validation-result"))
-
     left_col_children.append(Div(*spec_card_children, cls="bp-card"))
 
     # MIDDLE COLUMN: Configuration & Run
@@ -884,6 +882,7 @@ async def index(req: Request):
                     ),
                     cls="insight-card",
                 ),
+                Div(id="studio-errors-panel", cls="studio-errors-panel"),
                 cls="studio-page-insight",
             ),
             *_render_warnings_banner(_STARTUP_WARNINGS),

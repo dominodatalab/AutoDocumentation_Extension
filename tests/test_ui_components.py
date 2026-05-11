@@ -337,9 +337,19 @@ class TestStudioPageInsightBanner:
     def test_insight_card_is_single_full_width_banner_before_grid(self):
         root = Path(__file__).resolve().parent.parent
         src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
         assert src.count('cls="insight-card"') == 1
         assert "studio-page-insight" in src
         assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
+        assert 'id="studio-errors-panel"' in src
+        assert src.index('cls="insight-card"') < src.index('id="studio-errors-panel"')
+        assert "spec-validation-result" not in src
+        assert "function setStudioErrorSlot" in scripts
+        assert "function clearAllStudioErrors" in scripts
+        assert "_studioErrorSlotOrder" in scripts
+        assert "studio-errors-panel--visible" in scripts
+        assert ".studio-errors-panel" in styles
 
 
 class TestInfoTooltipLayer:

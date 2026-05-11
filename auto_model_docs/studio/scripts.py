@@ -39,6 +39,56 @@ MAIN_DOM_JS = r"""
 
     document.addEventListener('DOMContentLoaded', function() {
 
+        function _studioEscapeHtml(s) {
+            var t = document.createElement('textarea');
+            t.textContent = s == null ? '' : String(s);
+            return t.innerHTML;
+        }
+        var _studioErrorSlotOrder = ['datasets', 'files', 'codeRoot', 'language', 'envRevisions', 'jobHistory', 'cancelQueued', 'upload', 'spec', 'generate'];
+        var _studioErrorSlots = {};
+        function clearAllStudioErrors() {
+            _studioErrorSlots = {};
+            _studioReflowErrorPanel();
+        }
+        function setStudioErrorSlot(key, block) {
+            if (!key) return;
+            if (!block) {
+                delete _studioErrorSlots[key];
+            } else {
+                var items = block.items || [];
+                if (typeof items === 'string') items = [items];
+                if (!items.length) {
+                    delete _studioErrorSlots[key];
+                } else {
+                    _studioErrorSlots[key] = { title: block.title || 'Error', items: items };
+                }
+            }
+            _studioReflowErrorPanel();
+        }
+        function _studioReflowErrorPanel() {
+            var panel = document.getElementById('studio-errors-panel');
+            if (!panel) return;
+            var html = '';
+            var ki;
+            for (ki = 0; ki < _studioErrorSlotOrder.length; ki++) {
+                var slotKey = _studioErrorSlotOrder[ki];
+                var b = _studioErrorSlots[slotKey];
+                if (!b) continue;
+                var lis = '';
+                var ii;
+                for (ii = 0; ii < b.items.length; ii++) {
+                    lis += '<li>' + _studioEscapeHtml(b.items[ii]) + '</li>';
+                }
+                html += '<div class="spec-validation-error"><span class="spec-selected-value">' + _studioEscapeHtml(b.title) + '</span><ul class="spec-validation-error-list">' + lis + '</ul></div>';
+            }
+            panel.innerHTML = html;
+            if (html) {
+                panel.classList.add('studio-errors-panel--visible');
+            } else {
+                panel.classList.remove('studio-errors-panel--visible');
+            }
+        }
+
         (function() {
             var tip = document.createElement('div');
             tip.id = 'studio-info-tooltip';
@@ -147,6 +197,7 @@ MAIN_DOM_JS = r"""
             fetch(url)
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(data) {
+                    setStudioErrorSlot('language', null);
                     if (langRow) langRow.style.display = '';
                     if (data.language) {
                         if (langName) langName.textContent = data.display_name;
@@ -162,7 +213,9 @@ MAIN_DOM_JS = r"""
                         }
                     }
                 })
-                .catch(function() {});
+                .catch(function(err) {
+                    setStudioErrorSlot('language', { title: 'Language detection', items: [err && err.message ? err.message : 'Could not detect languages for this code root.'] });
+                });
         }
 
         window.handleLanguageOverride = function(lang) {
@@ -184,6 +237,7 @@ MAIN_DOM_JS = r"""
             var cr = document.getElementById('field-code_root');
             var val = cr ? (cr.value || '').trim() : '';
             if (!val) {
+                setStudioErrorSlot('language', null);
                 if (langRow) langRow.style.display = 'none';
                 if (langName) langName.textContent = '';
                 if (langCount) langCount.textContent = '';
@@ -226,16 +280,21 @@ MAIN_DOM_JS = r"""
             var slot = document.getElementById('environment-revision-slot');
             if (!slot) return;
             if (!envId) {
+                setStudioErrorSlot('envRevisions', null);
                 slot.innerHTML = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">'
                     + '<option value="" selected disabled>(select environment first)</option></select>';
                 return;
             }
             var pid = resolvedProjectId();
-            if (!pid) return;
+            if (!pid) {
+                setStudioErrorSlot('envRevisions', { title: 'Environment revisions', items: ['Add projectId to the URL to load revisions.'] });
+                return;
+            }
             var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
                 + '&environmentId=' + encodeURIComponent(envId);
             fetch(url).then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(revs) {
+                    setStudioErrorSlot('envRevisions', null);
                     var html = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">';
                     if (!revs || !revs.length) {
                         html += '<option value="" selected disabled>(no revisions)</option>';
@@ -248,7 +307,9 @@ MAIN_DOM_JS = r"""
                     html += '</select>';
                     slot.innerHTML = html;
                 })
-                .catch(function() {});
+                .catch(function(err) {
+                    setStudioErrorSlot('envRevisions', { title: 'Environment revisions', items: [err && err.message ? err.message : 'Could not load revisions for the selected environment.'] });
+                });
         };
 
         function queryApiDatasets() {
@@ -278,6 +339,7 @@ MAIN_DOM_JS = r"""
             var pid = resolvedProjectId();
             if (!pid) {
                 specDatasetSelect.innerHTML = '<option value="">Set a project ID first</option>';
+                setStudioErrorSlot('datasets', { title: 'Project required', items: ['Add projectId to the URL to load datasets.'] });
                 return;
             }
             console.log('[spec-browser] Loading writable datasets...');
@@ -287,6 +349,7 @@ MAIN_DOM_JS = r"""
                     if (datasets.error) {
                         console.error('[spec-browser] Error loading datasets:', datasets.error);
                         specDatasetSelect.innerHTML = '<option value="">Error: ' + datasets.error + '</option>';
+                        setStudioErrorSlot('datasets', { title: 'Could not load datasets', items: [String(datasets.error)] });
                         return;
                     }
                     _specDatasets = datasets;
@@ -294,8 +357,10 @@ MAIN_DOM_JS = r"""
                     if (datasets.length === 0) {
                         specDatasetSelect.innerHTML = '<option value="">No datasets found</option>';
                         console.warn('[spec-browser] No writable datasets returned');
+                        setStudioErrorSlot('datasets', { title: 'Datasets', items: ['No writable datasets found for this project.'] });
                         return;
                     }
+                    setStudioErrorSlot('datasets', null);
                     var html = '';
                     for (var i = 0; i < datasets.length; i++) {
                         html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
@@ -319,6 +384,7 @@ MAIN_DOM_JS = r"""
                 .catch(function(err) {
                     console.error('[spec-browser] Failed to load datasets:', err);
                     specDatasetSelect.innerHTML = '<option value="">Failed to load datasets</option>';
+                    setStudioErrorSlot('datasets', { title: 'Could not load datasets', items: [err && err.message ? err.message : 'Request failed'] });
                 });
         }
 
@@ -332,8 +398,7 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
             if (specPathField) specPathField.value = '';
-            var svm = document.getElementById('spec-validation-msg');
-            if (svm) svm.remove();
+            clearAllStudioErrors();
             if (_specCurrentDatasetId) {
                 browseFiles('');
             } else {
@@ -371,11 +436,14 @@ MAIN_DOM_JS = r"""
                         if (files && files.error) {
                             console.error('[spec-browser] File listing error:', files.error);
                             specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
+                            setStudioErrorSlot('files', { title: 'Could not list files', items: [String(files.error)] });
                         } else {
                             specFileList.innerHTML = '<span class="spec-file-empty">Unexpected response from server</span>';
+                            setStudioErrorSlot('files', { title: 'Could not list files', items: ['Unexpected response from server'] });
                         }
                         return;
                     }
+                    setStudioErrorSlot('files', null);
                     console.log('[spec-browser] Found ' + files.length + ' items at path:', path || '(root)');
                     if (files.length === 0) {
                         var emptyMsg = 'No YAML files found in this location';
@@ -425,6 +493,7 @@ MAIN_DOM_JS = r"""
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
+                    setStudioErrorSlot('files', { title: 'Could not list files', items: [err && err.message ? err.message : 'Request failed'] });
                 })
                 .finally(function() {
                     if (specFileList && _specBrowseAbort === ctrl) {
@@ -500,9 +569,12 @@ MAIN_DOM_JS = r"""
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
+                    setStudioErrorSlot('upload', { title: 'Upload', items: ['Select a dataset first'] });
                     if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                     return;
                 }
+                setStudioErrorSlot('upload', null);
+                setStudioErrorSlot('spec', null);
                 var qs = queryApiDatasets();
                 var fd = new FormData();
                 fd.append('datasetId', uploadDsId);
@@ -515,24 +587,24 @@ MAIN_DOM_JS = r"""
                         });
                     })
                     .then(function(o) {
-                        var resultEl = document.getElementById('spec-validation-result');
                         if (!o.ok) {
-                            if (o.j && o.j.errors && o.j.errors.length && resultEl) {
-                                var verr = o.j.errors.map(function(e) { return '<li>' + e + '</li>'; }).join('');
-                                resultEl.innerHTML = '<div class="spec-validation-error">'
-                                    + '<span class="spec-selected-value">Spec validation failed</span>'
-                                    + '<ul class="spec-validation-error-list">' + verr + '</ul>'
-                                    + '</div>';
-                            } else if (resultEl) {
-                                resultEl.innerHTML = '';
+                            var em;
+                            if (o.j && o.j.errors && o.j.errors.length) {
+                                var errItems = o.j.errors.map(function(x) { return String(x); });
+                                setStudioErrorSlot('spec', { title: 'Spec validation failed', items: errItems });
+                                em = (o.j && o.j.error) ? o.j.error : 'Spec validation failed';
+                            } else {
+                                var em0 = (o.j && o.j.error) ? o.j.error : 'Upload failed';
+                                setStudioErrorSlot('upload', { title: 'Upload failed', items: [em0] });
+                                em = em0;
                             }
-                            var em = (o.j && o.j.error) ? o.j.error : 'Upload failed';
                             if (specUploadStatus) { specUploadStatus.textContent = em; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                             var ev = new Error(em);
                             ev._uploadUiDone = true;
                             throw ev;
                         }
-                        if (resultEl) resultEl.innerHTML = '<span class="spec-validation-success">Spec is valid</span>';
+                        setStudioErrorSlot('upload', null);
+                        setStudioErrorSlot('spec', null);
                         var result = o.j;
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
@@ -555,6 +627,7 @@ MAIN_DOM_JS = r"""
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
                         if (err._uploadUiDone) return;
+                        setStudioErrorSlot('upload', { title: 'Upload failed', items: [err.message] });
                         if (specUploadStatus) {
                             specUploadStatus.textContent = 'Upload failed: ' + err.message;
                             specUploadStatus.className = 'spec-upload-status spec-validation-empty';
@@ -639,8 +712,10 @@ MAIN_DOM_JS = r"""
                 const sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
                 hidden.value = sub ? base + '/' + sub : base;
             }
-            function showCodeRootError() {
+            function showCodeRootError(detail) {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
+                var msg = detail ? String(detail) : 'Could not load source code roots for this project.';
+                setStudioErrorSlot('codeRoot', { title: 'Source code root', items: [msg] });
                 prefix.innerHTML = '';
                 var opt = document.createElement('option');
                 opt.value = '';
@@ -656,6 +731,7 @@ MAIN_DOM_JS = r"""
             }
             function showCodeRootLoading() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
+                setStudioErrorSlot('codeRoot', null);
                 prefix.innerHTML = '';
                 var opt = document.createElement('option');
                 opt.value = '';
@@ -671,16 +747,17 @@ MAIN_DOM_JS = r"""
             function loadCodeRootOptions() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
                 var pid = new URLSearchParams(window.location.search).get('projectId');
-                if (!pid) { showCodeRootError(); return; }
+                if (!pid) { showCodeRootError('Add projectId to the page URL.'); return; }
                 showCodeRootLoading();
                 var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
                 fetch(url)
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data && data.error) { showCodeRootError(); return; }
+                        if (data && data.error) { showCodeRootError(data.error); return; }
                         var opts = (data && data.options) || [];
                         var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
-                        if (!opts.length) { showCodeRootError(); return; }
+                        if (!opts.length) { showCodeRootError('No source code roots returned for this project.'); return; }
+                        setStudioErrorSlot('codeRoot', null);
                         prefix.classList.remove('code-root-error');
                         prefix.classList.remove('code-root-loading');
                         prefix.innerHTML = '';
@@ -704,7 +781,7 @@ MAIN_DOM_JS = r"""
                         sync();
                         detectLanguageFromCodeRoot();
                     })
-                    .catch(function() { showCodeRootError(); });
+                    .catch(function() { showCodeRootError('Request to load source code roots failed.'); });
             }
             if (suffix) {
                 suffix.addEventListener('input', sync);
@@ -827,8 +904,13 @@ MAIN_DOM_JS = r"""
                     e.preventDefault();
                     fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
                         .then(_checkResp).then(function(r) { return r.json(); })
-                        .then(function(data) { renderJobHistory(data.jobs || []); })
-                        .catch(function() {});
+                        .then(function(data) {
+                            setStudioErrorSlot('cancelQueued', null);
+                            renderJobHistory(data.jobs || []);
+                        })
+                        .catch(function(err) {
+                            setStudioErrorSlot('cancelQueued', { title: 'Cancel queued jobs', items: [err && err.message ? err.message : 'Request failed'] });
+                        });
                 });
             }
         }
@@ -836,8 +918,13 @@ MAIN_DOM_JS = r"""
         function fetchJobHistory() {
             fetch(_adUrl('job-history') + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) { renderJobHistory(data.jobs || []); })
-                .catch(function() {});
+                .then(function(data) {
+                    setStudioErrorSlot('jobHistory', null);
+                    renderJobHistory(data.jobs || []);
+                })
+                .catch(function(err) {
+                    setStudioErrorSlot('jobHistory', { title: 'Job history', items: [err && err.message ? err.message : 'Could not load job history'] });
+                });
         }
 
         // Poll job history every 10 seconds
@@ -891,23 +978,10 @@ MAIN_DOM_JS = r"""
                 var hasSpec = specPath && specPath.value.trim();
                 if (!hasSpec) {
                     var msg = 'Please select or upload a spec file before generating documentation.';
-                    var existing = document.getElementById('spec-validation-msg');
-                    if (!existing) {
-                        var indicator = document.getElementById('spec-selected-indicator');
-                        if (indicator) {
-                            var msgEl = document.createElement('div');
-                            msgEl.id = 'spec-validation-msg';
-                            msgEl.className = 'spec-validation-msg';
-                            msgEl.textContent = msg;
-                            indicator.parentNode.insertBefore(msgEl, indicator.nextSibling);
-                        } else {
-                            alert(msg);
-                        }
-                    }
+                    setStudioErrorSlot('generate', { title: 'Spec file required', items: [msg] });
                     return;
                 }
-                var existingMsg = document.getElementById('spec-validation-msg');
-                if (existingMsg) existingMsg.remove();
+                setStudioErrorSlot('generate', null);
 
                 var rawSpec = (specPath && specPath.value || '').trim();
                 var resolvedSpec = rawSpec;
@@ -949,10 +1023,12 @@ MAIN_DOM_JS = r"""
                             } catch (e) {}
                             if (!r.ok) {
                                 var err = (data && data.error) ? data.error : ('Request failed (' + r.status + ')');
-                                setRunMessage(err, true);
+                                setRunMessage('', false);
+                                setStudioErrorSlot('generate', { title: 'Could not start job', items: [err] });
                                 throw new Error(err);
                             }
                             setRunMessage('', false);
+                            setStudioErrorSlot('generate', null);
                             return data;
                         });
                     })
