@@ -716,7 +716,15 @@ input[type="file"] {
     background: var(--primary-fixed);
     color: var(--primary-active);
 }
-.spec-file-icon { flex-shrink: 0; width: 18px; text-align: center; }
+.spec-file-icon { flex-shrink: 0; width: 1.125rem; text-align: center; }
+.spec-file-item .fa-icon {
+    font-size: 14px;
+    line-height: 1;
+    color: var(--surface-dim);
+}
+.spec-file-item.selected .fa-icon {
+    color: var(--primary-active);
+}
 .spec-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spec-file-size { color: var(--outline); font-size: 12px; flex-shrink: 0; }
 .spec-file-empty {

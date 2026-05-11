@@ -382,7 +382,7 @@ MAIN_DOM_JS = r"""
                         var pPath = specParentPath(path);
                         if (pPath !== null) {
                             var up = '<div class="spec-file-item spec-file-parent" data-path="' + pPath + '" data-dir="true" data-name=".." data-parent="true">'
-                                + '<span class="spec-file-icon">\ud83d\udcc1</span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
+                                + '<span class="fa-icon fa-folder-open spec-file-icon"></span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
                             specFileList.innerHTML = up + '<span class="spec-file-empty">' + emptyMsg + '</span>';
                             var upEl = specFileList.querySelector('.spec-file-parent');
                             if (upEl) upEl.addEventListener('click', onFileClick);
@@ -395,7 +395,7 @@ MAIN_DOM_JS = r"""
                     var parentPath = specParentPath(path);
                     if (parentPath !== null) {
                         html += '<div class="spec-file-item spec-file-parent" data-path="' + parentPath + '" data-dir="true" data-name=".." data-parent="true">'
-                            + '<span class="spec-file-icon">\ud83d\udcc1</span>'
+                            + '<span class="fa-icon fa-folder-open spec-file-icon"></span>'
                             + '<span class="spec-file-name">..</span>'
                             + '<span class="spec-file-size"></span></div>';
                     }
@@ -406,11 +406,11 @@ MAIN_DOM_JS = r"""
                     });
                     for (var i = 0; i < files.length; i++) {
                         var f = files[i];
-                        var icon = f.isDirectory ? '\ud83d\udcc1' : '\ud83d\udcc4';
+                        var iconClass = f.isDirectory ? 'fa-icon fa-folder-open spec-file-icon' : 'fa-icon fa-file-lines spec-file-icon';
                         var size = f.isDirectory ? '' : formatBytes(f.sizeInBytes || 0);
                         var fullPath = path ? path + '/' + f.fileName : f.fileName;
                         html += '<div class="spec-file-item" data-path="' + fullPath + '" data-dir="' + f.isDirectory + '" data-name="' + f.fileName + '">'
-                            + '<span class="spec-file-icon">' + icon + '</span>'
+                            + '<span class="' + iconClass + '"></span>'
                             + '<span class="spec-file-name">' + f.fileName + '</span>'
                             + '<span class="spec-file-size">' + size + '</span>'
                             + '</div>';
