@@ -128,9 +128,9 @@ def record_job(
     *,
     domino_run_id: str,
     job_url: str,
-    branch: str,
     hardware_tier: str,
     spec_path: str,
+    branch: str = "",
     status: str = "submitted",
 ) -> None:
     if not owner_id or not project_id or not domino_run_id:

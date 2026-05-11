@@ -111,9 +111,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     # Mock domino_client
     mock_client = MagicMock()
-    mock_client.list_branches_api.return_value = [
-        {"name": "main"}, {"name": "develop"},
-    ]
     mock_client.list_hardware_tiers.return_value = [
         {"id": "small", "name": "Small", "isDefault": True},
     ]
@@ -187,7 +184,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         filtered_model_names: str = ""
         latest_only: bool = False
         verbose: bool = True
-        branch: str = ""
         hardware_tier: str = ""
         environment_id: str = ""
         environment_revision_id: str = ""
@@ -462,12 +458,6 @@ class TestApiRoutesIntegration:
     def test_download_template(self, client):
         resp = client.get("/api/download-template")
         assert resp.status_code == 200
-
-    def test_branches(self, client, integration_env):
-        resp = client.get("/api/branches?projectId=proj-integration")
-        assert resp.status_code == 200
-        body = resp.text
-        assert "main" in body
 
     def test_hardware_tiers(self, client):
         resp = client.get("/api/hardware-tiers?projectId=proj-integration")

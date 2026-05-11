@@ -53,8 +53,6 @@ from studio.font_assets import (
 from studio.routes_api import register_api_routes
 from studio.routes_job import register_job_routes
 
-from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
-
 from domino_job_store import ensure_database
 
 
@@ -208,14 +206,7 @@ async def index(req: Request):
         owner_id = auth_context.get_viewing_user().id
     except Exception:
         owner_id = ""
-    branch_options = []
     tier_options = []
-    if project_id:
-        try:
-            _branches_raw = domino_client.list_branches_api(project_id)
-            branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
-        except Exception:
-            pass
     try:
         tier_rows = domino_client.list_hardware_tiers(project_id=project_id) or []
         default_tier = domino_client.get_project_default_tier()
@@ -487,41 +478,6 @@ async def index(req: Request):
         )
     )
 
-    # Branch
-    if branch_options:
-        branch_input = Select(*branch_options, name="branch", id="field-branch")
-    else:
-        branch_input = Input(name="branch", id="field-branch", type="text", value="", placeholder="Default branch")
-    run_card_children.append(
-        Div(
-            Div(
-                Label("Branch (Main Repository Only)", for_="field-branch"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use the project's default branch. Imported repositories are not affected.."),
-                cls="label-row",
-            ),
-            branch_input,
-            cls="field",
-        )
-    )
-    _lang_opts = [
-        Option("Auto-detect", value="auto", selected=True),
-        *[Option(LANGUAGE_PROFILES[k].display_name, value=k) for k in LANGUAGE_PRIORITY],
-    ]
-    run_card_children.append(
-        Div(
-            Div(
-                Label("Programming language", for_="field-language"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Same choices as the CLI --language flag. Auto-detect picks python, r, sas, or matlab from files under code root.",
-                ),
-                cls="label-row",
-            ),
-            Select(*_lang_opts, name="language", id="field-language"),
-            cls="field",
-        )
-    )
     run_card_children.append(
         Div(
             Div(

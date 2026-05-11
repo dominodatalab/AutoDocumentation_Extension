@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from starlette.requests import Request
 
@@ -139,8 +139,6 @@ async def _parse_request(req: Request) -> JobRequest:
     _model = _form_str(body, "model").strip()
     if not _model:
         raise RuntimeError("model is required in the JSON body")
-    _lang_raw = (_form_str(body, "language") or DEFAULT_LANGUAGE).strip().lower()
-    _language = _lang_raw if _lang_raw in ALLOWED_LANGUAGES else DEFAULT_LANGUAGE
 
     notebook = _checkbox_truthy(body.get("notebook"))
     notebook_path = _form_str(body, "notebook_path")
@@ -164,13 +162,12 @@ async def _parse_request(req: Request) -> JobRequest:
         filtered_model_names=_form_str(body, "filtered_model_names"),
         latest_only=_checkbox_truthy(body.get("latest_only")),
         verbose=_checkbox_truthy(body.get("verbose")),
-        branch=_form_str(body, "branch"),
         hardware_tier=_form_str(body, "hardware_tier"),
         environment_id=_form_str(body, "environment_id"),
         environment_revision_id=_form_str(body, "environment_revision_id"),
         project_id=project_id,
         provider_base_url=_form_str(body, "provider_base_url"),
-        language=_language,
+        language=DEFAULT_LANGUAGE,
         max_retries=_form_int(body, "max_retries", DEFAULT_LLM_MAX_RETRIES),
         initial_backoff=_form_float(body, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
         max_backoff=_form_float(body, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
@@ -255,7 +252,6 @@ def _build_job_command_str(req: JobRequest, spec_path: str, dataset_path: str = 
 def launch_domino_job_run(
     command_str: str,
     *,
-    branch: Optional[str] = None,
     tier_id: str,
     project_id: str,
     environment_id: str,
@@ -263,7 +259,7 @@ def launch_domino_job_run(
 ) -> tuple[str, str]:
     run_id = domino_client.submit_job(
         command_str,
-        branch=branch,
+        branch=None,
         tier_id=tier_id,
         project_id=project_id,
         environment_id=environment_id,
@@ -291,7 +287,6 @@ async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> tuple[
     try:
         run_id, job_url = launch_domino_job_run(
             command_str,
-            branch=req.branch or None,
             tier_id=_domino_id_str(req.hardware_tier),
             project_id=_domino_id_str(req.project_id),
             environment_id=_domino_id_str(req.environment_id),

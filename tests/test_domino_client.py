@@ -391,7 +391,6 @@ def _make_job_request(**overrides) -> Any:
         filtered_model_names="",
         latest_only=False,
         verbose=True,
-        branch="main",
         hardware_tier="small",
         environment_id="",
         environment_revision_id="",

@@ -189,7 +189,6 @@ MAIN_DOM_JS = r"""
         var langCount = document.getElementById('lang-detected-count');
         var langInput = document.getElementById('field-detected-language');
         var langSelect = document.getElementById('lang-override-select');
-        var langFieldMain = document.getElementById('field-language');
 
         function detectLanguage(codeRoot) {
             var url = _adUrl('api/detect-language');
@@ -220,18 +219,9 @@ MAIN_DOM_JS = r"""
 
         window.handleLanguageOverride = function(lang) {
             if (langInput) langInput.value = lang === 'auto' ? 'python' : lang;
-            if (langFieldMain) langFieldMain.value = lang;
             var cr = document.getElementById('field-code_root');
             detectLanguage(cr ? cr.value : undefined);
         };
-
-        if (langFieldMain) {
-            langFieldMain.addEventListener('change', function() {
-                var v = this.value || 'auto';
-                if (langInput) langInput.value = v === 'auto' ? 'python' : v;
-                if (langSelect) langSelect.value = v;
-            });
-        }
 
         function detectLanguageFromCodeRoot() {
             var cr = document.getElementById('field-code_root');
@@ -954,12 +944,10 @@ MAIN_DOM_JS = r"""
                 filtered_model_names: val('field-filtered_model_names'),
                 latest_only: chk('field-latest_only'),
                 verbose: chk('field-verbose'),
-                branch: val('field-branch'),
                 hardware_tier: val('field-hardware_tier'),
                 environment_id: val('field-environment_id'),
                 environment_revision_id: val('field-environment_revision_id'),
                 provider_base_url: val('field-provider_base_url'),
-                language: val('field-language'),
                 max_retries: val('field-max_retries'),
                 initial_backoff: val('field-initial_backoff'),
                 max_backoff: val('field-max_backoff'),

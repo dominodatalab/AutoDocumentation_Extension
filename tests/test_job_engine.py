@@ -41,7 +41,6 @@ class JobRequest:
     filtered_model_names: str
     latest_only: bool
     verbose: bool
-    branch: str
     hardware_tier: str
     environment_id: str
     environment_revision_id: str
@@ -70,7 +69,6 @@ _JR_DEFAULTS = {
     "filtered_model_names": "",
     "latest_only": False,
     "verbose": False,
-    "branch": "",
     "hardware_tier": "tier-default",
     "environment_id": "env-default",
     "environment_revision_id": "rev-default",
@@ -353,7 +351,7 @@ async def test_parse_request_language_defaults_to_auto_when_missing():
 
 
 @pytest.mark.asyncio
-async def test_parse_request_language_allowed_and_invalid():
+async def test_parse_request_language_always_auto_ignores_body():
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
@@ -367,7 +365,7 @@ async def test_parse_request_language_allowed_and_invalid():
         }
     )
     jr = await je._parse_request(req)
-    assert jr.language == "sas"
+    assert jr.language == "auto"
 
     req.json = AsyncMock(
         return_value={

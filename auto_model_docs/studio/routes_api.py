@@ -1,4 +1,4 @@
-"""API routes: branches, hardware tiers, language detection, datasets, etc."""
+"""API routes: hardware tiers, language detection, datasets, etc."""
 
 from __future__ import annotations
 
@@ -38,20 +38,6 @@ def sanitize_dataset_subpath(raw: Optional[str]) -> str:
 
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
-
-    async def api_branches(req: Request):
-        project_id = _resolve_request_project_id(req)
-        search = req.query_params.get("search", "")
-        if project_id:
-            branches = domino_client.list_branches_api(project_id, search=search)
-            if branches:
-                return Response(
-                    json.dumps([{"name": b["name"], "value": b["name"]} for b in branches]),
-                    media_type="application/json",
-                )
-        return Response(json.dumps([]), media_type="application/json")
-
-    rt("/api/branches")(api_branches)
 
     async def api_hardware_tiers(req: Request):
         project_id = _resolve_request_project_id(req)

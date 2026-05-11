@@ -92,7 +92,6 @@ def register_job_routes(rt):
             job_request.project_id,
             domino_run_id=run_id,
             job_url=job_url,
-            branch=(job_request.branch or "").strip(),
             hardware_tier=(job_request.hardware_tier or "").strip(),
             spec_path=(job_request.spec_path or "").strip(),
         )

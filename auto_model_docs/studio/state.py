@@ -88,7 +88,6 @@ class JobRequest:
     filtered_model_names: str
     latest_only: bool
     verbose: bool
-    branch: str
     hardware_tier: str
     environment_id: str
     environment_revision_id: str

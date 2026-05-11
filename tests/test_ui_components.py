@@ -263,8 +263,8 @@ class TestValidateEnvironment:
 class TestFieldId:
     def test_prefix(self):
         ui = _import_ui()
-        assert ui._field_id("branch") == "field-branch"
         assert ui._field_id("model") == "field-model"
+        assert ui._field_id("hardware_tier") == "field-hardware_tier"
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +383,8 @@ class TestSpecFileBrowserUi:
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
         assert "runJobJsonPayloadFromMainForm" in scripts
+        assert "lang-override-select" in scripts
+        assert "field-language" not in scripts
         assert 'Summary("Advanced settings"' in web
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web

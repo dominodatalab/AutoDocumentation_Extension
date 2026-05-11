@@ -43,7 +43,6 @@ class _MockJobRequest:
     filtered_model_names: str = ""
     latest_only: bool = False
     verbose: bool = True
-    branch: str = ""
     hardware_tier: str = ""
     environment_id: str = ""
     environment_revision_id: str = ""
@@ -304,38 +303,6 @@ def _register(mod, register_fn_name="register_api_routes"):
 
 class TestApiRoutes:
     @pytest.mark.asyncio
-    async def test_branches_returns_json_when_available(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        client = _mock_studio_modules["state"].domino_client
-        client.list_branches_api.return_value = [{"name": "main"}, {"name": "develop"}]
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/api/branches"](req)
-        client.list_branches_api.assert_called_once_with("proj-123", search="")
-        body = json.loads(result.body)
-        assert isinstance(body, list)
-        assert any(b["name"] == "main" for b in body)
-
-    @pytest.mark.asyncio
-    async def test_branches_returns_empty_list_when_no_branches(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        _mock_studio_modules["state"].domino_client.list_branches_api.return_value = []
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/api/branches"](req)
-        body = json.loads(result.body)
-        assert body == []
-
-    @pytest.mark.asyncio
-    async def test_branches_returns_empty_list_when_no_project_id(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        req = _make_request(query_params={})
-        result = await routes["/api/branches"](req)
-        body = json.loads(result.body)
-        assert body == []
-
-    @pytest.mark.asyncio
     async def test_hardware_tiers_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
@@ -551,7 +518,6 @@ class TestJobRoutes:
             "proj-123",
             domino_run_id="run-mock",
             job_url="https://jobs.example/run-mock",
-            branch="",
             hardware_tier="tier-small",
             spec_path="/spec.yaml",
         )
