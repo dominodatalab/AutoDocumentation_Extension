@@ -122,6 +122,20 @@ def _fontawesome_faces_css_for_base(font_dir_base: str) -> str:
     font-display: block;
     src: url("UA") format("opentype");
 }
+body::before {
+    content: "\\f059";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 300;
+    font-style: normal;
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    pointer-events: none;
+}
 """
         .replace("U1", u("fa-pro-thin-100"))
         .replace("U2", u("fa-pro-light-300"))

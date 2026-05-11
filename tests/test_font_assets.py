@@ -81,6 +81,8 @@ def test_font_face_css_contains_urls(fh_app):
     css = fontawesome_faces_css(Request(scope))
     assert "/apps/z/studio-static/fontawesome/fa-pro-light-300" in css
     assert ".otf" not in css
+    assert "body::before" in css
+    assert "Font Awesome 6 Pro" in css
 
 
 def test_serve_font_otf(fh_app):
@@ -89,3 +91,14 @@ def test_serve_font_otf(fh_app):
     assert r.status_code == 200
     assert r.content[:4] == b"OTTO"
     assert c.get("/studio-static/fontawesome/unknown").status_code == 404
+
+
+def test_studio_css_uses_fontawesome_only():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    css = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+    assert "fonts.googleapis.com" not in css
+    assert "Material+Symbols" not in css
+    assert '"Font Awesome 6 Pro"' in css or "'Font Awesome 6 Pro'" in css
+    assert ".fa-icon" in css

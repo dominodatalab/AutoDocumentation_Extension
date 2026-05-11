@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 STUDIO_CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
-
 :root {
     /* Primary palette */
     --primary: #543fde;
@@ -54,9 +51,8 @@ STUDIO_CSS = """
     --info: #0070CC;
     --info-container: #e8f1fb;
 
-    /* Typography */
-    --font-headline: 'Inter', 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    --font-body: 'Inter', 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-headline: "Font Awesome 6 Pro";
+    --font-body: "Font Awesome 6 Pro";
 
     /* Ambient shadows */
     --shadow-sm: 0 1px 2px rgba(46, 46, 56, 0.04), 0 8px 24px rgba(46, 46, 56, 0.04);
@@ -87,7 +83,7 @@ h1, h2, h3, h4 {
     font-family: var(--font-headline);
     color: var(--on-surface);
     margin: 0;
-    font-weight: 700;
+    font-weight: 900;
 }
 
 a {
@@ -97,11 +93,22 @@ a {
 }
 a:hover { color: var(--primary-container); }
 
-/* Material icon baseline */
-.material-symbols-outlined {
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+.fa-icon {
+    font-family: "Font Awesome 6 Pro";
+    font-style: normal;
+    font-weight: 300;
+    font-variant: normal;
+    line-height: 1;
+    display: inline-block;
     vertical-align: middle;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
 }
+.fa-icon::before {
+    display: inline-block;
+}
+.fa-folder-open::before { content: "\\f07c"; }
+.fa-file-lines::before { content: "\\f15c"; }
 
 /* ── Header ───────────────────────────────────────────────────────── */
 .domino-header {
@@ -721,7 +728,6 @@ input[type="file"] {
 .spec-file-empty-icon {
     font-size: 1.75rem;
     color: var(--surface-dim);
-    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
 .spec-actions-row {
     display: flex;

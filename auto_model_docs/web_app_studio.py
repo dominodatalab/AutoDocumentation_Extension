@@ -311,7 +311,7 @@ async def index(req: Request):
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),           
             Div(
                 Div(
-                    Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span(cls="fa-icon fa-folder-open spec-file-empty-icon"),
                     Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
                     cls="spec-file-empty",
                 ),
@@ -844,7 +844,7 @@ async def index(req: Request):
         Div(
             Div(
                 Div(
-                    Span("description", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span(cls="fa-icon fa-file-lines spec-file-empty-icon"),
                     Span("No autodocs generated yet.", cls="spec-file-list-empty"),
                     cls="spec-file-empty",
                 ),

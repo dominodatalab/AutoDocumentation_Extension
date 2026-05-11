@@ -780,7 +780,7 @@ MAIN_DOM_JS = r"""
             }
 
             if (!jobs || !jobs.length) {
-                el.innerHTML = '<div class="spec-file-empty"><span class="material-symbols-outlined spec-file-empty-icon">description</span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
+                el.innerHTML = '<div class="spec-file-empty"><span class="fa-icon fa-file-lines spec-file-empty-icon"></span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
                 return;
             }
 
