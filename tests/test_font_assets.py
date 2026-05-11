@@ -70,8 +70,9 @@ def test_font_face_css_uses_placeholder_until_browser_patch(fh_app):
     assert STUDIO_FONT_BASE_MARKER in css
     assert STUDIO_FONT_BASE_MARKER + "/fa-pro-light-300" in css
     assert ".otf" not in css
-    assert "body::before" in css
     assert "Font Awesome 6 Pro" in css
+    assert css.count("@font-face") == 1
+    assert "Font Awesome 6 Sharp" not in css
 
 
 def test_font_base_patch_script_targets_placeholder():
@@ -87,14 +88,16 @@ def test_serve_font_otf(fh_app):
     assert r.status_code == 200
     assert r.content[:4] == b"OTTO"
     assert c.get("/studio-static/fontawesome/unknown").status_code == 404
+    assert c.get("/studio-static/fontawesome/fa-pro-solid-900").status_code == 404
 
 
-def test_studio_css_uses_fontawesome_only():
+def test_studio_css_typography_matches_domino_web_ui():
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
     css = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
-    assert "fonts.googleapis.com" not in css
-    assert "Material+Symbols" not in css
-    assert '"Font Awesome 6 Pro"' in css or "'Font Awesome 6 Pro'" in css
+    assert "fonts.googleapis.com/css2?family=Inter" in css
+    assert "Roboto+Mono" in css
+    assert "--font-body:" in css and "Inter" in css
+    assert "Font Awesome 6 Pro" in css
     assert ".fa-icon" in css
