@@ -45,7 +45,11 @@ from studio.ui_components import (
     _render_warnings_banner,
     _validate_environment,
 )
-from studio.font_assets import fontawesome_faces_css, register_font_assets
+from studio.font_assets import (
+    STUDIO_FONT_BASE_PATCH_JS,
+    fontawesome_faces_css,
+    register_font_assets,
+)
 from studio.routes_api import register_api_routes
 from studio.routes_job import register_job_routes
 
@@ -93,7 +97,8 @@ async def index(req: Request):
     if not project_id:
         return (
             Title("Auto Model Docs Studio — Domino"),
-            Style(fontawesome_faces_css(req)),
+            Style(fontawesome_faces_css()),
+            Script(STUDIO_FONT_BASE_PATCH_JS),
             Style(STUDIO_CSS),
             Script(r"""
                 (function() {
@@ -856,7 +861,8 @@ async def index(req: Request):
 
     return (
         Title("Auto Model Docs Studio — Domino"),
-        Style(fontawesome_faces_css(req)),
+        Style(fontawesome_faces_css()),
+        Script(STUDIO_FONT_BASE_PATCH_JS),
         # Header
         Div(
             Div(

@@ -24,6 +24,25 @@ _ALLOWED_OTF = frozenset(
 
 _ALLOWED_STEMS = frozenset({p[:-4] for p in _ALLOWED_OTF})
 
+STUDIO_FONT_BASE_MARKER = "__STUDIO_FONT_BASE__"
+
+STUDIO_FONT_BASE_PATCH_JS = (
+    r"(function(){"
+    r"var m=(location.pathname||'').match(/^(\/apps(?:-internal)?\/[^/]+)/i);"
+    r"var b=m?m[1]+'/studio-static/fontawesome':'/studio-static/fontawesome';"
+    r"var nodes=document.getElementsByTagName('style');"
+    r"for(var i=0;i<nodes.length;i++){"
+    r"var t=nodes[i].textContent||'';"
+    r"if(t.indexOf('"
+    + STUDIO_FONT_BASE_MARKER
+    + r"')!==-1){"
+    r"nodes[i].textContent=t.split('"
+    + STUDIO_FONT_BASE_MARKER
+    + r"').join(b);break;}"
+    r"}"
+    r"})();"
+)
+
 
 def studio_public_prefix(req: Request) -> str:
     rp = req.scope.get("root_path") or ""
@@ -151,9 +170,8 @@ body::before {
     )
 
 
-def fontawesome_faces_css(req: Request) -> str:
-    base = studio_asset_url(req, "studio-static/fontawesome")
-    return _fontawesome_faces_css_for_base(base)
+def fontawesome_faces_css() -> str:
+    return _fontawesome_faces_css_for_base(STUDIO_FONT_BASE_MARKER)
 
 
 def register_font_assets(rt):

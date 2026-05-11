@@ -63,26 +63,22 @@ def test_studio_asset_url_root():
     assert studio_asset_url(req, "studio-static/fontawesome/fa-x") == "/studio-static/fontawesome/fa-x"
 
 
-def test_font_face_css_contains_urls(fh_app):
-    from studio.font_assets import fontawesome_faces_css
+def test_font_face_css_uses_placeholder_until_browser_patch(fh_app):
+    from studio.font_assets import STUDIO_FONT_BASE_MARKER, fontawesome_faces_css
 
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0"},
-        "method": "GET",
-        "path": "/apps/z/",
-        "raw_path": b"/apps/z/",
-        "query_string": b"",
-        "headers": [],
-        "scheme": "https",
-        "server": ("test", 443),
-        "client": ("127.0.0.1", 12345),
-    }
-    css = fontawesome_faces_css(Request(scope))
-    assert "/apps/z/studio-static/fontawesome/fa-pro-light-300" in css
+    css = fontawesome_faces_css()
+    assert STUDIO_FONT_BASE_MARKER in css
+    assert STUDIO_FONT_BASE_MARKER + "/fa-pro-light-300" in css
     assert ".otf" not in css
     assert "body::before" in css
     assert "Font Awesome 6 Pro" in css
+
+
+def test_font_base_patch_script_targets_placeholder():
+    from studio.font_assets import STUDIO_FONT_BASE_MARKER, STUDIO_FONT_BASE_PATCH_JS
+
+    assert STUDIO_FONT_BASE_MARKER in STUDIO_FONT_BASE_PATCH_JS
+    assert "location.pathname" in STUDIO_FONT_BASE_PATCH_JS
 
 
 def test_serve_font_otf(fh_app):
