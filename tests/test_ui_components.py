@@ -401,7 +401,7 @@ class TestStudioPageInsightBanner:
         assert "studio-success-toast" in scripts
         assert "12000" in scripts
         assert "60000" in scripts
-        assert ".studio-error-dismiss" in styles
+        assert "label.primary" in styles and "a.primary" in styles
         assert "studio-error-dismiss-row" in styles
         assert "studio-success-toast" in styles
 

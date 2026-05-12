@@ -636,29 +636,6 @@ input[type="file"] {
     flex: 1;
     min-width: 0;
 }
-.upload-btn {
-    background: transparent;
-    border: 1px solid var(--primary);
-    border-radius: var(--radius-sm);
-    padding: 0 16px;
-    height: 32px;
-    color: var(--primary);
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    text-decoration: none;
-    white-space: nowrap;
-    box-sizing: border-box;
-}
-.upload-btn:hover {
-    background: var(--primary-fixed);
-    color: var(--primary-active);
-}
 .hidden-upload {
     display: none !important;
 }
@@ -937,42 +914,12 @@ body.studio-modal-open {
     font-weight: 600;
     color: var(--on-surface);
 }
-.studio-modal-close {
-    flex-shrink: 0;
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 600;
-    padding: 0.35rem 0.65rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--outline-variant);
-    background: var(--surface-container-lowest);
-    color: var(--on-surface);
-    cursor: pointer;
-}
-.studio-modal-close:hover {
-    background: var(--surface-container-low);
-}
 .studio-modal-body {
     padding: 0.75rem 1rem 1rem;
 }
 .advanced-open-row {
     margin-top: 0.75rem;
 }
-.studio-advanced-open-btn {
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 600;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--outline-variant);
-    background: var(--surface-container-low);
-    color: var(--primary);
-    cursor: pointer;
-}
-.studio-advanced-open-btn:hover {
-    background: var(--surface-container);
-}
-
 /* ── Advanced / Collapsible Sections ──────────────────────────────── */
 .advanced-section {
     margin-top: 0.75rem;
@@ -1127,12 +1074,15 @@ body.studio-modal-open {
 }
 
 /* ── Primary Button ───────────────────────────────────────────────── */
-button.primary {
+button.primary,
+label.primary,
+a.primary {
     background: #543fde;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     padding: 0 16px;
     height: 32px;
+    min-height: 32px;
     color: #ffffff;
     font-family: var(--font-body);
     font-size: 14px;
@@ -1145,19 +1095,38 @@ button.primary {
     justify-content: center;
     gap: 0.5rem;
     box-sizing: border-box;
+    line-height: 1.2;
+    text-decoration: none;
 }
-button.primary:hover {
+button.primary:hover,
+label.primary:hover,
+a.primary:hover {
     background: #3b23d1;
     box-shadow: none;
+    color: #ffffff;
 }
-button.primary:active {
+button.primary:active,
+label.primary:active,
+a.primary:active {
     background: #311eae;
     box-shadow: none;
+    color: #ffffff;
 }
 button.primary:disabled {
     background: #ebebeb;
     color: #65657b;
     cursor: not-allowed;
+}
+a.primary:visited {
+    color: #ffffff;
+}
+
+label.primary {
+    white-space: nowrap;
+}
+
+#lang-override-btn {
+    margin-left: 8px;
 }
 
 /* ── Terminal Card ────────────────────────────────────────────────── */
@@ -1183,26 +1152,7 @@ button.primary:disabled {
     display: flex;
     gap: 0.5rem;
 }
-.terminal-action {
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 500;
-    color: #ffffff;
-    text-decoration: none;
-    cursor: pointer;
-    padding: 0.375rem 0.875rem;
-    border-radius: var(--radius-sm);
-    background: #543fde;
-    border: none;
-    transition: background 0.15s ease;
-    min-height: 32px;
-    display: inline-flex;
-    align-items: center;
-}
-.terminal-action:hover {
-    background: #3b23d1;
-    color: #ffffff;
-}
+a.primary.terminal-action-disabled,
 .terminal-action-disabled {
     opacity: 0.35;
     pointer-events: none;
@@ -1749,23 +1699,6 @@ select.hw-tier-select option {
     font-weight: 600;
 }
 
-.lang-override-btn {
-    background: none;
-    border: none;
-    color: var(--primary);
-    cursor: pointer;
-    padding: 8px 12px;
-    min-height: 44px;
-    font-size: inherit;
-    margin-left: 8px;
-    border-radius: var(--radius-sm);
-}
-
-.lang-override-btn:hover {
-    color: var(--primary-hover);
-    background: rgba(84, 63, 222, 0.06);
-}
-
 .lang-override-select {
     display: none;
     border: 1px solid #d6d6d6;
@@ -1828,12 +1761,7 @@ select.hw-tier-select option {
 }
 
 .warning-banner-close {
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0 0.5rem;
-    color: var(--on-surface-variant);
+    flex-shrink: 0;
 }
 
 .inline-callout {

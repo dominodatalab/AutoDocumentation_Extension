@@ -176,7 +176,7 @@ def _render_warnings_banner(warnings: list) -> list:
                 Span(f"{w.message} {w.action}", cls="warning-banner-message"),
                 Button(
                     "\u00d7", type="button",
-                    cls="warning-banner-close",
+                    cls="warning-banner-close primary",
                     onclick="this.parentElement.remove();",
                 ),
                 cls=style,

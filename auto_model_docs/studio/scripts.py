@@ -141,7 +141,7 @@ MAIN_DOM_JS = r"""
                 html = '<div class="spec-validation-error studio-error-toast" role="alert">'
                     + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(b.title) + '</span>'
                     + '<ul class="spec-validation-error-list">' + lis + '</ul>'
-                    + '<div class="studio-error-dismiss-row"><a href="#" class="studio-error-dismiss" role="button">Dismiss</a></div></div>';
+                    + '<div class="studio-error-dismiss-row"><a href="#" class="studio-error-dismiss primary" role="button">Dismiss</a></div></div>';
                 break;
             }
             if (!html && _studioUploadBanner) {
@@ -155,11 +155,11 @@ MAIN_DOM_JS = r"""
                     ? ('<div class="studio-success-toast studio-error-toast" role="status">'
                         + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
                         + '<ul class="spec-validation-error-list studio-success-toast-list">' + ulis + '</ul>'
-                        + '<div class="studio-error-dismiss-row studio-success-dismiss-row"><a href="#" class="studio-error-dismiss" role="button">Dismiss</a></div></div>')
+                        + '<div class="studio-error-dismiss-row studio-success-dismiss-row"><a href="#" class="studio-error-dismiss primary" role="button">Dismiss</a></div></div>')
                     : ('<div class="spec-validation-error studio-error-toast" role="alert">'
                         + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
                         + '<ul class="spec-validation-error-list">' + ulis + '</ul>'
-                        + '<div class="studio-error-dismiss-row"><a href="#" class="studio-error-dismiss" role="button">Dismiss</a></div></div>');
+                        + '<div class="studio-error-dismiss-row"><a href="#" class="studio-error-dismiss primary" role="button">Dismiss</a></div></div>');
                 html = uwrap;
             }
             panel.innerHTML = html;
@@ -913,9 +913,9 @@ MAIN_DOM_JS = r"""
             var html = _maxJobsWarning(jobs);
             html += '<div class="history-table-wrap">' + _tableHtml(jobs) + '</div>';
 
-            var actions = '<a class="terminal-action" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
+            var actions = '<a class="primary" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
             if (hasQueued) {
-                actions += ' <a class="terminal-action" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
+                actions += ' <a class="primary" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
             }
             html += '<div class="history-actions">' + actions + '</div>';
 
