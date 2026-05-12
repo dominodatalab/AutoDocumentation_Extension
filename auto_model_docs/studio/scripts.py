@@ -44,12 +44,8 @@ MAIN_DOM_JS = r"""
             t.textContent = s == null ? '' : String(s);
             return t.innerHTML;
         }
-        var _studioErrorSlotOrder = ['datasets', 'files', 'codeRoot', 'language', 'envRevisions', 'jobHistory', 'cancelQueued', 'upload', 'spec', 'generate'];
+        var _studioErrorSlotOrder = ['computeEnv', 'datasets', 'files', 'codeRoot', 'language', 'jobHistory', 'cancelQueued', 'upload', 'spec', 'generate'];
         var _studioErrorSlots = {};
-        function clearAllStudioErrors() {
-            _studioErrorSlots = {};
-            _studioReflowErrorPanel();
-        }
         function setStudioErrorSlot(key, block) {
             if (!key) return;
             if (!block) {
@@ -88,6 +84,17 @@ MAIN_DOM_JS = r"""
                 panel.classList.remove('studio-errors-panel--visible');
             }
         }
+
+        (function() {
+            var n = document.getElementById('studio-compute-env-json');
+            if (!n || !n.textContent) return;
+            try {
+                var arr = JSON.parse(n.textContent.trim());
+                if (Array.isArray(arr) && arr.length) {
+                    setStudioErrorSlot('computeEnv', { title: 'Unable to open the app', items: arr });
+                }
+            } catch (e) {}
+        })();
 
         (function() {
             var tip = document.createElement('div');
@@ -265,43 +272,6 @@ MAIN_DOM_JS = r"""
             return params.get('projectId') || params.get('project_id') || '';
         }
 
-        window.reloadEnvironmentRevisions = function(sel) {
-            var envId = sel && sel.value ? sel.value : '';
-            var slot = document.getElementById('environment-revision-slot');
-            if (!slot) return;
-            if (!envId) {
-                setStudioErrorSlot('envRevisions', null);
-                slot.innerHTML = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">'
-                    + '<option value="" selected disabled>(select environment first)</option></select>';
-                return;
-            }
-            var pid = resolvedProjectId();
-            if (!pid) {
-                setStudioErrorSlot('envRevisions', { title: 'Environment revisions', items: ['Add projectId to the URL to load revisions.'] });
-                return;
-            }
-            var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
-                + '&environmentId=' + encodeURIComponent(envId);
-            fetch(url).then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(revs) {
-                    setStudioErrorSlot('envRevisions', null);
-                    var html = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">';
-                    if (!revs || !revs.length) {
-                        html += '<option value="" selected disabled>(no revisions)</option>';
-                    } else {
-                        for (var i = 0; i < revs.length; i++) {
-                            html += '<option value="' + revs[i].id + '"' + (revs[i].isDefault ? ' selected' : '') + '>'
-                                + revs[i].label + '</option>';
-                        }
-                    }
-                    html += '</select>';
-                    slot.innerHTML = html;
-                })
-                .catch(function(err) {
-                    setStudioErrorSlot('envRevisions', { title: 'Environment revisions', items: [err && err.message ? err.message : 'Could not load revisions for the selected environment.'] });
-                });
-        };
-
         function queryApiDatasets() {
             var pid = resolvedProjectId();
             return pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
@@ -388,7 +358,10 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
             if (specPathField) specPathField.value = '';
-            clearAllStudioErrors();
+            setStudioErrorSlot('datasets', null);
+            setStudioErrorSlot('files', null);
+            setStudioErrorSlot('upload', null);
+            setStudioErrorSlot('spec', null);
             if (_specCurrentDatasetId) {
                 browseFiles('');
             } else {
@@ -945,8 +918,6 @@ MAIN_DOM_JS = r"""
                 latest_only: chk('field-latest_only'),
                 verbose: chk('field-verbose'),
                 hardware_tier: val('field-hardware_tier'),
-                environment_id: val('field-environment_id'),
-                environment_revision_id: val('field-environment_revision_id'),
                 provider_base_url: val('field-provider_base_url'),
                 max_retries: val('field-max_retries'),
                 initial_backoff: val('field-initial_backoff'),

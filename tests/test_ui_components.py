@@ -330,6 +330,44 @@ class TestRenderDominoStatus:
         assert result is not None
 
 
+class TestValidateStudioComputeEnvironment:
+    def test_missing_both_env_vars(self, monkeypatch, _mock_dependencies):
+        monkeypatch.delenv("DOMINO_ENVIRONMENT_ID", raising=False)
+        monkeypatch.delenv("DOMINO_ENVIRONMENT_REVISION_ID", raising=False)
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(MagicMock())
+        assert len(out) == 2
+        assert "administrator" in " ".join(out).lower()
+
+    def test_revision_not_accessible(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "need-this")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.return_value = [{"id": "other-rev"}]
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(mock_c)
+        mock_c.list_environment_revisions.assert_called_once_with("e1")
+        assert len(out) == 2
+
+    def test_api_raises_returns_friendly(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "r1")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.side_effect = RuntimeError("network")
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(mock_c)
+        assert len(out) == 2
+        assert "try again" in " ".join(out).lower()
+
+    def test_ok_empty_list(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "r1")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.return_value = [{"id": "r1", "number": 1}]
+        ui = _import_ui()
+        assert ui.validate_studio_domino_compute_environment(mock_c) == []
+
+
 # ---------------------------------------------------------------------------
 # _render_job_history_table
 # ---------------------------------------------------------------------------
@@ -343,13 +381,17 @@ class TestStudioPageInsightBanner:
         assert "studio-page-insight" in src
         assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
         assert 'id="studio-errors-panel"' in src
-        assert src.index('cls="insight-card"') < src.index('id="studio-errors-panel"')
+        assert src.index('cls="insight-card"') < src.index('cls="studio-page-insight"')
         assert "spec-validation-result" not in src
         assert "function setStudioErrorSlot" in scripts
-        assert "function clearAllStudioErrors" in scripts
         assert "_studioErrorSlotOrder" in scripts
         assert "studio-errors-panel--visible" in scripts
         assert ".studio-errors-panel" in styles
+        assert 'field-environment_id' not in src
+        assert "validate_studio_domino_compute_environment" in src
+        assert "studio-compute-env-json" in src
+        assert "reloadEnvironmentRevisions" not in scripts
+        assert "computeEnv" in scripts
 
 
 class TestInfoTooltipLayer:
@@ -385,6 +427,8 @@ class TestSpecFileBrowserUi:
         assert "runJobJsonPayloadFromMainForm" in scripts
         assert "lang-override-select" in scripts
         assert "field-language" not in scripts
+        assert "field-environment_id" not in web
+        assert "environment-revision-slot" not in web
         assert 'Summary("Advanced settings"' in web
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web

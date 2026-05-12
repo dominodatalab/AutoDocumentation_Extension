@@ -120,6 +120,11 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_client.get_job_status.return_value = {
         "domino_status": "Succeeded", "local_status": "succeeded",
     }
+    monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "env-integration")
+    monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "rev-integration")
+    mock_client.list_environment_revisions.return_value = [
+        {"id": "rev-integration", "number": 1, "option_label": "#1"},
+    ]
     mock_info = MagicMock()
     mock_info.name = "test-project"
     mock_info.owner_username = "test-owner"

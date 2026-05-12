@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fasthtml.common import *
 
@@ -90,6 +90,34 @@ def _validate_environment() -> list:
     # Output and cache are managed via DatasetStore — no local directories needed.
 
     return warnings
+
+
+def validate_studio_domino_compute_environment(domino_client_mod: Any) -> list[str]:
+    """Return non-empty list of user-facing lines if the app cannot use the configured compute environment."""
+    eid = (os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip()
+    rid = (os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip()
+    if not eid or not rid:
+        return [
+            "This app is missing required configuration.",
+            "Please contact your administrator to finish setup.",
+        ]
+    try:
+        revs = domino_client_mod.list_environment_revisions(eid) or []
+    except Exception:
+        return [
+            "We could not verify your run environment right now.",
+            "Please try again in a few minutes, or contact your administrator if this continues.",
+        ]
+    rev_ids: set[str] = set()
+    for r in revs:
+        if isinstance(r, dict) and r.get("id") is not None:
+            rev_ids.add(str(r["id"]))
+    if rid not in rev_ids:
+        return [
+            "Your account cannot use the run environment configured for this app.",
+            "Please contact your administrator to fix access or update the configuration.",
+        ]
+    return []
 
 
 # ---------------------------------------------------------------------------

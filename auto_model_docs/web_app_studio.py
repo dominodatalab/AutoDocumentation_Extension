@@ -7,6 +7,7 @@ assembles the application.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import pathlib
@@ -44,6 +45,7 @@ from studio.scripts import MAIN_DOM_JS
 from studio.ui_components import (
     _render_warnings_banner,
     _validate_environment,
+    validate_studio_domino_compute_environment,
 )
 from studio.font_assets import (
     STUDIO_FONT_BASE_PATCH_JS,
@@ -220,56 +222,28 @@ async def index(req: Request):
     if not tier_options:
         tier_options = [Option("(default)", value="")]
 
-    env_rows: list = []
-    try:
-        env_rows = domino_client.list_self_environments() or []
-    except Exception:
-        env_rows = []
-    env_var_id = (os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip()
-    env_var_rev = (os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip()
-    env_ids = {str(e.get("id", "")) for e in env_rows if isinstance(e, dict)}
-    default_env_id = ""
-    if env_rows:
-        if env_var_id and env_var_id in env_ids:
-            default_env_id = env_var_id
-        else:
-            default_env_id = str(env_rows[0].get("id", ""))
-    env_options = []
-    for e in env_rows:
-        if not isinstance(e, dict):
-            continue
-        eid = str(e.get("id", ""))
-        if not eid:
-            continue
-        label = (e.get("name") or eid).strip()
-        env_options.append(Option(label, value=eid, selected=(eid == default_env_id)))
-    if not env_options:
-        env_options = [Option("(none)", value="", selected=True)]
-
-    rev_rows: list = []
-    if default_env_id:
-        try:
-            rev_rows = domino_client.list_environment_revisions(default_env_id) or []
-        except Exception:
-            rev_rows = []
-    rev_ids = {str(r.get("id", "")) for r in rev_rows}
-    default_rev_id = ""
-    if rev_rows:
-        if env_var_rev and env_var_rev in rev_ids:
-            default_rev_id = env_var_rev
-        else:
-            default_rev_id = str(rev_rows[0].get("id", ""))
-    rev_options = []
-    for r in rev_rows:
-        rid = str(r.get("id", ""))
-        if not rid:
-            continue
-        lab = r.get("option_label") or rid
-        rev_options.append(Option(lab, value=rid, selected=(rid == default_rev_id)))
-    if not rev_options:
-        rev_options = [Option("(none)", value="", selected=True)]
-
-    # ── Build the 3-column layout ────────────────────────────────────────
+    compute_env_errors = validate_studio_domino_compute_environment(domino_client)
+    studio_errors_panel = Div(id="studio-errors-panel", cls="studio-errors-panel")
+    _insight_children = [
+        Div(
+            H3("How it works"),
+            P(
+                "Select a spec file to define your documentation structure, configure project settings, "
+                "then click Generate documentation. Auto Model Docs scans your codebase and MLflow "
+                "experiments to produce a structured Word document.",
+            ),
+            cls="insight-card",
+        ),
+        studio_errors_panel,
+    ]
+    if compute_env_errors:
+        _insight_children.append(
+            Script(
+                json.dumps(compute_env_errors),
+                id="studio-compute-env-json",
+                type="application/json",
+            )
+        )
 
     # LEFT COLUMN: What to document
     left_col_children = [
@@ -492,51 +466,6 @@ async def index(req: Request):
                 cls="hw-tier-select",
             ),
             cls="field",
-        )
-    )
-    run_card_children.append(
-        Div(
-            Div(
-                Div(
-                    Label("Environment", for_="field-environment_id"),
-                    Span(
-                        "\u24d8",
-                        cls="info-tooltip",
-                        data_tooltip="Compute environment for the Domino job.",
-                    ),
-                    cls="label-row",
-                ),
-                Select(
-                    *env_options,
-                    name="environment_id",
-                    id="field-environment_id",
-                    cls="environment-select",
-                    onchange="reloadEnvironmentRevisions(this)",
-                ),
-                cls="field",
-            ),
-            Div(
-                Div(
-                    Label("Revision", for_="field-environment_revision_id"),
-                    Span(
-                        "\u24d8",
-                        cls="info-tooltip env-revision-label-spacer",
-                        aria_hidden="true",
-                    ),
-                    cls="label-row",
-                ),
-                Div(
-                    Select(
-                        *rev_options,
-                        name="environment_revision_id",
-                        id="field-environment_revision_id",
-                        cls="env-revision-select",
-                    ),
-                    id="environment-revision-slot",
-                ),
-                cls="field",
-            ),
-            cls="env-revision-row",
         )
     )
 
@@ -829,16 +758,7 @@ async def index(req: Request):
         Div(
             H1("Auto Model Docs Studio", cls="page-title"),
             Div(
-                Div(
-                    H3("How it works"),
-                    P(
-                        "Select a spec file to define your documentation structure, configure project settings, "
-                        "then click Generate documentation. Auto Model Docs scans your codebase and MLflow "
-                        "experiments to produce a structured Word document.",
-                    ),
-                    cls="insight-card",
-                ),
-                Div(id="studio-errors-panel", cls="studio-errors-panel"),
+                *_insight_children,
                 cls="studio-page-insight",
             ),
             *_render_warnings_banner(_STARTUP_WARNINGS),
