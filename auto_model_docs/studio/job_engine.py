@@ -141,12 +141,9 @@ async def _parse_request(req: Request) -> JobRequest:
     if not _model:
         raise RuntimeError("model is required in the JSON body")
 
-    notebook = _checkbox_truthy(body.get("notebook"))
+    notebook = True
     notebook_path = _form_str(body, "notebook_path")
     notebook_from_cache = _checkbox_truthy(body.get("notebook_from_cache"))
-    if not notebook:
-        notebook_path = ""
-        notebook_from_cache = False
 
     return JobRequest(
         spec_path=_form_str(body, "spec_path"),

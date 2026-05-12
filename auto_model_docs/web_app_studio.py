@@ -8,7 +8,6 @@ assembles the application.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import pathlib
 from typing import Optional
@@ -23,17 +22,7 @@ configure_auth(user_auth)
 # Inline SVG logo — white paths, designed for dark backgrounds
 _LOGO_SVG = (pathlib.Path(__file__).parent.parent / "domino-logo.svg").read_text()
 
-from default_consts import (
-    DEFAULT_GENERATION_WORKERS,
-    DEFAULT_LLM_BACKOFF_JITTER,
-    DEFAULT_LLM_INITIAL_BACKOFF,
-    DEFAULT_LLM_MAX_BACKOFF,
-    DEFAULT_LLM_MAX_RETRIES,
-    DEFAULT_MAX_FILES,
-    DEFAULT_OPENAI_MODEL,
-    DEFAULT_PLANNING_WORKERS,
-    DEFAULT_TIMEOUT,
-)
+from default_consts import DEFAULT_OPENAI_MODEL
 
 from studio.state import (
     _STARTUP_WARNINGS,
@@ -71,11 +60,6 @@ app, rt = fast_app(
         Script(MAIN_DOM_JS),
     )
 )
-
-_log = logging.getLogger(__name__)
-for _k in sorted(os.environ):
-    if "domino" in _k.lower():
-        _log.info("env %s=%s", _k, os.environ[_k])
 
 ensure_database()
 
@@ -314,7 +298,6 @@ async def index(req: Request):
                     ),
                     cls="upload-btn",
                 ),
-                Span(id="spec-upload-status", cls="spec-upload-status"),
                 cls="spec-upload-footer",
             ),
             Details(
@@ -452,7 +435,7 @@ async def index(req: Request):
         )
     )
 
-    run_card_children.append(
+    advanced_modal_fields = [
         Div(
             Div(
                 Label("Hardware tier", for_="field-hardware_tier"),
@@ -466,145 +449,7 @@ async def index(req: Request):
                 cls="hw-tier-select",
             ),
             cls="field",
-        )
-    )
-
-    advanced_settings_body = [
-        Div(
-            Div("Generation settings", cls="advanced-subsection-title"),
-            Div(
-                Div(
-                    Label("Max files", for_="field-max_files"),
-                    Input(
-                        name="max_files",
-                        id="field-max_files",
-                        type="number",
-                        value=str(DEFAULT_MAX_FILES),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Planning workers", for_="field-planning_workers"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Parallel LLM calls in the planning phase."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="planning_workers",
-                        id="field-planning_workers",
-                        type="number",
-                        value=str(DEFAULT_PLANNING_WORKERS),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Generation workers", for_="field-workers"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Sections generated in parallel."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="workers",
-                        id="field-workers",
-                        type="number",
-                        value=str(DEFAULT_GENERATION_WORKERS),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Timeout (s)", for_="field-timeout"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Seconds before a single LLM call times out."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="timeout",
-                        id="field-timeout",
-                        type="number",
-                        value=str(int(DEFAULT_TIMEOUT)),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                cls="advanced-grid",
-            ),
-            Div("LLM API call settings", cls="advanced-subsection-title"),
-            Div(
-                Div(
-                    Div(
-                        Label("Max retries", for_="field-max_retries"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Number of retries on LLM API calls."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="max_retries",
-                        id="field-max_retries",
-                        type="number",
-                        value=str(DEFAULT_LLM_MAX_RETRIES),
-                        min="0",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Initial backoff (sec)", for_="field-initial_backoff"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Delay before the first retry; grows with each attempt."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="initial_backoff",
-                        id="field-initial_backoff",
-                        type="number",
-                        value=str(int(DEFAULT_LLM_INITIAL_BACKOFF)),
-                        min="0",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Max backoff (sec)", for_="field-max_backoff"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Cap on delay between retries."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="max_backoff",
-                        id="field-max_backoff",
-                        type="number",
-                        value=str(int(DEFAULT_LLM_MAX_BACKOFF)),
-                        min="0",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Backoff jitter", for_="field-backoff_jitter"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Random extra delay so retries do not align."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="backoff_jitter",
-                        id="field-backoff_jitter",
-                        type="number",
-                        value=str(DEFAULT_LLM_BACKOFF_JITTER),
-                        min="0",
-                        step="0.1",
-                    ),
-                    cls="field",
-                ),
-                cls="advanced-grid",
-            ),
         ),
-
         Div(
             Label("Provider", for_="field-provider"),
             Select(
@@ -657,53 +502,41 @@ async def index(req: Request):
             cls="field",
             id="model-name-field",
         ),
-        Div(
-            Label(
-                Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
-                Span("Generate notebook"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
-                cls="checkbox-field",
-                id="app-mode-note",
-            ),
-            Label(
-                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
-                Span("Notebook from cache only"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
-                ),
-                cls="checkbox-field",
-            ),
-            cls="advanced-checkbox-row",
-        ),
-        Div(
-            Div(
-                Label("Notebook path (optional)", for_="field-notebook_path"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Relative path under the output docs folder; leave blank for default notebook name.",
-                ),
-                cls="label-row",
-            ),
-            Input(name="notebook_path", id="field-notebook_path", type="text", value="", placeholder=""),
-            cls="field",
-            id="notebook-path-field-wrap",
-        ),
-        Label(
-            Input(type="checkbox", name="verbose", id="field-verbose", value="true", checked=False),
-            Span("Verbose logging"),
-            cls="checkbox-field",
-        ),
     ]
 
+    advanced_modal = Div(
+        Div(
+            Div(
+                H3("Advanced settings", id="studio-advanced-modal-title", cls="studio-modal-title"),
+                Button(
+                    "Close",
+                    type="button",
+                    id="studio-advanced-close",
+                    cls="studio-modal-close",
+                    aria_label="Close advanced settings",
+                ),
+                cls="studio-modal-header",
+            ),
+            Div(*advanced_modal_fields, cls="studio-modal-body advanced-content"),
+            cls="studio-modal",
+            role="dialog",
+            aria_modal="true",
+            aria_labelledby="studio-advanced-modal-title",
+        ),
+        id="studio-advanced-modal",
+        cls="studio-modal-overlay",
+        aria_hidden="true",
+    )
+
     run_card_children.append(
-        Details(
-            Summary("Advanced settings", cls="advanced-section-summary"),
-            Div(*advanced_settings_body, cls="advanced-content"),
-            cls="advanced-section",
-            open=False,
+        Div(
+            Button(
+                "Advanced settings",
+                type="button",
+                id="studio-advanced-open",
+                cls="studio-advanced-open-btn",
+            ),
+            cls="advanced-open-row",
         )
     )
 
@@ -777,6 +610,7 @@ async def index(req: Request):
                 data_app_rel="run",
                 enctype="multipart/form-data",
             ),
+            advanced_modal,
             cls="page",
         ),
     )
@@ -824,26 +658,8 @@ app.add_middleware(
 async def capture_auth_context(request, call_next):
     from studio.state import auth_context as _auth_context
 
-    try:
-        hdr_dump = {k: v for k, v in request.headers.items()}
-    except Exception as _e:
-        hdr_dump = {"_error": str(_e)}
-    _auth_variants = {
-        "authorization": request.headers.get("authorization"),
-        "Authorization": request.headers.get("Authorization"),
-        "x-authorization": request.headers.get("x-authorization"),
-        "x-forwarded-authorization": request.headers.get("x-forwarded-authorization"),
-        "x-domino-api-key": request.headers.get("x-domino-api-key"),
-        "x-domino-token": request.headers.get("x-domino-token"),
-        "x-forwarded-user": request.headers.get("x-forwarded-user"),
-        "x-remote-user": request.headers.get("x-remote-user"),
-        "cookie": request.headers.get("cookie"),
-    }
-
-    import threading as _threading
     forwarded = request.headers.get("authorization")
     _auth_context.set_request_auth_header(forwarded)
-    _after_set = _auth_context.get_request_auth_header()
     try:
         response = await call_next(request)
     finally:
@@ -868,4 +684,4 @@ async def _on_startup():
 # Serve
 # ---------------------------------------------------------------------------
 
-serve(host=HOST, port=PORT)
+serve(host=HOST, port=PORT, access_log=False)

@@ -381,6 +381,7 @@ class TestStudioPageInsightBanner:
         assert "studio-page-insight" in src
         assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
         assert 'id="studio-errors-panel"' in src
+        assert "access_log=False" in src
         assert src.index('cls="insight-card"') < src.index('cls="studio-page-insight"')
         assert "spec-validation-result" not in src
         assert "function setStudioErrorSlot" in scripts
@@ -440,7 +441,9 @@ class TestSpecFileBrowserUi:
         assert "field-language" not in scripts
         assert "field-environment_id" not in web
         assert "environment-revision-slot" not in web
-        assert 'Summary("Advanced settings"' in web
+        assert 'id="studio-advanced-modal"' in web
+        assert "studio-modal-overlay" in web
+        assert "openAdvancedModal" in scripts
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web
         assert 'id="field-model"' in web

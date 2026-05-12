@@ -267,7 +267,7 @@ async def test_parse_request_verbose_checkbox():
 
 
 @pytest.mark.asyncio
-async def test_parse_request_notebook_off_clears_path_and_from_cache():
+async def test_parse_request_notebook_always_true_keeps_optional_path():
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
@@ -282,9 +282,9 @@ async def test_parse_request_notebook_off_clears_path_and_from_cache():
         }
     )
     jr = await je._parse_request(req)
-    assert jr.notebook is False
-    assert jr.notebook_path == ""
-    assert jr.notebook_from_cache is False
+    assert jr.notebook is True
+    assert jr.notebook_path == "/out/x.ipynb"
+    assert jr.notebook_from_cache is True
 
 
 @pytest.mark.asyncio

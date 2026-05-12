@@ -349,7 +349,6 @@ MAIN_DOM_JS = r"""
         var specBreadcrumb = document.getElementById('spec-breadcrumb');
         var specSelectedIndicator = document.getElementById('spec-selected-indicator');
         var specMachineUpload = document.getElementById('spec-machine-upload');
-        var specUploadStatus = document.getElementById('spec-upload-status');
         var specPathField = document.getElementById('field-spec_path');
 
         // State
@@ -613,11 +612,10 @@ MAIN_DOM_JS = r"""
                 if (!file) return;
                 console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
                 setStudioUploadBanner(null);
-                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
-                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                    setStudioUploadBanner({ success: false, title: 'Upload', items: ['Select a dataset first'] });
                     return;
                 }
                 var qs = queryApiDatasets();
@@ -645,7 +643,6 @@ MAIN_DOM_JS = r"""
                                 em = em0;
                                 setStudioUploadBanner({ success: false, title: 'Upload failed', items: [em0] });
                             }
-                            if (specUploadStatus) { specUploadStatus.textContent = em; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
                             var ev = new Error(em);
                             ev._uploadUiDone = true;
                             throw ev;
@@ -653,7 +650,6 @@ MAIN_DOM_JS = r"""
                         var result = o.j;
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
                         setStudioUploadBanner({ success: true, title: 'Spec uploaded', items: ['Saved ' + result.fileName + ' to ' + (result.path || '')] });
                         var savedPath = result.path;
                         selectSpecFile(savedPath);
@@ -674,11 +670,6 @@ MAIN_DOM_JS = r"""
                         console.error('[spec-browser] Upload failed:', err.message);
                         if (err._uploadUiDone) return;
                         setStudioUploadBanner({ success: false, title: 'Upload failed', items: [err.message] });
-                        if (specUploadStatus) {
-                            specUploadStatus.textContent = 'Upload failed: ' + err.message;
-                            specUploadStatus.className = 'spec-upload-status spec-validation-empty';
-                            specUploadStatus.style.color = '';
-                        }
                     })
                     .finally(function() {
                         specMachineUpload.value = '';
@@ -732,16 +723,33 @@ MAIN_DOM_JS = r"""
         }
 
         (function() {
-            var nbCb = document.getElementById('field-notebook');
-            var pathInput = document.getElementById('field-notebook_path');
-            var pathWrap = document.getElementById('notebook-path-field-wrap');
-            function syncNotebookPathEnabled() {
-                var on = nbCb && nbCb.checked;
-                if (pathInput) pathInput.disabled = !on;
-                if (pathWrap) pathWrap.classList.toggle('notebook-path-disabled', !on);
+            var overlay = document.getElementById('studio-advanced-modal');
+            var openBtn = document.getElementById('studio-advanced-open');
+            var closeBtn = document.getElementById('studio-advanced-close');
+            function openAdvancedModal() {
+                if (!overlay) return;
+                overlay.classList.add('studio-modal-overlay--open');
+                overlay.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('studio-modal-open');
             }
-            if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
-            syncNotebookPathEnabled();
+            function closeAdvancedModal() {
+                if (!overlay) return;
+                overlay.classList.remove('studio-modal-overlay--open');
+                overlay.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('studio-modal-open');
+            }
+            if (openBtn) openBtn.addEventListener('click', function(e) { e.preventDefault(); openAdvancedModal(); });
+            if (closeBtn) closeBtn.addEventListener('click', function(e) { e.preventDefault(); closeAdvancedModal(); });
+            if (overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) closeAdvancedModal();
+                });
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && overlay && overlay.classList.contains('studio-modal-overlay--open')) {
+                    closeAdvancedModal();
+                }
+            });
         })();
 
         // ── Code root prefix select + suffix sync / browseCode options ─────
@@ -967,23 +975,14 @@ MAIN_DOM_JS = r"""
                 provider: val('field-provider'),
                 model: val('field-model'),
                 code_root: val('field-code_root'),
-                max_files: val('field-max_files'),
-                workers: val('field-workers'),
-                planning_workers: val('field-planning_workers'),
-                timeout: val('field-timeout'),
-                notebook: chk('field-notebook'),
-                notebook_path: val('field-notebook_path'),
+                notebook: true,
+                notebook_path: '',
+                notebook_from_cache: false,
                 filtered_experiment_names: val('field-filtered_experiment_names'),
                 filtered_model_names: val('field-filtered_model_names'),
                 latest_only: chk('field-latest_only'),
-                verbose: chk('field-verbose'),
                 hardware_tier: val('field-hardware_tier'),
                 provider_base_url: val('field-provider_base_url'),
-                max_retries: val('field-max_retries'),
-                initial_backoff: val('field-initial_backoff'),
-                max_backoff: val('field-max_backoff'),
-                backoff_jitter: val('field-backoff_jitter'),
-                notebook_from_cache: chk('field-notebook_from_cache'),
             };
         }
 

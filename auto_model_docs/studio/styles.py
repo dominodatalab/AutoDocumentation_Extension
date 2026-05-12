@@ -807,10 +807,6 @@ input[type="file"] {
     padding-top: 8px;
     flex-wrap: wrap;
 }
-.spec-upload-status {
-    font-size: 13px;
-    color: var(--on-surface);
-}
 .spec-validation-error {
     background: var(--error-container);
     border-left: 3px solid var(--error);
@@ -898,6 +894,84 @@ input[type="file"] {
     padding-left: 1.625rem;
 }
 .field-hint.hidden { display: none; }
+
+body.studio-modal-open {
+    overflow: hidden;
+}
+.studio-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(15, 23, 42, 0.5);
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    box-sizing: border-box;
+}
+.studio-modal-overlay.studio-modal-overlay--open {
+    display: flex;
+}
+.studio-modal {
+    width: 100%;
+    max-width: 32rem;
+    max-height: calc(100vh - 3rem);
+    overflow: auto;
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-md);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+}
+.studio-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--outline-variant);
+    background: var(--surface-container-low);
+}
+.studio-modal-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--on-surface);
+}
+.studio-modal-close {
+    flex-shrink: 0;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+    color: var(--on-surface);
+    cursor: pointer;
+}
+.studio-modal-close:hover {
+    background: var(--surface-container-low);
+}
+.studio-modal-body {
+    padding: 0.75rem 1rem 1rem;
+}
+.advanced-open-row {
+    margin-top: 0.75rem;
+}
+.studio-advanced-open-btn {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-low);
+    color: var(--primary);
+    cursor: pointer;
+}
+.studio-advanced-open-btn:hover {
+    background: var(--surface-container);
+}
 
 /* ── Advanced / Collapsible Sections ──────────────────────────────── */
 .advanced-section {
@@ -1010,13 +1084,6 @@ input[type="file"] {
     color: var(--on-surface-variant);
     margin-bottom: 0.75rem;
     margin-top: -0.5rem;
-}
-.notebook-hint {
-    padding-left: 1.625rem;
-    margin-top: -0.5rem;
-}
-.notebook-path-disabled {
-    opacity: 0.5;
 }
 
 /* ── API key source radio ─────────────────────────────────────────── */
@@ -1783,27 +1850,6 @@ select.hw-tier-select option {
 .inline-callout-warning {
     background: var(--warning-container);
     border-left-color: var(--warning);
-}
-
-.spec-validation-success {
-    color: var(--success);
-    font-weight: 500;
-    font-size: 13px;
-}
-
-.spec-validation-empty {
-    color: var(--on-surface);
-}
-
-.spec-validation-pending {
-    color: var(--outline);
-    font-size: 13px;
-}
-
-.spec-validation-msg {
-    color: var(--on-surface);
-    font-size: 13px;
-    margin-top: 6px;
 }
 
 .generate-run-message {
