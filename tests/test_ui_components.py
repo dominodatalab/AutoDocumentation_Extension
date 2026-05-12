@@ -385,6 +385,7 @@ class TestStudioPageInsightBanner:
         assert "spec-validation-result" not in src
         assert "function setStudioErrorSlot" in scripts
         assert "_studioErrorSlotOrder" in scripts
+        assert "['computeEnv', 'generate']" in scripts
         assert "studio-errors-panel--visible" in scripts
         assert ".studio-errors-panel" in styles
         assert 'field-environment_id' not in src
@@ -392,6 +393,16 @@ class TestStudioPageInsightBanner:
         assert "studio-compute-env-json" in src
         assert "reloadEnvironmentRevisions" not in scripts
         assert "computeEnv" in scripts
+        assert "studio-error-dismiss" in scripts
+        assert "studio-error-dismiss-row" in scripts
+        assert "studio-error-toast-title" in scripts
+        assert "function setStudioUploadBanner" in scripts
+        assert "studio-success-toast" in scripts
+        assert "12000" in scripts
+        assert "60000" in scripts
+        assert ".studio-error-dismiss" in styles
+        assert "studio-error-dismiss-row" in styles
+        assert "studio-success-toast" in styles
 
 
 class TestInfoTooltipLayer:

@@ -198,8 +198,56 @@ a:hover { color: var(--primary-container); }
 .studio-errors-panel.studio-errors-panel--visible {
     display: block;
 }
-.studio-errors-panel .spec-validation-error + .spec-validation-error {
-    margin-top: 0.5rem;
+.studio-error-toast {
+    position: relative;
+}
+.studio-error-toast-title {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+.studio-error-toast .spec-validation-error-list {
+    margin-bottom: 0;
+}
+.studio-error-dismiss-row {
+    margin-top: 0.625rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--outline-variant);
+}
+.studio-error-dismiss {
+    display: inline-block;
+    margin: 0;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-body);
+    line-height: 1.4;
+    color: var(--primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.studio-error-dismiss:hover {
+    color: var(--primary-active);
+}
+.studio-success-toast {
+    background: var(--success-container);
+    border-left: 3px solid var(--success);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.375rem;
+    font-size: 13px;
+    color: var(--on-surface);
+}
+.studio-success-toast .studio-error-toast-title {
+    color: var(--success);
+}
+.studio-success-toast-list {
+    color: var(--on-surface);
+}
+.studio-success-dismiss-row {
+    border-top-color: rgba(40, 164, 100, 0.25);
 }
 .hero {
     padding: 0.25rem 0 1rem 0;

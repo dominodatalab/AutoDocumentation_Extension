@@ -382,6 +382,12 @@ class TestCompleteJsonOpenAI:
 
         result = await client.complete_json("prompt", schema={"type": "object"})
         assert result == expected_data
+        create = client.client.chat.completions.create
+        assert create.await_args is not None
+        kwargs = create.await_args.kwargs
+        assert "max_completion_tokens" in kwargs
+        assert kwargs["max_completion_tokens"] == 4096
+        assert "max_tokens" not in kwargs
 
     @pytest.mark.asyncio
     async def test_empty_response_raises(self, client):
