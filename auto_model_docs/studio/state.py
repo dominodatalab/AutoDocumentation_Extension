@@ -24,6 +24,9 @@ logging.basicConfig(
 for _mod_name in ("domino_datasets", "domino_client", "auth_context"):
     logging.getLogger(_mod_name).setLevel(logging.INFO)
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 # ---------------------------------------------------------------------------
 # Sibling module imports  (domino_client, domino_job_store, etc.)
 # ---------------------------------------------------------------------------

@@ -319,13 +319,7 @@ a:hover { color: var(--primary-container); }
     min-height: 0;
     gap: 1.25rem;
 }
-.studio-col-main > .bp-card:first-of-type {
-    flex: 0 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-.studio-col-main > .bp-card:last-of-type {
+.studio-col-main > .bp-card {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;

@@ -425,9 +425,11 @@ class TestStudioTwoStepLayout:
         assert web.count('Span("Step 2", cls="step-badge")') == 1
         assert "Step 3" not in web
         assert 'H2("Documentation specification")' not in web
+        assert web.count('cls="bp-card"') == 1
+        assert "configure_card_children.extend(run_card_children)" in web
+        assert ".studio-col-main > .bp-card:first-of-type" not in styles
         assert 'cls="studio-col-main"' in web
         assert "studio-col-left" not in web
-        assert "studio-col-mid" not in web
         assert ".studio-col-main" in styles
         assert ".studio-col-left" not in styles
         assert ".studio-col-mid" not in styles

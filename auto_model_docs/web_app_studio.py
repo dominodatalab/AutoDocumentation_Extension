@@ -237,11 +237,9 @@ async def index(req: Request):
         ),
     ]
 
-    # Spec file card
-    spec_card_children = []
+    configure_card_children = []
 
-    # Dataset browser + upload
-    spec_card_children.append(
+    configure_card_children.append(
         Div(
             H3("Spec file selection"),
             P("To browse for spec files, select a dataset and a spec file in the navigator below.", cls="field-hint-text"),
@@ -345,9 +343,8 @@ async def index(req: Request):
         )
     )
 
-    main_col_children.append(Div(*spec_card_children, cls="bp-card"))
+    configure_card_children.append(Hr(cls="section-divider"))
 
-    # Run settings card
     run_card_children = []
 
     run_card_children.append(
@@ -505,7 +502,9 @@ async def index(req: Request):
         )
     )
 
-    main_col_children.append(Div(*run_card_children, cls="bp-card"))
+    configure_card_children.extend(run_card_children)
+
+    main_col_children.append(Div(*configure_card_children, cls="bp-card"))
 
     right_col_children = [
         Div(

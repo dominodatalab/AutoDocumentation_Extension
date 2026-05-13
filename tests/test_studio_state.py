@@ -77,6 +77,14 @@ def state_module():
             sys.modules[key] = val
 
 
+class TestLoggingSetup:
+    def test_httpx_httpcore_noise_suppressed(self, state_module):
+        import logging
+
+        assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+        assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
+
+
 # ---------------------------------------------------------------------------
 # Dataclass structure
 # ---------------------------------------------------------------------------
