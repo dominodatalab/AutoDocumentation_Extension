@@ -421,8 +421,7 @@ class TestStudioTwoStepLayout:
         root = Path(__file__).resolve().parent.parent
         web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
         styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
-        assert web.count('Span("Step 1", cls="step-badge")') == 1
-        assert web.count('Span("Step 2", cls="step-badge")') == 1
+        assert "step-badge" not in web
         assert "Step 3" not in web
         assert 'H2("Documentation specification")' not in web
         assert web.count('cls="bp-card"') == 1
@@ -430,6 +429,13 @@ class TestStudioTwoStepLayout:
         assert ".studio-col-main > .bp-card:first-of-type" not in styles
         assert 'cls="studio-col-main"' in web
         assert "studio-col-left" not in web
+        assert "studio-col-mid" not in web
+        assert "target_project_banner" in web
+        assert web.index("target_project_banner") < web.index('cls="page-title"')
+        assert "spec-hint-download-row" in web
+        assert "Hr(cls=" not in web
+        assert ".spec-hint-download-row" in styles
+        assert ".studio-target-project-top" in styles
         assert ".studio-col-main" in styles
         assert ".studio-col-left" not in styles
         assert ".studio-col-mid" not in styles

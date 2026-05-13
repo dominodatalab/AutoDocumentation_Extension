@@ -206,6 +206,18 @@ async def index(req: Request):
     if not tier_options:
         tier_options = [Option("(default)", value="")]
 
+    target_project_banner = Div(
+        H3(
+            Span("Target project: ", cls="target-project-label-prefix"),
+            Span(
+                project_display_name or project_id or "",
+                cls="target-project-display",
+            ),
+            cls="target-project-row",
+        ),
+        cls="field target-project-callout studio-target-project-top",
+    )
+
     compute_env_errors = validate_studio_domino_compute_environment(domino_client)
     studio_errors_panel = Div(id="studio-errors-panel", cls="studio-errors-panel")
     _insight_children = [
@@ -232,7 +244,6 @@ async def index(req: Request):
     main_col_children = [
         Div(
             H2("Configure and run"),
-            Span("Step 1", cls="step-badge"),
             cls="col-header",
         ),
     ]
@@ -242,15 +253,20 @@ async def index(req: Request):
     configure_card_children.append(
         Div(
             H3("Spec file selection"),
-            P("To browse for spec files, select a dataset and a spec file in the navigator below.", cls="field-hint-text"),
-            A(
-                "Download reference template",
-                href="api/download-template",
-                data_app_rel="api/download-template",
-                download="doc_spec_template.yaml",
-                cls="app-link",
+            Div(
+                P(
+                    "To browse for spec files, select a dataset and a spec file in the navigator below.",
+                    cls="field-hint-text",
+                ),
+                A(
+                    "Download reference template",
+                    href="api/download-template",
+                    data_app_rel="api/download-template",
+                    download="doc_spec_template.yaml",
+                    cls="app-link",
+                ),
+                cls="spec-hint-download-row",
             ),
-            Hr(cls="section-divider"),
             Div(
                 Label("Dataset", Span(" *", cls="required-star")),
                 Select(
@@ -343,23 +359,7 @@ async def index(req: Request):
         )
     )
 
-    configure_card_children.append(Hr(cls="section-divider"))
-
     run_card_children = []
-
-    run_card_children.append(
-        Div(
-            H3(
-                Span("Target project: ", cls="target-project-label-prefix"),
-                Span(
-                    project_display_name or project_id or "",
-                    cls="target-project-display",
-                ),
-                cls="target-project-row",
-            ),
-            cls="field target-project-callout",
-        )
-    )
 
     run_card_children.append(
         Div(
@@ -509,7 +509,6 @@ async def index(req: Request):
     right_col_children = [
         Div(
             H2("History"),
-            Span("Step 2", cls="step-badge"),
             cls="col-header",
         ),
     ]
@@ -542,6 +541,7 @@ async def index(req: Request):
         ),
         # Page content
         Div(
+            target_project_banner,
             H1("Auto Model Docs Studio", cls="page-title"),
             Div(
                 *_insight_children,

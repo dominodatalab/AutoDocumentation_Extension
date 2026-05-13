@@ -507,6 +507,21 @@ input[type="file"] {
     margin-top: 0.15rem;
     margin-bottom: 0.5rem;
 }
+.spec-hint-download-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.75rem;
+}
+.spec-hint-download-row .field-hint-text {
+    margin: 0;
+    flex: 1 1 14rem;
+}
+.studio-target-project-top {
+    margin-top: 0;
+}
 
 /* Code root combo */
 .code-root-wrap {
