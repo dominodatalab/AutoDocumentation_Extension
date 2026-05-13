@@ -349,6 +349,7 @@ MAIN_DOM_JS = r"""
         var specBreadcrumb = document.getElementById('spec-breadcrumb');
         var specSelectedIndicator = document.getElementById('spec-selected-indicator');
         var specMachineUpload = document.getElementById('spec-machine-upload');
+        var specUploadTrigger = document.getElementById('spec-upload-trigger');
         var specPathField = document.getElementById('field-spec_path');
 
         // State
@@ -604,6 +605,13 @@ MAIN_DOM_JS = r"""
 
         // Global for breadcrumb onclick
         window._specBrowse = function(path) { browseFiles(path); };
+
+        if (specUploadTrigger && specMachineUpload) {
+            specUploadTrigger.addEventListener('click', function(e) {
+                e.preventDefault();
+                specMachineUpload.click();
+            });
+        }
 
         // Upload from machine → autodoc dataset
         if (specMachineUpload) {

@@ -273,6 +273,21 @@ async def index(req: Request):
                 cls="spec-file-list",
             ),
             Div(
+                A(
+                    "Upload spec",
+                    href="#",
+                    id="spec-upload-trigger",
+                    cls="app-link",
+                ),
+                Input(
+                    type="file",
+                    accept=".yaml,.yml",
+                    id="spec-machine-upload",
+                    cls="hidden-upload",
+                ),
+                cls="spec-upload-footer",
+            ),
+            Div(
                 Span("Selected:", cls="spec-selected-label"),
                 Input(
                     name="spec_path",
@@ -286,19 +301,6 @@ async def index(req: Request):
                 ),
                 id="spec-selected-indicator",
                 cls="spec-selected-indicator",
-            ),
-            Div(
-                Label(
-                    "Upload spec",
-                    Input(
-                        type="file",
-                        accept=".yaml,.yml",
-                        id="spec-machine-upload",
-                        cls="hidden-upload",
-                    ),
-                    cls="primary",
-                ),
-                cls="spec-upload-footer",
             ),
             Details(
                 Summary("Filters", cls="advanced-section-summary"),
@@ -530,11 +532,11 @@ async def index(req: Request):
 
     run_card_children.append(
         Div(
-            Button(
+            A(
                 "Advanced settings",
-                type="button",
+                href="#",
                 id="studio-advanced-open",
-                cls="primary",
+                cls="app-link",
             ),
             cls="advanced-open-row",
         )

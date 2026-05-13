@@ -1671,7 +1671,8 @@ select.hw-tier-select option {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    margin-top: 2px;
+    margin-top: 0.375rem;
+    margin-bottom: 0.25rem;
 }
 
 #field-spec_path {
