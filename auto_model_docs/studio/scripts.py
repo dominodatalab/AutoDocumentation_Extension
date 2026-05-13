@@ -141,7 +141,7 @@ MAIN_DOM_JS = r"""
                 html = '<div class="spec-validation-error studio-error-toast" role="alert">'
                     + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(b.title) + '</span>'
                     + '<ul class="spec-validation-error-list">' + lis + '</ul>'
-                    + '<div class="studio-error-dismiss-row"><a href="#" class="studio-error-dismiss primary" role="button">Dismiss</a></div></div>';
+                    + '<div class="studio-error-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>';
                 break;
             }
             if (!html && _studioUploadBanner) {
@@ -155,11 +155,11 @@ MAIN_DOM_JS = r"""
                     ? ('<div class="studio-success-toast studio-error-toast" role="status">'
                         + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
                         + '<ul class="spec-validation-error-list studio-success-toast-list">' + ulis + '</ul>'
-                        + '<div class="studio-error-dismiss-row studio-success-dismiss-row"><a href="#" class="studio-error-dismiss primary" role="button">Dismiss</a></div></div>')
+                        + '<div class="studio-error-dismiss-row studio-success-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>')
                     : ('<div class="spec-validation-error studio-error-toast" role="alert">'
                         + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
                         + '<ul class="spec-validation-error-list">' + ulis + '</ul>'
-                        + '<div class="studio-error-dismiss-row"><a href="#" class="studio-error-dismiss primary" role="button">Dismiss</a></div></div>');
+                        + '<div class="studio-error-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>');
                 html = uwrap;
             }
             panel.innerHTML = html;
