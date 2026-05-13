@@ -299,6 +299,8 @@ MAIN_DOM_JS = r"""
         var specUploadTrigger = document.getElementById('spec-upload-trigger');
         var specPathField = document.getElementById('field-spec_path');
 
+        var _SPEC_BROWSER_EXCLUDE_DATASET_NAME = "__AUTODOC_DATASET_NAME__";
+
         // State
         var _specDatasets = [];
         var _specCurrentDatasetId = '';
@@ -352,31 +354,34 @@ MAIN_DOM_JS = r"""
                         specDatasetSelect.innerHTML = '<option value="">Error: ' + datasets.error + '</option>';
                         return;
                     }
-                    _specDatasets = datasets;
-                    console.log('[spec-browser] Loaded ' + datasets.length + ' datasets:', datasets.map(function(d) { return d.name; }));
-                    if (datasets.length === 0) {
+                    var ex = _SPEC_BROWSER_EXCLUDE_DATASET_NAME;
+                    var di;
+                    _specAutoDocSpecsId = '';
+                    for (di = 0; di < datasets.length; di++) {
+                        if (datasets[di].name === ex) {
+                            _specAutoDocSpecsId = datasets[di].id;
+                            break;
+                        }
+                    }
+                    var specUi = [];
+                    for (di = 0; di < datasets.length; di++) {
+                        if (datasets[di].name !== ex) specUi.push(datasets[di]);
+                    }
+                    _specDatasets = specUi;
+                    console.log('[spec-browser] Loaded ' + datasets.length + ' datasets (spec UI ' + specUi.length + '):', datasets.map(function(d) { return d.name; }));
+                    if (specUi.length === 0) {
                         specDatasetSelect.innerHTML = '<option value="">No datasets found</option>';
-                        console.warn('[spec-browser] No writable datasets returned');
+                        console.warn('[spec-browser] No writable datasets for spec browser after exclusions');
                         return;
                     }
                     var html = '';
-                    for (var i = 0; i < datasets.length; i++) {
-                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
-                            + datasets[i].name + '</option>';
+                    for (var i = 0; i < specUi.length; i++) {
+                        html += '<option value="' + specUi[i].id + '" data-name="' + specUi[i].name + '" data-snapshot="' + (specUi[i].rwSnapshotId || '') + '" data-path="' + (specUi[i].datasetPath || '') + '">'
+                            + specUi[i].name + '</option>';
                     }
                     specDatasetSelect.innerHTML = html;
 
-                    var j;
-                    for (j = 0; j < datasets.length; j++) {
-                        if (datasets[j].name === 'autodoc') {
-                            specDatasetSelect.value = datasets[j].id;
-                            _specAutoDocSpecsId = datasets[j].id;
-                            onDatasetChange();
-                            return;
-                        }
-                    }
                     specDatasetSelect.selectedIndex = 0;
-                    _specAutoDocSpecsId = datasets[0].id;
                     onDatasetChange();
                 })
                 .catch(function(err) {
@@ -1002,3 +1007,7 @@ MAIN_DOM_JS = r"""
         }
     });
 """
+
+from dataset_manager import AUTODOC_DATASET_NAME
+
+MAIN_DOM_JS = MAIN_DOM_JS.replace("__AUTODOC_DATASET_NAME__", AUTODOC_DATASET_NAME)

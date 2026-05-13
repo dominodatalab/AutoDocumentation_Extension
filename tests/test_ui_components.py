@@ -478,3 +478,15 @@ class TestSpecFileBrowserUi:
         assert web.index('id="spec-file-list"') < web.index("spec-upload-trigger")
         assert web.index("spec-upload-trigger") < web.index('id="field-spec_path"')
         assert "#generate-btn" in styles
+
+    def test_spec_dataset_select_excludes_autodoc_name(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "__AUTODOC_DATASET_NAME__" in scripts_src
+        assert "_SPEC_BROWSER_EXCLUDE_DATASET_NAME" in scripts_src
+        assert "if (datasets[di].name !== ex) specUi.push(datasets[di]);" in scripts_src
+        from dataset_manager import AUTODOC_DATASET_NAME
+        from studio.scripts import MAIN_DOM_JS
+
+        assert "__AUTODOC_DATASET_NAME__" not in MAIN_DOM_JS
+        assert f'_SPEC_BROWSER_EXCLUDE_DATASET_NAME = "{AUTODOC_DATASET_NAME}"' in MAIN_DOM_JS
