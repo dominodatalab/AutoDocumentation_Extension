@@ -815,19 +815,23 @@ MAIN_DOM_JS = r"""
             return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
-        function _jobRow(j) {
+        function _jobRow(j, documentUrl) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
             var tier = j.hardware_tier || '—';
             var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
             var linkCell = j.job_url
-                ? '<td><a href="' + _esc(j.job_url) + '" target="_blank">View →</a></td>'
+                ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener noreferrer">View →</a></td>'
+                : '<td>—</td>';
+            var docCell = documentUrl
+                ? '<td><a href="' + _esc(documentUrl) + '" target="_blank" rel="noopener noreferrer">View →</a></td>'
                 : '<td>—</td>';
             return '<tr>'
                 + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
                 + linkCell
+                + docCell
                 + '</tr>';
         }
 
@@ -843,13 +847,14 @@ MAIN_DOM_JS = r"""
                 + '</div>';
         }
 
-        function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
-            var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
+        function _tableHtml(jobs, documentUrl) {
+            var header = '<thead><tr><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th><th>Document</th></tr></thead>';
+            var du = documentUrl || '';
+            var rows = jobs.map(function(j) { return _jobRow(j, du); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
 
-        function renderJobHistory(jobs) {
+        function renderJobHistory(jobs, documentUrl) {
             var el = document.getElementById('job-history-content');
             if (!el) return;
 
@@ -861,7 +866,7 @@ MAIN_DOM_JS = r"""
             var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
 
             var html = _maxJobsWarning(jobs);
-            html += '<div class="history-table-wrap">' + _tableHtml(jobs) + '</div>';
+            html += '<div class="history-table-wrap">' + _tableHtml(jobs, documentUrl || '') + '</div>';
 
             var actions = '<a class="primary" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
             if (hasQueued) {
@@ -888,7 +893,7 @@ MAIN_DOM_JS = r"""
                     fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
                         .then(_checkResp).then(function(r) { return r.json(); })
                         .then(function(data) {
-                            renderJobHistory(data.jobs || []);
+                            renderJobHistory(data.jobs || [], data.document_url || '');
                         })
                         .catch(function(err) {
                             console.error('[job-history] Cancel queued failed:', err);
@@ -901,7 +906,7 @@ MAIN_DOM_JS = r"""
             fetch(_adUrl('job-history') + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(data) {
-                    renderJobHistory(data.jobs || []);
+                    renderJobHistory(data.jobs || [], data.document_url || '');
                 })
                 .catch(function(err) {
                     console.error('[job-history] Could not load job history:', err);

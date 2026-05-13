@@ -131,12 +131,20 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_info.main_repo_id = "repo-123"
     mock_client.resolve_project.return_value = mock_info
     mock_client.set_ui_host = MagicMock()
+    import domino_client as real_dc
+
+    monkeypatch.setattr(
+        real_dc,
+        "build_autodoc_dataset_data_page_url",
+        lambda pid, did: f"https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/{did}",
+    )
     mock_client.list_self_environments.return_value = []
     mock_client.list_environment_revisions.return_value = []
 
     mock_datasets = MagicMock()
     mock_datasets.list_datasets.return_value = [
         {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
+        {"id": "ds-autodoc-uuid", "name": "autodoc", "rwSnapshotId": "snap-ad", "datasetPath": "/mnt/data/autodoc"},
     ]
     mock_datasets.ensure_dataset = MagicMock(
         return_value={"id": "ds-1", "name": "autodoc-specs", "datasetPath": "/domino/datasets/local/autodoc"},
@@ -501,6 +509,9 @@ class TestJobRoutesIntegration:
         resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
         assert resp.json().get("jobs") == []
+        assert resp.json().get("document_url") == (
+            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid"
+        )
 
     def test_submit_job_calls_domino(self, client, integration_env):
         """POST /run submits to Domino and records the run for the current user."""
@@ -534,6 +545,9 @@ class TestJobRoutesIntegration:
         body = resp.json()
         assert body.get("ok") is True
         assert body.get("jobs") == []
+        assert body.get("document_url") == (
+            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid"
+        )
 
 
 # ===========================================================================
@@ -651,3 +665,6 @@ class TestCrossCuttingIntegration:
         resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
         assert resp.json().get("jobs") == []
+        assert resp.json().get("document_url") == (
+            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid"
+        )

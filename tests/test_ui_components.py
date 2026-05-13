@@ -461,6 +461,8 @@ class TestSpecFileBrowserUi:
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
         assert "runJobJsonPayloadFromMainForm" in scripts
+        assert "<th>Document</th>" in scripts
+        assert "renderJobHistory(data.jobs || [], data.document_url" in scripts
         assert "api/detect-language" not in scripts
         assert "field-language" not in scripts
         assert "field-environment_id" not in web

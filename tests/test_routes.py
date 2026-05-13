@@ -579,20 +579,43 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = [
             {"id": "j1", "status": "running", "hardware_tier": "small"}
         ]
+        _mock_studio_modules["state"].domino_datasets.list_datasets.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/job-history"](req)
         body = json.loads(result.body)
         assert "jobs" in body
         assert len(body["jobs"]) == 1
+        assert body.get("document_url") == ""
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.assert_called_with(
             "proj-123", "test_user", limit=50
         )
+        _mock_studio_modules["state"].domino_datasets.list_datasets.assert_called_once_with("proj-123")
+
+    @pytest.mark.asyncio
+    async def test_job_history_document_url_uses_autodoc_dataset(self, _mock_studio_modules):
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
+        _mock_studio_modules["state"].domino_datasets.list_datasets.return_value = [
+            {"id": "other", "name": "other-ds"},
+            {"id": "ds-autodoc", "name": "autodoc"},
+        ]
+        req = _make_request(query_params={"projectId": "proj-123"})
+        with patch(
+            "domino_client.build_autodoc_dataset_data_page_url",
+            return_value="https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc",
+        ) as mock_b:
+            result = await routes["/job-history"](req)
+        body = json.loads(result.body)
+        assert body["document_url"] == "https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc"
+        mock_b.assert_called_once_with("proj-123", "ds-autodoc")
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
+        _mock_studio_modules["state"].domino_datasets.list_datasets.return_value = []
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/cancel-queued-jobs"](req)
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_called_with(
@@ -600,6 +623,7 @@ class TestJobRoutes:
         )
         body = json.loads(result.body)
         assert body["ok"] is True
+        assert body.get("document_url") == ""
 
     @pytest.mark.asyncio
     async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules, monkeypatch):
@@ -610,6 +634,7 @@ class TestJobRoutes:
         result = await routes["/job-history"](req)
         body = json.loads(result.body)
         assert body["jobs"] == []
+        assert body.get("document_url") == ""
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
@@ -621,6 +646,7 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_not_called()
         body = json.loads(result.body)
         assert body["ok"] is False
+        assert body.get("document_url") == ""
 
     @pytest.mark.asyncio
     async def test_run_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):

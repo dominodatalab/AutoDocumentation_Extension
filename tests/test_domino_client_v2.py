@@ -2,7 +2,7 @@
 
 Covers: list_hardware_tiers, list_self_environments, list_environment_revisions,
 get_project_default_tier,
-get_job_status, stop_job, set_ui_host, build_job_url,
+get_job_status, stop_job, set_ui_host, build_job_url, build_autodoc_dataset_data_page_url,
 resolve_project, submit_job with current signatures.
 """
 
@@ -338,6 +338,21 @@ class TestBuildJobUrl:
         )
         url = dc.build_job_url("run-456", project_id="other-proj")
         assert "/bob/other-model/" in url
+
+
+class TestBuildAutodocDatasetDataPageUrl:
+    def test_builds_url(self):
+        dc.set_ui_host("domino.example.com")
+        with patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner")):
+            url = dc.build_autodoc_dataset_data_page_url("proj-123", "ds-uuid-1")
+        assert url == "https://domino.example.com/u/test_owner/test_project/data/rw/upload/autodoc/ds-uuid-1"
+
+    def test_none_without_ui_host(self):
+        assert dc.build_autodoc_dataset_data_page_url("proj-123", "ds-1") is None
+
+    def test_none_empty_dataset_id(self):
+        dc.set_ui_host("domino.example.com")
+        assert dc.build_autodoc_dataset_data_page_url("proj-123", "  ") is None
 
 
 # ---------------------------------------------------------------------------
