@@ -272,20 +272,19 @@ async def index(req: Request):
                 id="spec-file-list",
                 cls="spec-file-list",
             ),
-            Div(
-                A(
-                    "Upload spec",
-                    href="#",
-                    id="spec-upload-trigger",
-                    cls="app-link",
-                ),
-                Input(
-                    type="file",
-                    accept=".yaml,.yml",
-                    id="spec-machine-upload",
-                    cls="hidden-upload",
-                ),
-                cls="spec-upload-footer",
+            A(
+                "Upload spec",
+                href="#",
+                id="spec-upload-trigger",
+                name="spec-upload-trigger",
+                cls="app-link",
+            ),
+            Input(
+                type="file",
+                accept=".yaml,.yml",
+                id="spec-machine-upload",
+                name="spec-machine-upload",
+                cls="hidden-upload",
             ),
             Div(
                 Span("Selected:", cls="spec-selected-label"),

@@ -1668,11 +1668,8 @@ select.hw-tier-select option {
     color: var(--outline);
 }
 
-.spec-upload-footer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
+#spec-upload-trigger {
+    display: inline-block;
     margin-top: 0.375rem;
     margin-bottom: 0.25rem;
 }
