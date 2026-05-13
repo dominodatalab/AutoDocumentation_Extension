@@ -317,7 +317,7 @@ a:hover { color: var(--primary-container); }
     display: flex;
     flex-direction: column;
     min-height: 0;
-    gap: 1.25rem;
+    gap: 0.5rem;
 }
 .studio-col-main > .bp-card {
     flex: 1 1 auto;
@@ -346,7 +346,7 @@ a:hover { color: var(--primary-container); }
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    margin-bottom: 0.875rem;
+    margin-bottom: 0;
     padding: 0 0.125rem;
 }
 .col-header h2 {
@@ -371,8 +371,23 @@ a:hover { color: var(--primary-container); }
     font-size: 16px;
     font-weight: 600;
     color: var(--on-surface);
-    margin: 0 0 0.625rem 0;
+    margin: 0 0 0.45rem 0;
     letter-spacing: -0.01em;
+}
+.studio-spec-block {
+    gap: 0.12rem;
+}
+.studio-spec-block .spec-section-heading {
+    font-family: var(--font-headline);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--on-surface);
+    margin: 0;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+.studio-spec-block .spec-hint-download-row {
+    margin-bottom: 0.45rem;
 }
 
 /* ── Cards (No-Line Rule: tonal layering, not borders) ───────────── */
@@ -380,7 +395,7 @@ a:hover { color: var(--primary-container); }
     background: var(--surface-container-lowest);
     border: 1px solid var(--outline-variant);
     border-radius: var(--radius-lg);
-    padding: 1.5rem;
+    padding: 1.1rem 0.875rem;
     box-shadow: var(--shadow-sm);
     transition: box-shadow 0.2s ease;
 }
@@ -392,8 +407,8 @@ a:hover { color: var(--primary-container); }
 .field {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    margin-bottom: 1rem;
+    gap: 0.28rem;
+    margin-bottom: 0.7rem;
 }
 .field:last-child {
     margin-bottom: 0;
@@ -414,7 +429,7 @@ textarea {
     background-color: #ffffff;
     border: 1px solid #d6d6d6;
     border-radius: 4px;
-    padding: 0 14px;
+    padding: 0 10px;
     height: 36px;
     color: #2e2e38;
     font-family: var(--font-body);
@@ -432,7 +447,7 @@ select:not(.code-root-prefix) {
     background-color: #ffffff;
     border: 1px solid #d6d6d6;
     border-radius: 4px;
-    padding: 0 2rem 0 14px;
+    padding: 0 1.65rem 0 10px;
     height: 36px;
     color: #2e2e38;
     font-family: var(--font-body);
@@ -448,11 +463,11 @@ select:not(.code-root-prefix) {
     cursor: pointer;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 0.75rem center;
+    background-position: right 0.55rem center;
 }
 textarea {
     height: auto;
-    padding: 8px 14px;
+    padding: 8px 10px;
     min-height: 72px;
 }
 input[type="text"]:not(.code-root-suffix):hover,
@@ -512,17 +527,13 @@ input[type="file"] {
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
-    gap: 0.5rem 1rem;
-    margin-bottom: 0.75rem;
+    gap: 0.35rem 0.65rem;
+    margin-bottom: 0.55rem;
 }
 .spec-hint-download-row .field-hint-text {
     margin: 0;
     flex: 1 1 14rem;
 }
-.studio-target-project-top {
-    margin-top: 0;
-}
-
 /* Code root combo */
 .code-root-wrap {
     display: flex;
@@ -541,7 +552,7 @@ input[type="file"] {
     box-shadow: none;
 }
 .code-root-prefix {
-    padding: 0 2rem 0 14px;
+    padding: 0 1.5rem 0 10px;
     height: 36px;
     background: var(--surface-container-low);
     border: none;
@@ -559,7 +570,7 @@ input[type="file"] {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 0.75rem center;
+    background-position: right 0.5rem center;
     outline: none;
 }
 .code-root-prefix option {
@@ -574,7 +585,7 @@ input[type="file"] {
 .code-root-suffix {
     flex: 1;
     border: none;
-    padding: 0 14px;
+    padding: 0 10px;
     height: 36px;
     font-size: 14px;
     color: #2e2e38;
@@ -1399,7 +1410,7 @@ a.primary.terminal-action-disabled,
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding: 1rem;
+    padding: 0.875rem 0.75rem;
 }
 /* ── Job History ──────────────────────────────────────────────────── */
 #job-history-content {
@@ -1533,8 +1544,8 @@ details[open] > .history-toggle::before {
 .card-footer {
     display: flex;
     justify-content: flex-end;
-    padding-top: 1.25rem;
-    margin-top: 0.75rem;
+    padding-top: 0.85rem;
+    margin-top: 0.5rem;
     border-top: 1px solid var(--outline-variant);
 }
 .card-footer.generate-actions {

@@ -430,13 +430,14 @@ class TestStudioTwoStepLayout:
         assert 'cls="studio-col-main"' in web
         assert "studio-col-left" not in web
         assert "studio-col-mid" not in web
-        assert "target_project_banner" in web
-        assert web.index("target_project_banner") < web.index('cls="page-title"')
+        assert web.index('cls="target-project-row"') < web.index("Spec file selection")
+        assert 'H4("Spec file selection"' in web
+        assert "studio-spec-block" in web
         assert "spec-hint-download-row" in web
         assert "Hr(cls=" not in web
+        assert ".studio-spec-block" in styles
+        assert ".spec-section-heading" in styles
         assert ".spec-hint-download-row" in styles
-        assert ".studio-target-project-top" in styles
-        assert ".studio-col-main" in styles
         assert ".studio-col-left" not in styles
         assert ".studio-col-mid" not in styles
 

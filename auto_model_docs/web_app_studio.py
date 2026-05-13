@@ -206,18 +206,6 @@ async def index(req: Request):
     if not tier_options:
         tier_options = [Option("(default)", value="")]
 
-    target_project_banner = Div(
-        H3(
-            Span("Target project: ", cls="target-project-label-prefix"),
-            Span(
-                project_display_name or project_id or "",
-                cls="target-project-display",
-            ),
-            cls="target-project-row",
-        ),
-        cls="field target-project-callout studio-target-project-top",
-    )
-
     compute_env_errors = validate_studio_domino_compute_environment(domino_client)
     studio_errors_panel = Div(id="studio-errors-panel", cls="studio-errors-panel")
     _insight_children = [
@@ -251,8 +239,19 @@ async def index(req: Request):
     configure_card_children = []
 
     configure_card_children.append(
+        H3(
+            Span("Target project: ", cls="target-project-label-prefix"),
+            Span(
+                project_display_name or project_id or "",
+                cls="target-project-display",
+            ),
+            cls="target-project-row",
+        ),
+    )
+
+    configure_card_children.append(
         Div(
-            H3("Spec file selection"),
+            H4("Spec file selection", cls="spec-section-heading"),
             Div(
                 P(
                     "To browse for spec files, select a dataset and a spec file in the navigator below.",
@@ -355,7 +354,7 @@ async def index(req: Request):
                 cls="advanced-section",
                 open=False,
             ),
-            cls="field",
+            cls="field studio-spec-block",
         )
     )
 
@@ -541,7 +540,6 @@ async def index(req: Request):
         ),
         # Page content
         Div(
-            target_project_banner,
             H1("Auto Model Docs Studio", cls="page-title"),
             Div(
                 *_insight_children,
