@@ -43,7 +43,6 @@ def _db_record_to_dataclass(row: dict) -> DominoJobRecord:
         id=row["id"],
         owner_id=row["owner_id"],
         domino_run_id=row.get("domino_run_id"),
-        branch=row.get("branch"),
         hardware_tier=row.get("hardware_tier"),
         status=row.get("status", "queued"),
         domino_status=row.get("domino_status"),

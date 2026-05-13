@@ -49,7 +49,6 @@ class _MockJobRequest:
     api_key_source: str = "domino_env"
     project_id: str = ""
     provider_base_url: str = ""
-    language: str = "auto"
     max_retries: int = 5
     initial_backoff: float = 10.0
     max_backoff: float = 120.0
@@ -62,7 +61,6 @@ class _MockDominoJobRecord:
     id: str
     owner_id: str
     domino_run_id: Optional[str] = None
-    branch: Optional[str] = None
     hardware_tier: Optional[str] = None
     status: str = "queued"
     domino_status: Optional[str] = None
@@ -193,7 +191,6 @@ def _mock_studio_modules(monkeypatch):
     # autodoc.core.models — DocumentSpec on routes_api (upload validation)
     mock_autodoc_models = ModuleType("autodoc.core.models")
     mock_autodoc_models.DocumentSpec = MagicMock()
-    mock_autodoc_models.detect_language = MagicMock()
     mock_autodoc_models.LANGUAGE_PROFILES = {}
 
     # authorization — default to "allow everything" so existing route tests pass.
@@ -580,7 +577,7 @@ class TestJobRoutes:
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = [
-            {"id": "j1", "status": "running", "branch": "main", "hardware_tier": "small"}
+            {"id": "j1", "status": "running", "hardware_tier": "small"}
         ]
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/job-history"](req)

@@ -25,7 +25,6 @@ def test_record_job_skips_without_env():
         "proj",
         domino_run_id="r1",
         job_url="http://x",
-        branch="",
         hardware_tier="t",
         spec_path="/s.yaml",
     )
@@ -60,7 +59,6 @@ def test_roundtrip_and_refresh(monkeypatch, tmp_path):
         "proj-a",
         domino_run_id="run-1",
         job_url="http://job",
-        branch="main",
         hardware_tier="small",
         spec_path="/x.yaml",
     )
@@ -85,7 +83,6 @@ def test_no_cross_user_leak(monkeypatch, tmp_path):
         "proj-x",
         domino_run_id="r1",
         job_url="",
-        branch="",
         hardware_tier="",
         spec_path="",
     )

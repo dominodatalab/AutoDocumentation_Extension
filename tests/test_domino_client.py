@@ -396,7 +396,6 @@ def _make_job_request(**overrides) -> Any:
         environment_revision_id="",
         project_id="",
         provider_base_url="",
-        language="auto",
         max_retries=5,
         initial_backoff=10.0,
         max_backoff=120.0,
@@ -456,15 +455,10 @@ class TestBuildJobCommandStr:
         assert "--provider-base-url" in cmd
         assert "https://api.anthropic.example" in cmd
 
-    def test_includes_language_when_set(self):
-        req = _make_job_request(language="r")
-        cmd = _bld_cmd(req, "/spec.yaml", _ds)
-        assert "--language" in cmd
-        parts = shlex.split(cmd)
-        assert parts[parts.index("--language") + 1] == "r"
+    def test_includes_language_default_in_command(self):
+        from default_consts import DEFAULT_LANGUAGE
 
-    def test_includes_language_auto_by_default(self):
         req = _make_job_request()
         cmd = _bld_cmd(req, "/spec.yaml", _ds)
         parts = shlex.split(cmd)
-        assert parts[parts.index("--language") + 1] == "auto"
+        assert parts[parts.index("--language") + 1] == DEFAULT_LANGUAGE

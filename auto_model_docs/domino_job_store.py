@@ -130,7 +130,6 @@ def record_job(
     job_url: str,
     hardware_tier: str,
     spec_path: str,
-    branch: str = "",
     status: str = "submitted",
 ) -> None:
     if not owner_id or not project_id or not domino_run_id:
@@ -159,7 +158,7 @@ def record_job(
                     domino_run_id,
                     job_url or "",
                     (status or "submitted").strip().lower(),
-                    branch or "",
+                    "",
                     hardware_tier or "",
                     spec_path or "",
                     submitted_at,
@@ -191,7 +190,7 @@ def get_user_jobs(project_id: str, owner_id: str, limit: int = 50) -> list[dict[
 
             cur = conn.execute(
                 """
-                SELECT id, domino_run_id, job_url, status, branch, hardware_tier,
+                SELECT id, domino_run_id, job_url, status, hardware_tier,
                        spec_path, submitted_at
                 FROM studio_jobs
                 WHERE owner_id = ? AND project_id = ?
@@ -210,7 +209,6 @@ def get_user_jobs(project_id: str, owner_id: str, limit: int = 50) -> list[dict[
                         "domino_run_id": rid,
                         "job_url": row["job_url"] or "",
                         "status": st,
-                        "branch": row["branch"] or "",
                         "hardware_tier": row["hardware_tier"] or "",
                         "spec_path": row["spec_path"] or "",
                         "submitted_at": row["submitted_at"] or "",

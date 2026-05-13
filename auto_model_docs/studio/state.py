@@ -93,7 +93,6 @@ class JobRequest:
     environment_revision_id: str
     project_id: str
     provider_base_url: str
-    language: str
     max_retries: int
     initial_backoff: float
     max_backoff: float
@@ -106,7 +105,6 @@ class DominoJobRecord:
     id: str                              # local UUID
     owner_id: str                        # Domino user id (from /v4/users/self)
     domino_run_id: Optional[str] = None
-    branch: Optional[str] = None
     hardware_tier: Optional[str] = None
     status: str = "queued"               # queued | submitted | running | succeeded | failed | cancelled
     domino_status: Optional[str] = None

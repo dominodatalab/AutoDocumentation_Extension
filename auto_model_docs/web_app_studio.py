@@ -402,40 +402,6 @@ async def index(req: Request):
             cls="field",
         )
     )
-    # Hidden detected language field
-    run_card_children.append(
-        Input(type="hidden", name="detected_language", id="field-detected-language", value="python"),
-    )
-
-    # Language detection row (shown after code root is set)
-    run_card_children.append(
-        Div(
-            Span("Detected: ", cls="lang-detection-label"),
-            Span(id="lang-detected-name", cls="lang-detection-value"),
-            Span(id="lang-detected-count", cls="lang-detection-count"),
-            Button(
-                "Override",
-                id="lang-override-btn",
-                type="button",
-                cls="primary",
-                aria_label="Override detected language",
-                onclick="document.getElementById('lang-override-select').style.display = "
-                        "document.getElementById('lang-override-select').style.display === 'none' ? 'inline-block' : 'none';",
-            ),
-            Select(
-                Option("Auto-detect", value="auto", selected=True),
-                Option("Python", value="python"),
-                Option("R", value="r"),
-                Option("SAS", value="sas"),
-                Option("MATLAB", value="matlab"),
-                id="lang-override-select",
-                cls="lang-override-select",
-                onchange="handleLanguageOverride(this.value)",
-            ),
-            id="lang-detection-row",
-            cls="lang-detection-row",
-        )
-    )
 
     advanced_modal_fields = [
         Div(
@@ -510,6 +476,10 @@ async def index(req: Request):
         Div(
             Div(
                 H3("Advanced settings", id="studio-advanced-modal-title", cls="studio-modal-title"),
+                cls="studio-modal-header",
+            ),
+            Div(*advanced_modal_fields, cls="studio-modal-body advanced-content"),
+            Div(
                 Button(
                     "Close",
                     type="button",
@@ -517,9 +487,8 @@ async def index(req: Request):
                     cls="primary",
                     aria_label="Close advanced settings",
                 ),
-                cls="studio-modal-header",
+                cls="studio-modal-footer",
             ),
-            Div(*advanced_modal_fields, cls="studio-modal-body advanced-content"),
             cls="studio-modal",
             role="dialog",
             aria_modal="true",
@@ -528,18 +497,6 @@ async def index(req: Request):
         id="studio-advanced-modal",
         cls="studio-modal-overlay",
         aria_hidden="true",
-    )
-
-    run_card_children.append(
-        Div(
-            A(
-                "Advanced settings",
-                href="#",
-                id="studio-advanced-open",
-                cls="app-link",
-            ),
-            cls="advanced-open-row",
-        )
     )
 
     run_card_children.append(Div(cls="card-content-spacer"))
@@ -553,6 +510,14 @@ async def index(req: Request):
     )
 
     mid_col_children.append(Div(*run_card_children, cls="bp-card"))
+    mid_col_children.append(
+        A(
+            "Advanced settings",
+            href="#",
+            id="studio-advanced-open",
+            cls="app-link studio-advanced-open",
+        ),
+    )
 
     # RIGHT COLUMN: History
     right_col_children = [

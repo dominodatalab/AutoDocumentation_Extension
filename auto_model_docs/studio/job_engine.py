@@ -14,7 +14,6 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 from default_consts import (
-    ALLOWED_LANGUAGES,
     ALLOWED_PROVIDERS,
     DEFAULT_GENERATION_WORKERS,
     DEFAULT_LANGUAGE,
@@ -83,9 +82,6 @@ def _validate_job_inputs(req: JobRequest, spec_path: str) -> None:
         raise ValueError("Environment is required. Select an environment before generating documentation.")
     if not _domino_id_str(req.environment_revision_id):
         raise ValueError("Environment revision is required. Select an environment revision before generating documentation.")
-    lang = (req.language or "").strip().lower()
-    if lang not in ALLOWED_LANGUAGES:
-        raise ValueError("Language is not supported.")
     if req.max_files < 1 or req.max_files > _MAX_JOB_MAX_FILES:
         raise ValueError(f"max_files must be between 1 and {_MAX_JOB_MAX_FILES}.")
     if req.workers < 1 or req.workers > _MAX_JOB_WORKERS:
@@ -165,7 +161,6 @@ async def _parse_request(req: Request) -> JobRequest:
         environment_revision_id=(os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip(),
         project_id=project_id,
         provider_base_url=_form_str(body, "provider_base_url"),
-        language=DEFAULT_LANGUAGE,
         max_retries=_form_int(body, "max_retries", DEFAULT_LLM_MAX_RETRIES),
         initial_backoff=_form_float(body, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
         max_backoff=_form_float(body, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
@@ -198,7 +193,7 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
         "--provider",
         req.provider.strip().lower(),
         "--language",
-        req.language,
+        DEFAULT_LANGUAGE,
         "--max-files",
         str(req.max_files),
         "--generation-workers",

@@ -1,4 +1,4 @@
-"""API routes: hardware tiers, language detection, datasets, etc."""
+"""API routes: hardware tiers, datasets, etc."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
 
 from .state import (
-    _get_default_code_root,
     _resolve_request_project_id,
     domino_client,
     domino_datasets,
@@ -67,37 +66,6 @@ def register_api_routes(rt):
         return Response(json.dumps(result), media_type="application/json")
 
     rt("/api/environment-revisions")(api_environment_revisions)
-
-    def api_detect_language(req: Request):
-        from autodoc.core.models import detect_language as _detect_lang, LANGUAGE_PROFILES
-
-        code_root_param = req.query_params.get("code_root", "")
-        if code_root_param:
-            code_root = Path(code_root_param)
-        else:
-            code_root = _get_default_code_root()
-
-        profile, count = _detect_lang(code_root)
-        if profile:
-            return Response(
-                json.dumps({
-                    "language": profile.name,
-                    "display_name": profile.display_name,
-                    "file_count": count,
-                }),
-                media_type="application/json",
-            )
-        return Response(
-            json.dumps({
-                "language": None,
-                "display_name": None,
-                "file_count": 0,
-                "supported": list(LANGUAGE_PROFILES.keys()),
-            }),
-            media_type="application/json",
-        )
-
-    rt("/api/detect-language")(api_detect_language)
 
     async def api_datasets(req: Request):
         """List writable datasets for the project.

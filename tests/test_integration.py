@@ -195,7 +195,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         api_key_source: str = "domino_env"
         project_id: str = ""
         provider_base_url: str = ""
-        language: str = "auto"
         max_retries: int = 5
         initial_backoff: float = 10.0
         max_backoff: float = 120.0
@@ -207,7 +206,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         id: str
         owner_id: str
         domino_run_id: Optional[str] = None
-        branch: Optional[str] = None
         hardware_tier: Optional[str] = None
         status: str = "queued"
         domino_status: Optional[str] = None
@@ -273,7 +271,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_doc_spec = MagicMock()
     mock_doc_spec.validate_spec.return_value = []
     mock_models.DocumentSpec = mock_doc_spec
-    mock_models.detect_language = MagicMock(return_value=(None, 0))
     mock_models.LANGUAGE_PROFILES = {}
     sys.modules["autodoc"] = ModuleType("autodoc")
     sys.modules["autodoc.core"] = ModuleType("autodoc.core")

@@ -287,59 +287,6 @@ MAIN_DOM_JS = r"""
             });
         })();
 
-        // ── Language detection ────────────────────────────────────────────
-        var langRow = document.getElementById('lang-detection-row');
-        var langName = document.getElementById('lang-detected-name');
-        var langCount = document.getElementById('lang-detected-count');
-        var langInput = document.getElementById('field-detected-language');
-        var langSelect = document.getElementById('lang-override-select');
-
-        function detectLanguage(codeRoot) {
-            var url = _adUrl('api/detect-language');
-            if (codeRoot) url += '?code_root=' + encodeURIComponent(codeRoot);
-            fetch(url)
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (langRow) langRow.style.display = '';
-                    if (data.language) {
-                        if (langName) langName.textContent = data.display_name;
-                        if (langCount) langCount.textContent = '(' + data.file_count + ' files)';
-                        if (langInput) langInput.value = data.language;
-                        if (langSelect) langSelect.value = data.language;
-                    } else {
-                        if (langName) langName.textContent = '';
-                        if (langCount) langCount.textContent = '';
-                        if (langRow) {
-                            langRow.innerHTML = '<span class="lang-empty-state">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
-                            langRow.style.display = '';
-                        }
-                    }
-                })
-                .catch(function(err) {
-                    console.error('[language-detection]', err);
-                });
-        }
-
-        window.handleLanguageOverride = function(lang) {
-            if (langInput) langInput.value = lang === 'auto' ? 'python' : lang;
-            var cr = document.getElementById('field-code_root');
-            detectLanguage(cr ? cr.value : undefined);
-        };
-
-        function detectLanguageFromCodeRoot() {
-            var cr = document.getElementById('field-code_root');
-            var val = cr ? (cr.value || '').trim() : '';
-            if (!val) {
-                if (langRow) langRow.style.display = 'none';
-                if (langName) langName.textContent = '';
-                if (langCount) langCount.textContent = '';
-                return;
-            }
-            detectLanguage(val);
-        }
-
-        detectLanguageFromCodeRoot();
-
         const providerSelect    = document.getElementById('field-provider');
         const modelNameField    = document.getElementById('model-name-field');
 
@@ -793,7 +740,6 @@ MAIN_DOM_JS = r"""
                 prefix.classList.add('code-root-error');
                 if (hidden) hidden.value = '';
                 sync();
-                detectLanguageFromCodeRoot();
             }
             function showCodeRootLoading() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
@@ -843,22 +789,15 @@ MAIN_DOM_JS = r"""
                         }
                         if (!found) prefix.selectedIndex = 0;
                         sync();
-                        detectLanguageFromCodeRoot();
                     })
                     .catch(function() { showCodeRootError('Request to load source code roots failed.'); });
             }
             if (suffix) {
                 suffix.addEventListener('input', sync);
-                var langTimer = null;
-                suffix.addEventListener('input', function() {
-                    clearTimeout(langTimer);
-                    langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
-                });
             }
             if (prefix && prefix.tagName === 'SELECT') {
                 prefix.addEventListener('change', function() {
                     sync();
-                    detectLanguageFromCodeRoot();
                 });
             }
             sync();
@@ -874,14 +813,12 @@ MAIN_DOM_JS = r"""
         function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
-            var branch = j.branch || '—';
             var tier = j.hardware_tier || '—';
             var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
             var linkCell = j.job_url
                 ? '<td><a href="' + _esc(j.job_url) + '" target="_blank">View →</a></td>'
                 : '<td>—</td>';
             return '<tr>'
-                + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
                 + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
@@ -902,7 +839,7 @@ MAIN_DOM_JS = r"""
         }
 
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Branch</th><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
+            var header = '<thead><tr><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
             var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }

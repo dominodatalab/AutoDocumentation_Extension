@@ -432,7 +432,7 @@ textarea {
     -webkit-appearance: none;
     appearance: none;
 }
-select:not(.code-root-prefix):not(.lang-override-select) {
+select:not(.code-root-prefix) {
     background-color: #ffffff;
     border: 1px solid #d6d6d6;
     border-radius: 4px;
@@ -462,14 +462,14 @@ textarea {
 input[type="text"]:not(.code-root-suffix):hover,
 input[type="number"]:hover,
 input[type="password"]:hover,
-select:not(.code-root-prefix):not(.lang-override-select):hover,
+select:not(.code-root-prefix):hover,
 textarea:hover {
     border-color: #543fde;
 }
 input[type="text"]:not(.code-root-suffix):focus,
 input[type="number"]:focus,
 input[type="password"]:focus,
-select:not(.code-root-prefix):not(.lang-override-select):focus,
+select:not(.code-root-prefix):focus,
 textarea:focus {
     border-color: #543fde;
     box-shadow: none;
@@ -902,8 +902,6 @@ body.studio-modal-open {
 .studio-modal-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--outline-variant);
     background: var(--surface-container-low);
@@ -917,7 +915,15 @@ body.studio-modal-open {
 .studio-modal-body {
     padding: 0.75rem 1rem 1rem;
 }
-.advanced-open-row {
+.studio-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+}
+.studio-advanced-open {
+    display: inline-block;
     margin-top: 0.75rem;
 }
 /* ── Advanced / Collapsible Sections ──────────────────────────────── */
@@ -1123,10 +1129,6 @@ a.primary:visited {
 
 label.primary {
     white-space: nowrap;
-}
-
-#lang-override-btn {
-    margin-left: 8px;
 }
 
 /* ── Terminal Card ────────────────────────────────────────────────── */
@@ -1680,53 +1682,6 @@ select.hw-tier-select option {
     overflow-x: auto;
 }
 
-.lang-detection-row {
-    display: none;
-    padding: 8px 0;
-    font-size: 13px;
-    color: var(--on-surface-variant);
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-}
-
-.lang-detection-label,
-.lang-detection-count {
-    color: var(--outline);
-}
-
-.lang-detection-value {
-    color: var(--on-surface);
-    font-weight: 600;
-}
-
-.lang-override-select {
-    display: none;
-    border: 1px solid #d6d6d6;
-    border-radius: 4px;
-    padding: 0 2rem 0 14px;
-    height: 36px;
-    margin-left: 4px;
-    font-size: 14px;
-    font-family: var(--font-body);
-    font-weight: 400;
-    background: #ffffff;
-    color: #2e2e38;
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    cursor: pointer;
-    outline: none;
-    transition: border-color 0.15s ease;
-}
-.lang-override-select:hover,
-.lang-override-select:focus {
-    border-color: #543fde;
-    box-shadow: none;
-}
-
 .warning-banner {
     padding: 0.625rem 1rem;
     border-radius: var(--radius-sm);
@@ -1791,10 +1746,6 @@ select.hw-tier-select option {
 
 .generate-run-message.generate-run-message--error {
     color: var(--error);
-}
-
-.lang-empty-state {
-    color: var(--outline);
 }
 
 /* ── Responsive ───────────────────────────────────────────────────── */

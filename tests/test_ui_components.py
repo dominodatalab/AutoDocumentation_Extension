@@ -54,7 +54,6 @@ def _mock_dependencies(monkeypatch):
         id: str
         owner_id: str
         domino_run_id: Optional[str] = None
-        branch: Optional[str] = None
         hardware_tier: Optional[str] = None
         status: str = "queued"
         domino_status: Optional[str] = None
@@ -184,7 +183,6 @@ class TestDbRecordToDataclass:
             "id": "job-1",
             "owner_id": "alice",
             "domino_run_id": "run-1",
-            "branch": "main",
             "hardware_tier": "tier-1",
             "status": "running",
             "domino_status": "Executing",
@@ -437,7 +435,7 @@ class TestSpecFileBrowserUi:
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
         assert "runJobJsonPayloadFromMainForm" in scripts
-        assert "lang-override-select" in scripts
+        assert "api/detect-language" not in scripts
         assert "field-language" not in scripts
         assert "field-environment_id" not in web
         assert "environment-revision-slot" not in web

@@ -46,7 +46,6 @@ class JobRequest:
     environment_revision_id: str
     project_id: str
     provider_base_url: str
-    language: str
     max_retries: int
     initial_backoff: float
     max_backoff: float
@@ -74,7 +73,6 @@ _JR_DEFAULTS = {
     "environment_revision_id": "rev-default",
     "project_id": "",
     "provider_base_url": "",
-    "language": "auto",
     "max_retries": 5,
     "initial_backoff": 10.0,
     "max_backoff": 120.0,
@@ -92,7 +90,6 @@ class DominoJobRecord:
     id: str
     owner_id: str
     domino_run_id: Optional[str] = None
-    branch: Optional[str] = None
     hardware_tier: Optional[str] = None
     status: str = "queued"
     domino_status: Optional[str] = None
@@ -331,51 +328,6 @@ async def test_parse_request_raises_when_provider_missing():
     req.json = AsyncMock(return_value={})
     with pytest.raises(RuntimeError, match="provider is required"):
         await je._parse_request(req)
-
-
-@pytest.mark.asyncio
-async def test_parse_request_language_defaults_to_auto_when_missing():
-    je = _import_job_engine()
-    from unittest.mock import MagicMock
-
-    req = MagicMock()
-    req.query_params = {"projectId": "proj-x"}
-    req.json = AsyncMock(
-        return_value={
-            "provider": "anthropic",
-            "model": "gpt-4",
-        }
-    )
-    jr = await je._parse_request(req)
-    assert jr.language == "auto"
-
-
-@pytest.mark.asyncio
-async def test_parse_request_language_always_auto_ignores_body():
-    je = _import_job_engine()
-    from unittest.mock import MagicMock
-
-    req = MagicMock()
-    req.query_params = {"projectId": "proj-x"}
-    req.json = AsyncMock(
-        return_value={
-            "provider": "anthropic",
-            "model": "gpt-4",
-            "language": "sas",
-        }
-    )
-    jr = await je._parse_request(req)
-    assert jr.language == "auto"
-
-    req.json = AsyncMock(
-        return_value={
-            "provider": "anthropic",
-            "model": "gpt-4",
-            "language": "fortran",
-        }
-    )
-    jr2 = await je._parse_request(req)
-    assert jr2.language == "auto"
 
 
 @pytest.mark.asyncio
@@ -633,18 +585,6 @@ class TestValidateJobInputs:
             model="",
         )
         with pytest.raises(ValueError, match="Model is required"):
-            je._validate_job_inputs(req, "/spec.yaml")
-
-    def test_rejects_bad_language(self):
-        je = _import_job_engine()
-        req = _jr(
-            spec_path="/spec.yaml",
-            provider="anthropic",
-            project_id="proj-123",
-            code_root="/mnt/code",
-            language="cobol",
-        )
-        with pytest.raises(ValueError, match="Language is not supported"):
             je._validate_job_inputs(req, "/spec.yaml")
 
     def test_rejects_max_files_out_of_range(self):
