@@ -603,11 +603,11 @@ class TestJobRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         with patch(
             "domino_client.build_autodoc_dataset_data_page_url",
-            return_value="https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc",
+            return_value="https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc/docs",
         ) as mock_b:
             result = await routes["/job-history"](req)
         body = json.loads(result.body)
-        assert body["document_url"] == "https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc"
+        assert body["document_url"] == "https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc/docs"
         mock_b.assert_called_once_with("proj-123", "ds-autodoc")
 
     @pytest.mark.asyncio

@@ -463,6 +463,7 @@ class TestSpecFileBrowserUi:
         assert "runJobJsonPayloadFromMainForm" in scripts
         assert "<th>Document</th>" in scripts
         assert "renderJobHistory(data.jobs || [], data.document_url" in scripts
+        assert "(documentUrl && statusKey === 'succeeded')" in scripts
         assert "api/detect-language" not in scripts
         assert "field-language" not in scripts
         assert "field-environment_id" not in web

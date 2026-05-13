@@ -345,7 +345,7 @@ class TestBuildAutodocDatasetDataPageUrl:
         dc.set_ui_host("domino.example.com")
         with patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner")):
             url = dc.build_autodoc_dataset_data_page_url("proj-123", "ds-uuid-1")
-        assert url == "https://domino.example.com/u/test_owner/test_project/data/rw/upload/autodoc/ds-uuid-1"
+        assert url == "https://domino.example.com/u/test_owner/test_project/data/rw/upload/autodoc/ds-uuid-1/docs"
 
     def test_none_without_ui_host(self):
         assert dc.build_autodoc_dataset_data_page_url("proj-123", "ds-1") is None

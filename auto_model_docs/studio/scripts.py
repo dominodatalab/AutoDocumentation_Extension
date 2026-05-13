@@ -817,18 +817,19 @@ MAIN_DOM_JS = r"""
 
         function _jobRow(j, documentUrl) {
             var status = j.status || 'queued';
-            var statusCls = 'history-status history-status-' + status;
+            var statusKey = String(status).toLowerCase();
+            var statusCls = 'history-status history-status-' + statusKey;
             var tier = j.hardware_tier || '—';
             var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
             var linkCell = j.job_url
                 ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener noreferrer">View →</a></td>'
                 : '<td>—</td>';
-            var docCell = documentUrl
+            var docCell = (documentUrl && statusKey === 'succeeded')
                 ? '<td><a href="' + _esc(documentUrl) + '" target="_blank" rel="noopener noreferrer">View →</a></td>'
                 : '<td>—</td>';
             return '<tr>'
                 + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
-                + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
+                + '<td><span class="' + statusCls + '">' + _esc(statusKey.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
                 + linkCell
                 + docCell

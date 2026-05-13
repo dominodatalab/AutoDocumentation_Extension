@@ -674,4 +674,4 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
     if not powner or not pname:
         return None
     seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
-    return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}"
+    return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"

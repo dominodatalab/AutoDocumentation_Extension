@@ -136,7 +136,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         real_dc,
         "build_autodoc_dataset_data_page_url",
-        lambda pid, did: f"https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/{did}",
+        lambda pid, did: f"https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/{did}/docs",
     )
     mock_client.list_self_environments.return_value = []
     mock_client.list_environment_revisions.return_value = []
@@ -510,7 +510,7 @@ class TestJobRoutesIntegration:
         assert resp.status_code == 200
         assert resp.json().get("jobs") == []
         assert resp.json().get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid"
+            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
         )
 
     def test_submit_job_calls_domino(self, client, integration_env):
@@ -546,7 +546,7 @@ class TestJobRoutesIntegration:
         assert body.get("ok") is True
         assert body.get("jobs") == []
         assert body.get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid"
+            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
         )
 
 
@@ -666,5 +666,5 @@ class TestCrossCuttingIntegration:
         assert resp.status_code == 200
         assert resp.json().get("jobs") == []
         assert resp.json().get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid"
+            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
         )
