@@ -924,7 +924,7 @@ body.studio-modal-open {
 }
 .studio-advanced-open {
     display: inline-block;
-    margin-top: 0.75rem;
+    margin-top: 0;
 }
 /* ── Advanced / Collapsible Sections ──────────────────────────────── */
 .advanced-section {

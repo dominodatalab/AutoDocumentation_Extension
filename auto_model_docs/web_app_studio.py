@@ -399,6 +399,13 @@ async def index(req: Request):
                 ),
                 cls="code-root-wrap",
             ),
+            A(
+                "Advanced settings",
+                href="#",
+                id="studio-advanced-open",
+                name="studio-advanced-open",
+                cls="app-link studio-advanced-open",
+            ),
             cls="field",
         )
     )
@@ -510,14 +517,6 @@ async def index(req: Request):
     )
 
     mid_col_children.append(Div(*run_card_children, cls="bp-card"))
-    mid_col_children.append(
-        A(
-            "Advanced settings",
-            href="#",
-            id="studio-advanced-open",
-            cls="app-link studio-advanced-open",
-        ),
-    )
 
     # RIGHT COLUMN: History
     right_col_children = [
