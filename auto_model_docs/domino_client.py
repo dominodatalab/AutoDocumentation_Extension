@@ -225,62 +225,6 @@ def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, 
 
 
 # ---------------------------------------------------------------------------
-# Branches
-# ---------------------------------------------------------------------------
-
-def list_branches_api(project_id: str, search: str = "") -> list[dict[str, Any]]:
-    """List branches in the target project via the Domino git API.
-
-    Requires the project to have been resolved first (to obtain the repo ID).
-    Returns a list of ``{"name": branch_name}`` dicts, or empty on failure.
-    """
-    info = _project_cache.get(project_id)
-    if not info or not info.main_repo_id:
-        info = resolve_project(project_id)
-    if not info or not info.main_repo_id:
-        return []
-
-    try:
-        data = _domino_request(
-            "GET",
-            f"/v4/projects/{project_id}/gitRepositories/{info.main_repo_id}/git/branches",
-            params={"count": 300, "searchPattern": search},
-        )
-        branches = []
-        # Unwrap nested pagination: {"data": {"items": [...], ...}}
-        payload = data
-        if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
-            payload = payload["data"]
-        if isinstance(payload, list):
-            items = payload
-        elif isinstance(payload, dict):
-            items = (
-                payload.get("items")
-                or payload.get("branches")
-                or payload.get("data")
-                or []
-            )
-            # Ensure we got a list, not another nested dict
-            if not isinstance(items, list):
-                items = []
-        else:
-            items = []
-        for item in items:
-            if isinstance(item, dict):
-                name = item.get("name") or item.get("value", "")
-            elif isinstance(item, str):
-                name = item
-            else:
-                continue
-            if name:
-                branches.append({"name": name})
-        return branches
-    except Exception as exc:
-        logger.warning("Failed to list branches via API: %s", exc)
-        return []
-
-
-# ---------------------------------------------------------------------------
 # Hardware tiers
 # ---------------------------------------------------------------------------
 

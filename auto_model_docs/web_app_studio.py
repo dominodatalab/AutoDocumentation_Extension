@@ -7,6 +7,7 @@ assembles the application.
 
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 from typing import Optional
@@ -21,40 +22,29 @@ configure_auth(user_auth)
 # Inline SVG logo — white paths, designed for dark backgrounds
 _LOGO_SVG = (pathlib.Path(__file__).parent.parent / "domino-logo.svg").read_text()
 
-from default_consts import (
-    DEFAULT_GENERATION_WORKERS,
-    DEFAULT_LLM_BACKOFF_JITTER,
-    DEFAULT_LLM_INITIAL_BACKOFF,
-    DEFAULT_LLM_MAX_BACKOFF,
-    DEFAULT_LLM_MAX_RETRIES,
-    DEFAULT_MAX_FILES,
-    DEFAULT_PLANNING_WORKERS,
-    DEFAULT_TIMEOUT,
-)
+from default_consts import DEFAULT_OPENAI_MODEL
 
 from studio.state import (
     _STARTUP_WARNINGS,
-    _get_default_spec_path,
+    _resolve_request_project_id,
     domino_client,
-    log_buffer,
-    logger,
 )
 from studio.styles import STUDIO_CSS
 from studio.scripts import MAIN_DOM_JS
 from studio.ui_components import (
     _render_warnings_banner,
     _validate_environment,
+    validate_studio_domino_compute_environment,
+)
+from studio.font_assets import (
+    STUDIO_FONT_BASE_PATCH_JS,
+    fontawesome_faces_css,
+    register_font_assets,
 )
 from studio.routes_api import register_api_routes
-from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
-from autodoc.core.models import LANGUAGE_PROFILES, LANGUAGE_PRIORITY
-
-from temporary_versioning import get_deploy_version_label
-
-
-# TEMP: remove deploy hint: import above, Div with get_deploy_version_label in index(), temporary_versioning.py
+from domino_job_store import ensure_database
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +61,8 @@ app, rt = fast_app(
     )
 )
 
+ensure_database()
+
 
 # ---------------------------------------------------------------------------
 # index() — Blueprint Enterprise 3-Column Layout
@@ -82,27 +74,26 @@ async def index(req: Request):
     scheme = req.headers.get("x-forwarded-proto", "https")
     domino_client.set_ui_host(host, scheme)
 
-    # Guard: projectId query param is required.  Domino's reverse proxy
-    # strips query params from the iframe URL, so if it's missing we serve
-    # a bootstrap page whose JS extracts the ID from the parent frame,
-    # hash fragment, or postMessage and reloads with it in the URL.
-    project_id = req.query_params.get("projectId") or None
+    # projectId query param is required. Domino's reverse proxy may strip query params
+    # from the iframe URL, so if it's missing we serve a bootstrap page whose JS
+    # extracts the ID from the parent frame, hash fragment, or postMessage and reloads.
+    project_id = _resolve_request_project_id(req)
     if not project_id:
         return (
             Title("Auto Model Docs Studio — Domino"),
+            Style(fontawesome_faces_css()),
+            Script(STUDIO_FONT_BASE_PATCH_JS),
             Style(STUDIO_CSS),
             Script(r"""
                 (function() {
                     var pid = null;
 
-                    // 1. Hash fragment (#projectId=xxx — survives proxies)
                     if (window.location.hash) {
                         var h = window.location.hash.substring(1);
                         if (h.charAt(0) === '?') h = h.substring(1);
                         pid = new URLSearchParams(h).get('projectId');
                     }
 
-                    // 2. Parent frame (same-origin deployments)
                     if (!pid && window.parent !== window) {
                         try {
                             var pLoc = window.parent.location;
@@ -115,7 +106,6 @@ async def index(req: Request):
                         } catch(e) { /* cross-origin */ }
                     }
 
-                    // 3. Referrer URL (Domino sets this on the outer page)
                     if (!pid && document.referrer) {
                         try {
                             pid = new URL(document.referrer).searchParams.get('projectId');
@@ -123,14 +113,12 @@ async def index(req: Request):
                     }
 
                     if (pid) {
-                        // Reload with projectId in the query string
                         var url = new URL(window.location.href);
                         url.searchParams.set('projectId', pid);
                         window.location.replace(url.toString());
                         return;
                     }
 
-                    // 4. Listen for postMessage from Domino parent frame
                     var allowedOrigin = window.location.origin;
                     window.addEventListener('message', function(e) {
                         if (e.origin !== allowedOrigin) return;
@@ -141,7 +129,6 @@ async def index(req: Request):
                         }
                     });
 
-                    // Show error after a short wait if nothing found
                     setTimeout(function() {
                         var el = document.getElementById('project-id-error');
                         if (el) el.style.display = '';
@@ -158,8 +145,7 @@ async def index(req: Request):
             Div(
                 Div(
                     Div(
-                        Span("Resolving project...",
-                             cls="bootstrap-status-text"),
+                        Span("Resolving project...", cls="bootstrap-status-text"),
                     ),
                     cls="bootstrap-status-wrap",
                 ),
@@ -193,8 +179,6 @@ async def index(req: Request):
         if info:
             project_display_name = f"{info.owner_username}/{info.name}"
 
-
-    default_spec = _get_default_spec_path()
     try:
         from autodoc.core.config import Settings as _StudioSettings
         _ss = _StudioSettings()
@@ -208,14 +192,7 @@ async def index(req: Request):
         owner_id = auth_context.get_viewing_user().id
     except Exception:
         owner_id = ""
-    branch_options = []
     tier_options = []
-    if project_id:
-        try:
-            _branches_raw = domino_client.list_branches_api(project_id)
-            branch_options = [Option(b["name"], value=b["name"]) for b in _branches_raw]
-        except Exception:
-            pass
     try:
         tier_rows = domino_client.list_hardware_tiers(project_id=project_id) or []
         default_tier = domino_client.get_project_default_tier()
@@ -229,56 +206,28 @@ async def index(req: Request):
     if not tier_options:
         tier_options = [Option("(default)", value="")]
 
-    env_rows: list = []
-    try:
-        env_rows = domino_client.list_self_environments() or []
-    except Exception:
-        env_rows = []
-    env_var_id = (os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip()
-    env_var_rev = (os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip()
-    env_ids = {str(e.get("id", "")) for e in env_rows if isinstance(e, dict)}
-    default_env_id = ""
-    if env_rows:
-        if env_var_id and env_var_id in env_ids:
-            default_env_id = env_var_id
-        else:
-            default_env_id = str(env_rows[0].get("id", ""))
-    env_options = []
-    for e in env_rows:
-        if not isinstance(e, dict):
-            continue
-        eid = str(e.get("id", ""))
-        if not eid:
-            continue
-        label = (e.get("name") or eid).strip()
-        env_options.append(Option(label, value=eid, selected=(eid == default_env_id)))
-    if not env_options:
-        env_options = [Option("(none)", value="", selected=True)]
-
-    rev_rows: list = []
-    if default_env_id:
-        try:
-            rev_rows = domino_client.list_environment_revisions(default_env_id) or []
-        except Exception:
-            rev_rows = []
-    rev_ids = {str(r.get("id", "")) for r in rev_rows}
-    default_rev_id = ""
-    if rev_rows:
-        if env_var_rev and env_var_rev in rev_ids:
-            default_rev_id = env_var_rev
-        else:
-            default_rev_id = str(rev_rows[0].get("id", ""))
-    rev_options = []
-    for r in rev_rows:
-        rid = str(r.get("id", ""))
-        if not rid:
-            continue
-        lab = r.get("option_label") or rid
-        rev_options.append(Option(lab, value=rid, selected=(rid == default_rev_id)))
-    if not rev_options:
-        rev_options = [Option("(none)", value="", selected=True)]
-
-    # ── Build the 3-column layout ────────────────────────────────────────
+    compute_env_errors = validate_studio_domino_compute_environment(domino_client)
+    studio_errors_panel = Div(id="studio-errors-panel", cls="studio-errors-panel")
+    _insight_children = [
+        Div(
+            H3("How it works"),
+            P(
+                "Select a spec file to define your documentation structure, configure project settings, "
+                "then click Generate documentation. Auto Model Docs scans your codebase and MLflow "
+                "experiments to produce a structured Word document.",
+            ),
+            cls="insight-card",
+        ),
+        studio_errors_panel,
+    ]
+    if compute_env_errors:
+        _insight_children.append(
+            Script(
+                json.dumps(compute_env_errors),
+                id="studio-compute-env-json",
+                type="application/json",
+            )
+        )
 
     # LEFT COLUMN: What to document
     left_col_children = [
@@ -316,12 +265,26 @@ async def index(req: Request):
             Div(id="spec-breadcrumb", cls="spec-breadcrumb"),           
             Div(
                 Div(
-                    Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span(cls="fa-icon fa-folder-open spec-file-empty-icon"),
                     Span("Select a dataset to browse spec files", cls="spec-file-list-empty"),
                     cls="spec-file-empty",
                 ),
                 id="spec-file-list",
                 cls="spec-file-list",
+            ),
+            A(
+                "Upload spec",
+                href="#",
+                id="spec-upload-trigger",
+                name="spec-upload-trigger",
+                cls="app-link",
+            ),
+            Input(
+                type="file",
+                accept=".yaml,.yml",
+                id="spec-machine-upload",
+                name="spec-machine-upload",
+                cls="hidden-upload",
             ),
             Div(
                 Span("Selected:", cls="spec-selected-label"),
@@ -383,27 +346,6 @@ async def index(req: Request):
         )
     )
 
-    spec_card_children.append(Div(id="spec-validation-result"))
-
-    spec_card_children.append(Div(cls="card-content-spacer"))
-
-    spec_card_children.append(
-        Div(
-            Label(
-                "Upload spec",
-                Input(
-                    type="file",
-                    accept=".yaml,.yml",
-                    id="spec-machine-upload",
-                    cls="hidden-upload",
-                ),
-                cls="upload-btn",
-            ),
-            Span(id="spec-upload-status", cls="spec-upload-status"),
-            cls="card-footer",
-        )
-    )
-
     left_col_children.append(Div(*spec_card_children, cls="bp-card"))
 
     # MIDDLE COLUMN: Configuration & Run
@@ -456,80 +398,18 @@ async def index(req: Request):
                 ),
                 cls="code-root-wrap",
             ),
+            A(
+                "Advanced settings",
+                href="#",
+                id="studio-advanced-open",
+                name="studio-advanced-open",
+                cls="app-link studio-advanced-open",
+            ),
             cls="field",
-        )
-    )
-    # Hidden detected language field
-    run_card_children.append(
-        Input(type="hidden", name="detected_language", id="field-detected-language", value="python"),
-    )
-
-    # Language detection row (shown after code root is set)
-    run_card_children.append(
-        Div(
-            Span("Detected: ", cls="lang-detection-label"),
-            Span(id="lang-detected-name", cls="lang-detection-value"),
-            Span(id="lang-detected-count", cls="lang-detection-count"),
-            Button(
-                "Override",
-                id="lang-override-btn",
-                type="button",
-                cls="lang-override-btn",
-                aria_label="Override detected language",
-                onclick="document.getElementById('lang-override-select').style.display = "
-                        "document.getElementById('lang-override-select').style.display === 'none' ? 'inline-block' : 'none';",
-            ),
-            Select(
-                Option("Auto-detect", value="auto", selected=True),
-                Option("Python", value="python"),
-                Option("R", value="r"),
-                Option("SAS", value="sas"),
-                Option("MATLAB", value="matlab"),
-                id="lang-override-select",
-                cls="lang-override-select",
-                onchange="handleLanguageOverride(this.value)",
-            ),
-            id="lang-detection-row",
-            cls="lang-detection-row",
         )
     )
 
-    # Branch
-    if branch_options:
-        branch_input = Select(*branch_options, name="branch", id="field-branch")
-    else:
-        branch_input = Input(name="branch", id="field-branch", type="text", value="", placeholder="Default branch")
-    run_card_children.append(
-        Div(
-            Div(
-                Label("Branch (Main Repository Only)", for_="field-branch"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Leave blank to use the project's default branch. Imported repositories are not affected.."),
-                cls="label-row",
-            ),
-            branch_input,
-            cls="field",
-        )
-    )
-    _lang_opts = [
-        Option("Auto-detect", value="auto", selected=True),
-        *[Option(LANGUAGE_PROFILES[k].display_name, value=k) for k in LANGUAGE_PRIORITY],
-    ]
-    run_card_children.append(
-        Div(
-            Div(
-                Label("Programming language", for_="field-language"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Same choices as the CLI --language flag. Auto-detect picks python, r, sas, or matlab from files under code root.",
-                ),
-                cls="label-row",
-            ),
-            Select(*_lang_opts, name="language", id="field-language"),
-            cls="field",
-        )
-    )
-    run_card_children.append(
+    advanced_modal_fields = [
         Div(
             Div(
                 Label("Hardware tier", for_="field-hardware_tier"),
@@ -543,190 +423,7 @@ async def index(req: Request):
                 cls="hw-tier-select",
             ),
             cls="field",
-        )
-    )
-    run_card_children.append(
-        Div(
-            Div(
-                Div(
-                    Label("Environment", for_="field-environment_id"),
-                    Span(
-                        "\u24d8",
-                        cls="info-tooltip",
-                        data_tooltip="Compute environment for the Domino job.",
-                    ),
-                    cls="label-row",
-                ),
-                Select(
-                    *env_options,
-                    name="environment_id",
-                    id="field-environment_id",
-                    cls="environment-select",
-                    onchange="reloadEnvironmentRevisions(this)",
-                ),
-                cls="field",
-            ),
-            Div(
-                Div(
-                    Label("Revision", for_="field-environment_revision_id"),
-                    Span(
-                        "\u24d8",
-                        cls="info-tooltip env-revision-label-spacer",
-                        aria_hidden="true",
-                    ),
-                    cls="label-row",
-                ),
-                Div(
-                    Select(
-                        *rev_options,
-                        name="environment_revision_id",
-                        id="field-environment_revision_id",
-                        cls="env-revision-select",
-                    ),
-                    id="environment-revision-slot",
-                ),
-                cls="field",
-            ),
-            cls="env-revision-row",
-        )
-    )
-
-    advanced_settings_body = [
-        Div(
-            Div("Generation settings", cls="advanced-subsection-title"),
-            Div(
-                Div(
-                    Label("Max files", for_="field-max_files"),
-                    Input(
-                        name="max_files",
-                        id="field-max_files",
-                        type="number",
-                        value=str(DEFAULT_MAX_FILES),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Planning workers", for_="field-planning_workers"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Parallel LLM calls in the planning phase."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="planning_workers",
-                        id="field-planning_workers",
-                        type="number",
-                        value=str(DEFAULT_PLANNING_WORKERS),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Generation workers", for_="field-workers"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Sections generated in parallel."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="workers",
-                        id="field-workers",
-                        type="number",
-                        value=str(DEFAULT_GENERATION_WORKERS),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Timeout (s)", for_="field-timeout"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Seconds before a single LLM call times out."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="timeout",
-                        id="field-timeout",
-                        type="number",
-                        value=str(int(DEFAULT_TIMEOUT)),
-                        min="1",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                cls="advanced-grid",
-            ),
-            Div("LLM API call settings", cls="advanced-subsection-title"),
-            Div(
-                Div(
-                    Div(
-                        Label("Max retries", for_="field-max_retries"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Number of retries on LLM API calls."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="max_retries",
-                        id="field-max_retries",
-                        type="number",
-                        value=str(DEFAULT_LLM_MAX_RETRIES),
-                        min="0",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Initial backoff (sec)", for_="field-initial_backoff"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Delay before the first retry; grows with each attempt."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="initial_backoff",
-                        id="field-initial_backoff",
-                        type="number",
-                        value=str(int(DEFAULT_LLM_INITIAL_BACKOFF)),
-                        min="0",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Max backoff (sec)", for_="field-max_backoff"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Cap on delay between retries."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="max_backoff",
-                        id="field-max_backoff",
-                        type="number",
-                        value=str(int(DEFAULT_LLM_MAX_BACKOFF)),
-                        min="0",
-                        step="1",
-                    ),
-                    cls="field",
-                ),
-                Div(
-                    Div(
-                        Label("Backoff jitter", for_="field-backoff_jitter"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Random extra delay so retries do not align."),
-                        cls="label-row",
-                    ),
-                    Input(
-                        name="backoff_jitter",
-                        id="field-backoff_jitter",
-                        type="number",
-                        value=str(DEFAULT_LLM_BACKOFF_JITTER),
-                        min="0",
-                        step="0.1",
-                    ),
-                    cls="field",
-                ),
-                cls="advanced-grid",
-            ),
         ),
-
         Div(
             Label("Provider", for_="field-provider"),
             Select(
@@ -769,59 +466,43 @@ async def index(req: Request):
                 ),
                 cls="label-row",
             ),
-            Input(name="model", id="field-model", type="text", value="", placeholder=""),
+            Input(
+                name="model",
+                id="field-model",
+                type="text",
+                value=DEFAULT_OPENAI_MODEL,
+                placeholder=DEFAULT_OPENAI_MODEL,
+            ),
             cls="field",
             id="model-name-field",
-            style="display: none;",
-        ),
-        Div(
-            Label(
-                Input(type="checkbox", name="notebook", id="field-notebook", checked=True),
-                Span("Generate notebook"),
-                Span("\u24d8", cls="info-tooltip", data_tooltip="Saved alongside your document in the output directory.", id="app-mode-notebook-hint"),
-                cls="checkbox-field",
-                id="app-mode-note",
-            ),
-            Label(
-                Input(type="checkbox", name="notebook_from_cache", id="field-notebook_from_cache"),
-                Span("Notebook from cache only"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Runs notebook regeneration from cached generation results instead of a full pipeline.",
-                ),
-                cls="checkbox-field",
-            ),
-            cls="advanced-checkbox-row",
-        ),
-        Div(
-            Div(
-                Label("Notebook path (optional)", for_="field-notebook_path"),
-                Span(
-                    "\u24d8",
-                    cls="info-tooltip",
-                    data_tooltip="Relative path under the output docs folder; leave blank for default notebook name.",
-                ),
-                cls="label-row",
-            ),
-            Input(name="notebook_path", id="field-notebook_path", type="text", value="", placeholder=""),
-            cls="field",
-            id="notebook-path-field-wrap",
-        ),
-        Label(
-            Input(type="checkbox", name="verbose", id="field-verbose", value="true", checked=False),
-            Span("Verbose logging"),
-            cls="checkbox-field",
         ),
     ]
 
-    run_card_children.append(
-        Details(
-            Summary("Advanced settings", cls="advanced-section-summary"),
-            Div(*advanced_settings_body, cls="advanced-content"),
-            cls="advanced-section",
-            open=False,
-        )
+    advanced_modal = Div(
+        Div(
+            Div(
+                H3("Advanced settings", id="studio-advanced-modal-title", cls="studio-modal-title"),
+                cls="studio-modal-header",
+            ),
+            Div(*advanced_modal_fields, cls="studio-modal-body advanced-content"),
+            Div(
+                Button(
+                    "Close",
+                    type="button",
+                    id="studio-advanced-close",
+                    cls="primary",
+                    aria_label="Close advanced settings",
+                ),
+                cls="studio-modal-footer",
+            ),
+            cls="studio-modal",
+            role="dialog",
+            aria_modal="true",
+            aria_labelledby="studio-advanced-modal-title",
+        ),
+        id="studio-advanced-modal",
+        cls="studio-modal-overlay",
+        aria_hidden="true",
     )
 
     run_card_children.append(Div(cls="card-content-spacer"))
@@ -829,7 +510,8 @@ async def index(req: Request):
     run_card_children.append(
         Div(
             Button("Generate Documentation", type="submit", id="generate-btn", cls="primary"),
-            cls="card-footer",
+            P("", id="generate-run-message", cls="generate-run-message"),
+            cls="card-footer generate-actions",
         )
     )
 
@@ -848,7 +530,7 @@ async def index(req: Request):
         Div(
             Div(
                 Div(
-                    Span("description", cls="material-symbols-outlined spec-file-empty-icon"),
+                    Span(cls="fa-icon fa-file-lines spec-file-empty-icon"),
                     Span("No autodocs generated yet.", cls="spec-file-list-empty"),
                     cls="spec-file-empty",
                 ),
@@ -860,6 +542,8 @@ async def index(req: Request):
 
     return (
         Title("Auto Model Docs Studio — Domino"),
+        Style(fontawesome_faces_css()),
+        Script(STUDIO_FONT_BASE_PATCH_JS),
         # Header
         Div(
             Div(
@@ -872,15 +556,7 @@ async def index(req: Request):
         Div(
             H1("Auto Model Docs Studio", cls="page-title"),
             Div(
-                Div(
-                    H3("How it works"),
-                    P(
-                        "Select a spec file to define your documentation structure, configure project settings, "
-                        "then click Generate documentation. Auto Model Docs scans your codebase and MLflow "
-                        "experiments to produce a structured Word document.",
-                    ),
-                    cls="insight-card",
-                ),
+                *_insight_children,
                 cls="studio-page-insight",
             ),
             *_render_warnings_banner(_STARTUP_WARNINGS),
@@ -899,15 +575,7 @@ async def index(req: Request):
                 data_app_rel="run",
                 enctype="multipart/form-data",
             ),
-            Div(
-                P(
-                    get_deploy_version_label(),
-                    cls="header-version-text",
-                ),
-                A("Logs", href="logs", data_app_rel="logs", target="_blank", rel="noopener",
-                  cls="header-logs-link"),
-                cls="studio-footer-meta",
-            ),
+            advanced_modal,
             cls="page",
         ),
     )
@@ -917,18 +585,9 @@ async def index(req: Request):
 # Register route modules
 # ---------------------------------------------------------------------------
 
+register_font_assets(rt)
 register_api_routes(rt)
-register_spec_routes(rt)
 register_job_routes(rt)
-
-
-@rt("/logs")
-def logs():
-    """Plain-text dump of the in-process log ring buffer for troubleshooting."""
-    from starlette.responses import PlainTextResponse
-    lines = log_buffer.snapshot()
-    body = "\n".join(lines) if lines else "(no log records buffered yet)"
-    return PlainTextResponse(body)
 
 
 # ---------------------------------------------------------------------------
@@ -964,26 +623,8 @@ app.add_middleware(
 async def capture_auth_context(request, call_next):
     from studio.state import auth_context as _auth_context
 
-    try:
-        hdr_dump = {k: v for k, v in request.headers.items()}
-    except Exception as _e:
-        hdr_dump = {"_error": str(_e)}
-    _auth_variants = {
-        "authorization": request.headers.get("authorization"),
-        "Authorization": request.headers.get("Authorization"),
-        "x-authorization": request.headers.get("x-authorization"),
-        "x-forwarded-authorization": request.headers.get("x-forwarded-authorization"),
-        "x-domino-api-key": request.headers.get("x-domino-api-key"),
-        "x-domino-token": request.headers.get("x-domino-token"),
-        "x-forwarded-user": request.headers.get("x-forwarded-user"),
-        "x-remote-user": request.headers.get("x-remote-user"),
-        "cookie": request.headers.get("cookie"),
-    }
-
-    import threading as _threading
     forwarded = request.headers.get("authorization")
     _auth_context.set_request_auth_header(forwarded)
-    _after_set = _auth_context.get_request_auth_header()
     try:
         response = await call_next(request)
     finally:
@@ -1008,4 +649,4 @@ async def _on_startup():
 # Serve
 # ---------------------------------------------------------------------------
 
-serve(host=HOST, port=PORT)
+serve(host=HOST, port=PORT, access_log=False)

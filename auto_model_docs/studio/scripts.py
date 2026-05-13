@@ -39,6 +39,160 @@ MAIN_DOM_JS = r"""
 
     document.addEventListener('DOMContentLoaded', function() {
 
+        function _studioEscapeHtml(s) {
+            var t = document.createElement('textarea');
+            t.textContent = s == null ? '' : String(s);
+            return t.innerHTML;
+        }
+        var _studioErrorSlotOrder = ['computeEnv', 'generate'];
+        var _studioErrorSlots = {};
+        var _studioUploadBanner = null;
+        var _studioDisplayedErrorSlot = null;
+        var _studioErrorDismissTimer = null;
+        function _studioCancelErrorDismissTimer() {
+            if (_studioErrorDismissTimer) {
+                clearTimeout(_studioErrorDismissTimer);
+                _studioErrorDismissTimer = null;
+            }
+        }
+        function _studioDismissCurrentError() {
+            _studioCancelErrorDismissTimer();
+            if (_studioDisplayedErrorSlot) {
+                delete _studioErrorSlots[_studioDisplayedErrorSlot];
+                _studioDisplayedErrorSlot = null;
+            } else if (_studioUploadBanner) {
+                _studioUploadBanner = null;
+            }
+            _studioReflowErrorPanel();
+        }
+        function _studioSchedulePanelAutoDismiss() {
+            _studioCancelErrorDismissTimer();
+            var slotToClear = _studioDisplayedErrorSlot;
+            var clearUploadOnly = false;
+            var delayMs = 0;
+            if (slotToClear) {
+                delayMs = 60000;
+            } else if (_studioUploadBanner) {
+                clearUploadOnly = true;
+                delayMs = _studioUploadBanner.success ? 12000 : 60000;
+            }
+            if (!delayMs) return;
+            _studioErrorDismissTimer = setTimeout(function() {
+                _studioErrorDismissTimer = null;
+                if (slotToClear && _studioErrorSlots[slotToClear]) {
+                    delete _studioErrorSlots[slotToClear];
+                    if (_studioDisplayedErrorSlot === slotToClear) {
+                        _studioDisplayedErrorSlot = null;
+                    }
+                }
+                if (clearUploadOnly && _studioUploadBanner) {
+                    _studioUploadBanner = null;
+                }
+                _studioReflowErrorPanel();
+            }, delayMs);
+        }
+        function setStudioErrorSlot(key, block) {
+            if (!key) return;
+            if (!block) {
+                delete _studioErrorSlots[key];
+            } else {
+                var items = block.items || [];
+                if (typeof items === 'string') items = [items];
+                if (!items.length) {
+                    delete _studioErrorSlots[key];
+                } else {
+                    _studioUploadBanner = null;
+                    _studioErrorSlots[key] = { title: block.title || 'Error', items: items };
+                }
+            }
+            _studioReflowErrorPanel();
+        }
+        function setStudioUploadBanner(block) {
+            if (!block) {
+                _studioUploadBanner = null;
+            } else {
+                var uitems = block.items || [];
+                if (typeof uitems === 'string') uitems = [uitems];
+                if (!uitems.length) {
+                    _studioUploadBanner = null;
+                } else {
+                    _studioUploadBanner = { success: !!block.success, title: block.title || '', items: uitems };
+                }
+            }
+            _studioReflowErrorPanel();
+        }
+        function _studioReflowErrorPanel() {
+            var panel = document.getElementById('studio-errors-panel');
+            if (!panel) return;
+            _studioCancelErrorDismissTimer();
+            _studioDisplayedErrorSlot = null;
+            var html = '';
+            var ki;
+            for (ki = 0; ki < _studioErrorSlotOrder.length; ki++) {
+                var slotKey = _studioErrorSlotOrder[ki];
+                var b = _studioErrorSlots[slotKey];
+                if (!b) continue;
+                _studioDisplayedErrorSlot = slotKey;
+                var lis = '';
+                var ii;
+                for (ii = 0; ii < b.items.length; ii++) {
+                    lis += '<li>' + _studioEscapeHtml(b.items[ii]) + '</li>';
+                }
+                html = '<div class="spec-validation-error studio-error-toast" role="alert">'
+                    + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(b.title) + '</span>'
+                    + '<ul class="spec-validation-error-list">' + lis + '</ul>'
+                    + '<div class="studio-error-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>';
+                break;
+            }
+            if (!html && _studioUploadBanner) {
+                var ub = _studioUploadBanner;
+                var ulis = '';
+                var ui;
+                for (ui = 0; ui < ub.items.length; ui++) {
+                    ulis += '<li>' + _studioEscapeHtml(ub.items[ui]) + '</li>';
+                }
+                var uwrap = ub.success
+                    ? ('<div class="studio-success-toast studio-error-toast" role="status">'
+                        + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
+                        + '<ul class="spec-validation-error-list studio-success-toast-list">' + ulis + '</ul>'
+                        + '<div class="studio-error-dismiss-row studio-success-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>')
+                    : ('<div class="spec-validation-error studio-error-toast" role="alert">'
+                        + '<span class="spec-selected-value studio-error-toast-title">' + _studioEscapeHtml(ub.title) + '</span>'
+                        + '<ul class="spec-validation-error-list">' + ulis + '</ul>'
+                        + '<div class="studio-error-dismiss-row"><a href="#" class="app-link studio-error-dismiss" role="button">Dismiss</a></div></div>');
+                html = uwrap;
+            }
+            panel.innerHTML = html;
+            if (html) {
+                panel.classList.add('studio-errors-panel--visible');
+                _studioSchedulePanelAutoDismiss();
+            } else {
+                panel.classList.remove('studio-errors-panel--visible');
+            }
+        }
+
+        (function() {
+            var ep = document.getElementById('studio-errors-panel');
+            if (!ep) return;
+            ep.addEventListener('click', function(e) {
+                if (e.target && e.target.closest && e.target.closest('.studio-error-dismiss')) {
+                    e.preventDefault();
+                    _studioDismissCurrentError();
+                }
+            });
+        })();
+
+        (function() {
+            var n = document.getElementById('studio-compute-env-json');
+            if (!n || !n.textContent) return;
+            try {
+                var arr = JSON.parse(n.textContent.trim());
+                if (Array.isArray(arr) && arr.length) {
+                    setStudioErrorSlot('computeEnv', { title: 'Unable to open the app', items: arr });
+                }
+            } catch (e) {}
+        })();
+
         (function() {
             var tip = document.createElement('div');
             tip.id = 'studio-info-tooltip';
@@ -106,16 +260,12 @@ MAIN_DOM_JS = r"""
                 } catch (e) { /* ignore */ }
             }
             var pid = null;
-            // 1. Own query string (direct / non-proxied access)
             pid = new URLSearchParams(window.location.search).get('projectId');
-            // 2. Own hash fragment (#projectId=xxx — survives proxies)
             if (!pid && window.location.hash) {
                 var h = window.location.hash.substring(1);
                 if (h.charAt(0) === '?') h = h.substring(1);
                 pid = new URLSearchParams(h).get('projectId');
             }
-            // 3. Parent frame (same-origin deployments where parent
-            //    and iframe share the same host)
             if (!pid && window.parent !== window) {
                 try {
                     var pLoc = window.parent.location;
@@ -125,79 +275,17 @@ MAIN_DOM_JS = r"""
                         if (ph.charAt(0) === '?') ph = ph.substring(1);
                         pid = new URLSearchParams(ph).get('projectId');
                     }
-                } catch(e) { /* cross-origin — ignore */ }
+                } catch(e) { /* cross-origin */ }
             }
             if (pid) {
                 setProjectId(pid);
             }
-            // 4. Listen for postMessage from Domino parent frame
             window.addEventListener('message', function(e) {
                 if (e.data && typeof e.data === 'object' && e.data.projectId) {
                     setProjectId(e.data.projectId);
                 }
             });
         })();
-
-        // ── Language detection ────────────────────────────────────────────
-        var langRow = document.getElementById('lang-detection-row');
-        var langName = document.getElementById('lang-detected-name');
-        var langCount = document.getElementById('lang-detected-count');
-        var langInput = document.getElementById('field-detected-language');
-        var langSelect = document.getElementById('lang-override-select');
-        var langFieldMain = document.getElementById('field-language');
-
-        function detectLanguage(codeRoot) {
-            var url = _adUrl('api/detect-language');
-            if (codeRoot) url += '?code_root=' + encodeURIComponent(codeRoot);
-            fetch(url)
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (langRow) langRow.style.display = '';
-                    if (data.language) {
-                        if (langName) langName.textContent = data.display_name;
-                        if (langCount) langCount.textContent = '(' + data.file_count + ' files)';
-                        if (langInput) langInput.value = data.language;
-                        if (langSelect) langSelect.value = data.language;
-                    } else {
-                        if (langName) langName.textContent = '';
-                        if (langCount) langCount.textContent = '';
-                        if (langRow) {
-                            langRow.innerHTML = '<span class="lang-empty-state">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
-                            langRow.style.display = '';
-                        }
-                    }
-                })
-                .catch(function() {});
-        }
-
-        window.handleLanguageOverride = function(lang) {
-            if (langInput) langInput.value = lang === 'auto' ? 'python' : lang;
-            if (langFieldMain) langFieldMain.value = lang;
-            var cr = document.getElementById('field-code_root');
-            detectLanguage(cr ? cr.value : undefined);
-        };
-
-        if (langFieldMain) {
-            langFieldMain.addEventListener('change', function() {
-                var v = this.value || 'auto';
-                if (langInput) langInput.value = v === 'auto' ? 'python' : v;
-                if (langSelect) langSelect.value = v;
-            });
-        }
-
-        function detectLanguageFromCodeRoot() {
-            var cr = document.getElementById('field-code_root');
-            var val = cr ? (cr.value || '').trim() : '';
-            if (!val) {
-                if (langRow) langRow.style.display = 'none';
-                if (langName) langName.textContent = '';
-                if (langCount) langCount.textContent = '';
-                return;
-            }
-            detectLanguage(val);
-        }
-
-        detectLanguageFromCodeRoot();
 
         const providerSelect    = document.getElementById('field-provider');
         const modelNameField    = document.getElementById('model-name-field');
@@ -208,7 +296,7 @@ MAIN_DOM_JS = r"""
         var specBreadcrumb = document.getElementById('spec-breadcrumb');
         var specSelectedIndicator = document.getElementById('spec-selected-indicator');
         var specMachineUpload = document.getElementById('spec-machine-upload');
-        var specUploadStatus = document.getElementById('spec-upload-status');
+        var specUploadTrigger = document.getElementById('spec-upload-trigger');
         var specPathField = document.getElementById('field-spec_path');
 
         // State
@@ -225,36 +313,6 @@ MAIN_DOM_JS = r"""
             var params = new URLSearchParams(window.location.search);
             return params.get('projectId') || params.get('project_id') || '';
         }
-
-        window.reloadEnvironmentRevisions = function(sel) {
-            var envId = sel && sel.value ? sel.value : '';
-            var slot = document.getElementById('environment-revision-slot');
-            if (!slot) return;
-            if (!envId) {
-                slot.innerHTML = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">'
-                    + '<option value="" selected disabled>(select environment first)</option></select>';
-                return;
-            }
-            var pid = resolvedProjectId();
-            if (!pid) return;
-            var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
-                + '&environmentId=' + encodeURIComponent(envId);
-            fetch(url).then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(revs) {
-                    var html = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">';
-                    if (!revs || !revs.length) {
-                        html += '<option value="" selected disabled>(no revisions)</option>';
-                    } else {
-                        for (var i = 0; i < revs.length; i++) {
-                            html += '<option value="' + revs[i].id + '"' + (revs[i].isDefault ? ' selected' : '') + '>'
-                                + revs[i].label + '</option>';
-                        }
-                    }
-                    html += '</select>';
-                    slot.innerHTML = html;
-                })
-                .catch(function() {});
-        };
 
         function queryApiDatasets() {
             var pid = resolvedProjectId();
@@ -275,8 +333,6 @@ MAIN_DOM_JS = r"""
             var parts = [];
             var pid = resolvedProjectId();
             if (pid) parts.push('projectId=' + encodeURIComponent(pid));
-            if (_specCurrentDatasetId) parts.push('datasetId=' + encodeURIComponent(_specCurrentDatasetId));
-            if (_specCurrentSnapshotId) parts.push('snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
             return parts.length ? ('?' + parts.join('&')) : '';
         }
 
@@ -339,8 +395,6 @@ MAIN_DOM_JS = r"""
             _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
             _specCurrentPath = '';
             if (specPathField) specPathField.value = '';
-            var svm = document.getElementById('spec-validation-msg');
-            if (svm) svm.remove();
             if (_specCurrentDatasetId) {
                 browseFiles('');
             } else {
@@ -380,6 +434,7 @@ MAIN_DOM_JS = r"""
                             specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
                         } else {
                             specFileList.innerHTML = '<span class="spec-file-empty">Unexpected response from server</span>';
+                            console.error('[spec-browser] Unexpected file listing response:', files);
                         }
                         return;
                     }
@@ -389,7 +444,7 @@ MAIN_DOM_JS = r"""
                         var pPath = specParentPath(path);
                         if (pPath !== null) {
                             var up = '<div class="spec-file-item spec-file-parent" data-path="' + pPath + '" data-dir="true" data-name=".." data-parent="true">'
-                                + '<span class="spec-file-icon">\ud83d\udcc1</span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
+                                + '<span class="fa-icon fa-folder-open spec-file-icon"></span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
                             specFileList.innerHTML = up + '<span class="spec-file-empty">' + emptyMsg + '</span>';
                             var upEl = specFileList.querySelector('.spec-file-parent');
                             if (upEl) upEl.addEventListener('click', onFileClick);
@@ -402,7 +457,7 @@ MAIN_DOM_JS = r"""
                     var parentPath = specParentPath(path);
                     if (parentPath !== null) {
                         html += '<div class="spec-file-item spec-file-parent" data-path="' + parentPath + '" data-dir="true" data-name=".." data-parent="true">'
-                            + '<span class="spec-file-icon">\ud83d\udcc1</span>'
+                            + '<span class="fa-icon fa-folder-open spec-file-icon"></span>'
                             + '<span class="spec-file-name">..</span>'
                             + '<span class="spec-file-size"></span></div>';
                     }
@@ -413,11 +468,11 @@ MAIN_DOM_JS = r"""
                     });
                     for (var i = 0; i < files.length; i++) {
                         var f = files[i];
-                        var icon = f.isDirectory ? '\ud83d\udcc1' : '\ud83d\udcc4';
+                        var iconClass = f.isDirectory ? 'fa-icon fa-folder-open spec-file-icon' : 'fa-icon fa-file-lines spec-file-icon';
                         var size = f.isDirectory ? '' : formatBytes(f.sizeInBytes || 0);
                         var fullPath = path ? path + '/' + f.fileName : f.fileName;
                         html += '<div class="spec-file-item" data-path="' + fullPath + '" data-dir="' + f.isDirectory + '" data-name="' + f.fileName + '">'
-                            + '<span class="spec-file-icon">' + icon + '</span>'
+                            + '<span class="' + iconClass + '"></span>'
                             + '<span class="spec-file-name">' + f.fileName + '</span>'
                             + '<span class="spec-file-size">' + size + '</span>'
                             + '</div>';
@@ -431,6 +486,7 @@ MAIN_DOM_JS = r"""
                 })
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
+                    console.error('[spec-browser] Failed to load files:', err);
                     specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
                 })
                 .finally(function() {
@@ -497,19 +553,24 @@ MAIN_DOM_JS = r"""
         // Global for breadcrumb onclick
         window._specBrowse = function(path) { browseFiles(path); };
 
+        if (specUploadTrigger && specMachineUpload) {
+            specUploadTrigger.addEventListener('click', function(e) {
+                e.preventDefault();
+                specMachineUpload.click();
+            });
+        }
+
         // Upload from machine → autodoc dataset
         if (specMachineUpload) {
             specMachineUpload.addEventListener('change', function(e) {
                 var file = e.target.files[0];
                 if (!file) return;
                 console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
-                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
-                // Validate spec content before uploading
-                if (typeof validateSpecContent === 'function') validateSpecContent(file);
+                setStudioUploadBanner(null);
 
                 var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
                 if (!uploadDsId) {
-                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                    setStudioUploadBanner({ success: false, title: 'Upload', items: ['Select a dataset first'] });
                     return;
                 }
                 var qs = queryApiDatasets();
@@ -518,11 +579,33 @@ MAIN_DOM_JS = r"""
                 fd.append('relativeDir', _specCurrentPath || '');
                 fd.append('file', file);
                 fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(result) {
+                    .then(function(r) {
+                        return r.json().catch(function() { return {}; }).then(function(j) {
+                            return { ok: r.ok, j: j };
+                        });
+                    })
+                    .then(function(o) {
+                        if (!o.ok) {
+                            var em;
+                            if (o.j && o.j.errors && o.j.errors.length) {
+                                var errItems = o.j.errors.map(function(x) { return String(x); });
+                                console.error('[spec-browser] Spec validation failed:', errItems);
+                                em = errItems.join(' ');
+                                setStudioUploadBanner({ success: false, title: 'Spec validation failed', items: errItems });
+                            } else {
+                                var em0 = (o.j && o.j.error) ? o.j.error : 'Upload failed';
+                                console.error('[spec-browser] Upload rejected:', o.j);
+                                em = em0;
+                                setStudioUploadBanner({ success: false, title: 'Upload failed', items: [em0] });
+                            }
+                            var ev = new Error(em);
+                            ev._uploadUiDone = true;
+                            throw ev;
+                        }
+                        var result = o.j;
                         if (result.error) throw new Error(result.error);
                         console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
+                        setStudioUploadBanner({ success: true, title: 'Spec uploaded', items: ['Saved ' + result.fileName + ' to ' + (result.path || '')] });
                         var savedPath = result.path;
                         selectSpecFile(savedPath);
                         return browseFiles(_specCurrentPath).then(function() {
@@ -540,7 +623,8 @@ MAIN_DOM_JS = r"""
                     })
                     .catch(function(err) {
                         console.error('[spec-browser] Upload failed:', err.message);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                        if (err._uploadUiDone) return;
+                        setStudioUploadBanner({ success: false, title: 'Upload failed', items: [err.message] });
                     })
                     .finally(function() {
                         specMachineUpload.value = '';
@@ -555,6 +639,10 @@ MAIN_DOM_JS = r"""
                 fetchJobHistory();
             });
             loadDatasets();
+        }
+
+        if (resolvedProjectId()) {
+            fetchJobHistory();
         }
 
         // ── Toggle base URL and model name fields based on provider selection
@@ -573,7 +661,14 @@ MAIN_DOM_JS = r"""
             }
             var modelInput = document.getElementById('field-model');
             if (modelInput) {
-                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                var ph = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                modelInput.placeholder = ph;
+                var cur = (modelInput.value || '').trim();
+                if (!cur) {
+                    modelInput.value = ph;
+                } else if (cur === OPENAI_DEFAULT_MODEL || cur === ANTHROPIC_DEFAULT_MODEL) {
+                    modelInput.value = ph;
+                }
             }
         }
 
@@ -583,45 +678,34 @@ MAIN_DOM_JS = r"""
         }
 
         (function() {
-            var nbCb = document.getElementById('field-notebook');
-            var pathInput = document.getElementById('field-notebook_path');
-            var pathWrap = document.getElementById('notebook-path-field-wrap');
-            function syncNotebookPathEnabled() {
-                var on = nbCb && nbCb.checked;
-                if (pathInput) pathInput.disabled = !on;
-                if (pathWrap) pathWrap.classList.toggle('notebook-path-disabled', !on);
+            var overlay = document.getElementById('studio-advanced-modal');
+            var openBtn = document.getElementById('studio-advanced-open');
+            var closeBtn = document.getElementById('studio-advanced-close');
+            function openAdvancedModal() {
+                if (!overlay) return;
+                overlay.classList.add('studio-modal-overlay--open');
+                overlay.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('studio-modal-open');
             }
-            if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
-            syncNotebookPathEnabled();
-        })();
-
-        // ── Spec validation helper ────────────────────────────────────
-        window._specValid = true;
-        function validateSpecContent(file) {
-            var fd = new FormData();
-            fd.append('spec_upload', file);
-            var resultEl = document.getElementById('spec-validation-result');
-            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
-            fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
-                    window._specValid = data.valid;
-                    if (!resultEl) return;
-                    if (data.valid) {
-                        resultEl.innerHTML = '<span class="spec-validation-success">Spec is valid</span>';
-                    } else {
-                        var items = (data.errors || []).map(function(e) { return '<li>' + e + '</li>'; }).join('');
-                        resultEl.innerHTML = '<div class="spec-validation-error">'
-                            + '<span class="spec-selected-value">Spec validation failed</span>'
-                            + '<ul class="spec-validation-error-list">' + items + '</ul>'
-                            + '</div>';
-                    }
-                })
-                .catch(function() {
-                    if (resultEl) resultEl.innerHTML = '';
-                    window._specValid = true;
+            function closeAdvancedModal() {
+                if (!overlay) return;
+                overlay.classList.remove('studio-modal-overlay--open');
+                overlay.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('studio-modal-open');
+            }
+            if (openBtn) openBtn.addEventListener('click', function(e) { e.preventDefault(); openAdvancedModal(); });
+            if (closeBtn) closeBtn.addEventListener('click', function(e) { e.preventDefault(); closeAdvancedModal(); });
+            if (overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) closeAdvancedModal();
                 });
-        }
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && overlay && overlay.classList.contains('studio-modal-overlay--open')) {
+                    closeAdvancedModal();
+                }
+            });
+        })();
 
         // ── Code root prefix select + suffix sync / browseCode options ─────
         (function() {
@@ -641,8 +725,10 @@ MAIN_DOM_JS = r"""
                 const sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
                 hidden.value = sub ? base + '/' + sub : base;
             }
-            function showCodeRootError() {
+            function showCodeRootError(detail) {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
+                var msg = detail ? String(detail) : 'Could not load source code roots for this project.';
+                console.error('[code-root]', msg);
                 prefix.innerHTML = '';
                 var opt = document.createElement('option');
                 opt.value = '';
@@ -654,7 +740,6 @@ MAIN_DOM_JS = r"""
                 prefix.classList.add('code-root-error');
                 if (hidden) hidden.value = '';
                 sync();
-                detectLanguageFromCodeRoot();
             }
             function showCodeRootLoading() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
@@ -673,16 +758,16 @@ MAIN_DOM_JS = r"""
             function loadCodeRootOptions() {
                 if (!prefix || prefix.tagName !== 'SELECT') return;
                 var pid = new URLSearchParams(window.location.search).get('projectId');
-                if (!pid) { showCodeRootError(); return; }
+                if (!pid) { showCodeRootError('Add projectId to the page URL.'); return; }
                 showCodeRootLoading();
                 var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
                 fetch(url)
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data && data.error) { showCodeRootError(); return; }
+                        if (data && data.error) { showCodeRootError(data.error); return; }
                         var opts = (data && data.options) || [];
                         var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
-                        if (!opts.length) { showCodeRootError(); return; }
+                        if (!opts.length) { showCodeRootError('No source code roots returned for this project.'); return; }
                         prefix.classList.remove('code-root-error');
                         prefix.classList.remove('code-root-loading');
                         prefix.innerHTML = '';
@@ -704,22 +789,15 @@ MAIN_DOM_JS = r"""
                         }
                         if (!found) prefix.selectedIndex = 0;
                         sync();
-                        detectLanguageFromCodeRoot();
                     })
-                    .catch(function() { showCodeRootError(); });
+                    .catch(function() { showCodeRootError('Request to load source code roots failed.'); });
             }
             if (suffix) {
                 suffix.addEventListener('input', sync);
-                var langTimer = null;
-                suffix.addEventListener('input', function() {
-                    clearTimeout(langTimer);
-                    langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
-                });
             }
             if (prefix && prefix.tagName === 'SELECT') {
                 prefix.addEventListener('change', function() {
                     sync();
-                    detectLanguageFromCodeRoot();
                 });
             }
             sync();
@@ -727,23 +805,20 @@ MAIN_DOM_JS = r"""
         })();
 
         // ── Job history rendering ─────────────────────────────────────
-        var _ACTIVE_STATUSES = {queued: true, submitted: true, pending: true, running: true};
 
         function _esc(s) {
             return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
-        function _jobRow(j, pid) {
+        function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
-            var branch = j.branch || '—';
             var tier = j.hardware_tier || '—';
             var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
             var linkCell = j.job_url
                 ? '<td><a href="' + _esc(j.job_url) + '" target="_blank">View →</a></td>'
                 : '<td>—</td>';
             return '<tr>'
-                + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
                 + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
@@ -764,8 +839,8 @@ MAIN_DOM_JS = r"""
         }
 
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Branch</th><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
-            var rows = jobs.map(function(j) { return _jobRow(j, resolvedProjectId()); }).join('');
+            var header = '<thead><tr><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
+            var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
 
@@ -773,42 +848,19 @@ MAIN_DOM_JS = r"""
             var el = document.getElementById('job-history-content');
             if (!el) return;
 
-            var prevDetailsOpen = false;
-            var prevCompletedCount = 0;
-            var details = el.querySelector('details');
-            if (details) {
-                prevDetailsOpen = details.open;
-                prevCompletedCount = details.querySelectorAll('tbody tr').length;
-            }
-
             if (!jobs || !jobs.length) {
-                el.innerHTML = '<div class="spec-file-empty"><span class="material-symbols-outlined spec-file-empty-icon">description</span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
+                el.innerHTML = '<div class="spec-file-empty"><span class="fa-icon fa-file-lines spec-file-empty-icon"></span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
                 return;
             }
 
-            var pid = resolvedProjectId();
-            var activeJobs = jobs.filter(function(j) { return _ACTIVE_STATUSES[j.status || 'queued']; });
-            var completedJobs = jobs.filter(function(j) { return !_ACTIVE_STATUSES[j.status || 'queued']; });
             var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
 
             var html = _maxJobsWarning(jobs);
+            html += '<div class="history-table-wrap">' + _tableHtml(jobs) + '</div>';
 
-            if (activeJobs.length) {
-                html += '<div class="history-table-wrap">' + _tableHtml(activeJobs) + '</div>';
-            }
-            if (completedJobs.length) {
-                var n = completedJobs.length;
-                var label = 'Show ' + n + ' completed job' + (n !== 1 ? 's' : '');
-                var autoOpen = !activeJobs.length || prevDetailsOpen || completedJobs.length > prevCompletedCount;
-                html += '<details' + (autoOpen ? ' open' : '') + '>'
-                    + '<summary class="history-toggle">' + label + '</summary>'
-                    + '<div class="history-table-wrap">' + _tableHtml(completedJobs) + '</div>'
-                    + '</details>';
-            }
-
-            var actions = '<a class="terminal-action" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
+            var actions = '<a class="primary" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
             if (hasQueued) {
-                actions += ' <a class="terminal-action" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
+                actions += ' <a class="primary" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
             }
             html += '<div class="history-actions">' + actions + '</div>';
 
@@ -830,8 +882,12 @@ MAIN_DOM_JS = r"""
                     e.preventDefault();
                     fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
                         .then(_checkResp).then(function(r) { return r.json(); })
-                        .then(function(data) { renderJobHistory(data.jobs || []); })
-                        .catch(function() {});
+                        .then(function(data) {
+                            renderJobHistory(data.jobs || []);
+                        })
+                        .catch(function(err) {
+                            console.error('[job-history] Cancel queued failed:', err);
+                        });
                 });
             }
         }
@@ -839,13 +895,41 @@ MAIN_DOM_JS = r"""
         function fetchJobHistory() {
             fetch(_adUrl('job-history') + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) { renderJobHistory(data.jobs || []); })
-                .catch(function() {});
+                .then(function(data) {
+                    renderJobHistory(data.jobs || []);
+                })
+                .catch(function(err) {
+                    console.error('[job-history] Could not load job history:', err);
+                });
         }
 
         // Poll job history every 10 seconds
         setInterval(fetchJobHistory, 10000);
 
+        function runJobJsonPayloadFromMainForm(resolvedSpecPath) {
+            function val(id) {
+                var el = document.getElementById(id);
+                return el ? String(el.value || '').trim() : '';
+            }
+            function chk(id) {
+                var el = document.getElementById(id);
+                return !!(el && el.checked);
+            }
+            return {
+                spec_path: resolvedSpecPath,
+                provider: val('field-provider'),
+                model: val('field-model'),
+                code_root: val('field-code_root'),
+                notebook: true,
+                notebook_path: '',
+                notebook_from_cache: false,
+                filtered_experiment_names: val('field-filtered_experiment_names'),
+                filtered_model_names: val('field-filtered_model_names'),
+                latest_only: chk('field-latest_only'),
+                hardware_tier: val('field-hardware_tier'),
+                provider_base_url: val('field-provider_base_url'),
+            };
+        }
 
         // ── Form submission ───────────────────────────────────────────
         var mainForm = document.getElementById('main-form');
@@ -854,43 +938,64 @@ MAIN_DOM_JS = r"""
                 e.preventDefault();
 
                 var specPath = document.getElementById('field-spec_path');
-                var specUpload = document.getElementById('spec-machine-upload');
-                var hasSpec = (specPath && specPath.value.trim()) ||
-                              (specUpload && specUpload.files && specUpload.files.length > 0);
+                var hasSpec = specPath && specPath.value.trim();
                 if (!hasSpec) {
                     var msg = 'Please select or upload a spec file before generating documentation.';
-                    var existing = document.getElementById('spec-validation-msg');
-                    if (!existing) {
-                        var indicator = document.getElementById('spec-selected-indicator');
-                        if (indicator) {
-                            var msgEl = document.createElement('div');
-                            msgEl.id = 'spec-validation-msg';
-                            msgEl.className = 'spec-validation-msg';
-                            msgEl.textContent = msg;
-                            indicator.parentNode.insertBefore(msgEl, indicator.nextSibling);
-                        } else {
-                            alert(msg);
-                        }
-                    }
+                    setStudioErrorSlot('generate', { title: 'Spec file required', items: [msg] });
                     return;
                 }
-                var existingMsg = document.getElementById('spec-validation-msg');
-                if (existingMsg) existingMsg.remove();
+                setStudioErrorSlot('generate', null);
 
-                var fd = new FormData(mainForm);
+                var rawSpec = (specPath && specPath.value || '').trim();
+                var resolvedSpec = rawSpec;
+                if (rawSpec.indexOf('dataset://') === 0 && _specCurrentDatasetPath) {
+                    var rest = rawSpec.slice('dataset://'.length);
+                    var si = rest.indexOf('/');
+                    var rel = si >= 0 ? rest.slice(si + 1) : '';
+                    var base = _specCurrentDatasetPath.replace(/\/+$/, '');
+                    resolvedSpec = rel ? (base + '/' + rel) : base;
+                }
                 var pid = resolvedProjectId();
-                if (pid && !fd.get('projectId')) fd.append('projectId', pid);
-                if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
-                if (_specCurrentSnapshotId && !fd.get('snapshotId')) fd.append('snapshotId', _specCurrentSnapshotId);
-                if (_specCurrentDatasetPath && !fd.get('datasetPath')) fd.append('datasetPath', _specCurrentDatasetPath);
+                var jsonPayload = runJobJsonPayloadFromMainForm(resolvedSpec);
 
                 var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
                 var submitBtn = mainForm.querySelector('[type=submit]');
+                var runMsgEl = document.getElementById('generate-run-message');
+                function setRunMessage(text, isError) {
+                    if (!runMsgEl) return;
+                    runMsgEl.textContent = text || '';
+                    if (isError) {
+                        runMsgEl.classList.add('generate-run-message--error');
+                    } else {
+                        runMsgEl.classList.remove('generate-run-message--error');
+                    }
+                }
+                setRunMessage('', false);
                 if (submitBtn) submitBtn.disabled = true;
 
-                fetch(_adUrl('run') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(data) { renderJobHistory(data.jobs || []); })
+                fetch(_adUrl('run') + qs, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(jsonPayload),
+                })
+                    .then(function(r) {
+                        return r.text().then(function(text) {
+                            var data = null;
+                            try {
+                                data = text ? JSON.parse(text) : null;
+                            } catch (e) {}
+                            if (!r.ok) {
+                                var err = (data && data.error) ? data.error : ('Request failed (' + r.status + ')');
+                                setRunMessage('', false);
+                                setStudioErrorSlot('generate', { title: 'Could not start job', items: [err] });
+                                throw new Error(err);
+                            }
+                            setRunMessage('', false);
+                            setStudioErrorSlot('generate', null);
+                            return data;
+                        });
+                    })
+                    .then(function() { fetchJobHistory(); })
                     .catch(function() {})
                     .finally(function() { if (submitBtn) submitBtn.disabled = false; });
             });

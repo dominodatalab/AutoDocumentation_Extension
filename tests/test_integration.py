@@ -111,9 +111,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     # Mock domino_client
     mock_client = MagicMock()
-    mock_client.list_branches_api.return_value = [
-        {"name": "main"}, {"name": "develop"},
-    ]
     mock_client.list_hardware_tiers.return_value = [
         {"id": "small", "name": "Small", "isDefault": True},
     ]
@@ -123,6 +120,11 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_client.get_job_status.return_value = {
         "domino_status": "Succeeded", "local_status": "succeeded",
     }
+    monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "env-integration")
+    monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "rev-integration")
+    mock_client.list_environment_revisions.return_value = [
+        {"id": "rev-integration", "number": 1, "option_label": "#1"},
+    ]
     mock_info = MagicMock()
     mock_info.name = "test-project"
     mock_info.owner_username = "test-owner"
@@ -136,6 +138,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_datasets.list_datasets.return_value = [
         {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
     ]
+    mock_datasets.ensure_dataset = MagicMock(
+        return_value={"id": "ds-1", "name": "autodoc-specs", "datasetPath": "/domino/datasets/local/autodoc"},
+    )
+    mock_datasets.resolve_dataset_mount_path = MagicMock(
+        side_effect=lambda e: (e.get("datasetPath") or "").strip() or "/domino/datasets/local/autodoc",
+    )
     mock_datasets.AUTODOC_SPECS_DATASET = "autodoc-specs"
     mock_datasets.build_spec_mount_path.return_value = "/mnt/data/autodoc-specs/spec.yaml"
     mock_datasets.get_rw_snapshot_id.return_value = "snap-1"
@@ -181,14 +189,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         filtered_model_names: str = ""
         latest_only: bool = False
         verbose: bool = True
-        branch: str = ""
         hardware_tier: str = ""
         environment_id: str = ""
         environment_revision_id: str = ""
         api_key_source: str = "domino_env"
         project_id: str = ""
         provider_base_url: str = ""
-        language: str = "auto"
         max_retries: int = 5
         initial_backoff: float = 10.0
         max_backoff: float = 120.0
@@ -200,7 +206,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         id: str
         owner_id: str
         domino_run_id: Optional[str] = None
-        branch: Optional[str] = None
         hardware_tier: Optional[str] = None
         status: str = "queued"
         domino_status: Optional[str] = None
@@ -261,12 +266,11 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     sys.modules["fasthtml"] = ModuleType("fasthtml")
     sys.modules["fasthtml.common"] = mock_fh
 
-    # Mock autodoc.core.models for routes_spec
+    # Mock autodoc.core.models (routes_api upload validation, etc.)
     mock_models = ModuleType("autodoc.core.models")
     mock_doc_spec = MagicMock()
     mock_doc_spec.validate_spec.return_value = []
     mock_models.DocumentSpec = mock_doc_spec
-    mock_models.detect_language = MagicMock(return_value=(None, 0))
     mock_models.LANGUAGE_PROFILES = {}
     sys.modules["autodoc"] = ModuleType("autodoc")
     sys.modules["autodoc.core"] = ModuleType("autodoc.core")
@@ -284,13 +288,12 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     # Load route modules fresh
     for mod_name in ("studio.ui_components", "studio.job_engine",
-                     "studio.routes_api", "studio.routes_job", "studio.routes_spec"):
+                     "studio.routes_api", "studio.routes_job"):
         sys.modules.pop(mod_name, None)
 
     ui_mod = _load_module("studio.ui_components", "ui_components.py")
     je_mod = _load_module("studio.job_engine", "job_engine.py")
     api_mod = _load_module("studio.routes_api", "routes_api.py")
-    spec_mod = _load_module("studio.routes_spec", "routes_spec.py")
     job_mod = _load_module("studio.routes_job", "routes_job.py")
 
     # Collect route handlers
@@ -303,7 +306,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         return decorator
 
     api_mod.register_api_routes(fake_rt)
-    spec_mod.register_spec_routes(fake_rt)
     job_mod.register_job_routes(fake_rt)
 
     # Build Starlette routes from collected handlers
@@ -381,6 +383,8 @@ def integration_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DOMINO_API_HOST", "https://domino.test")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
     monkeypatch.setenv("AUTODOC_MAX_JOBS", "2")
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(tmp_path / "domino_datasets"))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "autodoc-extension")
 
     import auth_context as _auth_ctx
     from auth_context import User
@@ -391,7 +395,7 @@ def integration_env(tmp_path, monkeypatch):
 
     saved_modules = {}
     for key in ("studio", "studio.state", "studio.ui_components", "studio.job_engine",
-                "studio.routes_api", "studio.routes_job", "studio.routes_spec",
+                "studio.routes_api", "studio.routes_job",
                 "fasthtml", "fasthtml.common", "autodoc", "autodoc.core", "autodoc.core.models"):
         saved_modules[key] = sys.modules.get(key)
 
@@ -457,67 +461,34 @@ class TestApiRoutesIntegration:
         resp = client.get("/api/download-template")
         assert resp.status_code == 200
 
-    def test_branches(self, client, integration_env):
-        resp = client.get("/api/branches?projectId=proj-integration")
-        assert resp.status_code == 200
-        body = resp.text
-        assert "main" in body
-
     def test_hardware_tiers(self, client):
         resp = client.get("/api/hardware-tiers?projectId=proj-integration")
         assert resp.status_code == 200
 
 
 # ===========================================================================
-# Spec route integration tests
+# Spec upload validation (via /api/upload-spec-to-dataset)
 # ===========================================================================
 
-class TestSpecRoutesIntegration:
+class TestSpecUploadIntegration:
 
-    def test_validate_spec_empty(self, client):
-        resp = client.post("/validate-spec", data={})
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["valid"] is False
-        assert len(body["errors"]) > 0
-
-    def test_validate_spec_valid(self, client, integration_env):
-        integration_env["doc_spec"].validate_spec.return_value = []
-        resp = client.post(
-            "/validate-spec",
-            files={"spec_upload": ("spec.yaml", b"title: Test\n", "application/x-yaml")},
+    def test_upload_invalid_yaml_returns_400(self, client, integration_env, monkeypatch):
+        integration_env["doc_spec"].validate_spec.return_value = ["bad spec"]
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
         )
-        assert resp.status_code == 200
-        integration_env["doc_spec"].validate_spec.assert_called()
-        body = resp.json()
-        assert body["valid"] is True
-        assert body["errors"] == []
-
-    def test_validate_spec_with_errors(self, client, integration_env):
-        integration_env["doc_spec"].validate_spec.return_value = ["Missing title field"]
         resp = client.post(
-            "/validate-spec",
-            files={"spec_upload": ("bad.yaml", b"sections: []\n", "application/x-yaml")},
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("spec.yaml", b"foo: bar\n", "application/x-yaml")},
+            data={"datasetId": "ds-integration", "relativeDir": ""},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         body = resp.json()
-        assert body["valid"] is False
-        assert "Missing title field" in body["errors"]
-
-    def test_spec_list_empty(self, client):
-        resp = client.get("/spec-list?projectId=proj-integration")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["specs"] == []
-
-    def test_save_spec(self, client):
-        resp = client.post("/save-spec", data={
-            "spec_filename": "test.yaml",
-            "spec_content": "title: Test\n",
-        })
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "saved" in body
+        assert body.get("valid") is False
+        assert "bad spec" in body.get("errors", [])
+        mock_write.assert_not_called()
 
 
 # ===========================================================================
@@ -527,55 +498,42 @@ class TestSpecRoutesIntegration:
 class TestJobRoutesIntegration:
 
     def test_job_history_empty(self, client):
-        resp = client.get("/job-history")
+        resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
+        assert resp.json().get("jobs") == []
 
-    def test_submit_job_creates_record(self, client, integration_env):
-        """Submit via HTTP, verify record appears in job index."""
+    def test_submit_job_calls_domino(self, client, integration_env):
+        """POST /run submits to Domino and records the run for the current user."""
         store = integration_env["store"]
+        mock_client = integration_env["domino_client"]
 
         resp = client.post(
             "/run?projectId=proj-integration",
-            data={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
+            json={
+                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
                 "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
+                "code_root": "/mnt/code",
+                "hardware_tier": "small",
+                "environment_id": "env-int",
+                "environment_revision_id": "rev-int",
             },
         )
         assert resp.status_code == 200
+        assert resp.json().get("ok") is True
+        integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
+        integration_env["domino_datasets"].resolve_dataset_mount_path.assert_called_once()
+        mock_client.submit_job.assert_called()
+        jobs = store.get_user_jobs("proj-integration", "integration_user", limit=50)
+        assert len(jobs) == 1
+        assert jobs[0]["domino_run_id"] == "run-integration"
 
-        jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
-        assert len(jobs) >= 1
-        assert jobs[0]["owner_id"] == "integration_user"
-
-    def test_cancel_queued_jobs(self, client, integration_env):
-        """Cancel via HTTP, verify status change in job index."""
-        store = integration_env["store"]
-        job_id = store.create_job(
-            "ds-integration", "snap-integration",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-
-        resp = client.post("/cancel-queued-jobs")
+    def test_cancel_queued_jobs(self, client):
+        resp = client.post("/cancel-queued-jobs?projectId=proj-integration")
         assert resp.status_code == 200
-
-        job = store.get_job("ds-integration", "snap-integration", job_id)
-        assert job["status"] == "cancelled"
-
-    def test_job_history_returns_submitted_jobs(self, client, integration_env):
-        """Jobs created via /run appear in /job-history."""
-        client.post(
-            "/run?projectId=proj-integration",
-            data={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
-                "provider": "anthropic",
-            },
-        )
-
-        resp = client.get("/job-history")
-        assert resp.status_code == 200
-        assert len(resp.text) > 50  # not empty
+        body = resp.json()
+        assert body.get("ok") is True
+        assert body.get("jobs") == []
 
 
 # ===========================================================================
@@ -594,12 +552,19 @@ class TestAuthorizationIntegration:
         self._deny(integration_env["authz"], "require_domino_job_start")
         resp = client.post(
             "/run?projectId=proj-integration",
-            data={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
+            json={
+                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
                 "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
+                "code_root": "/mnt/code",
+                "hardware_tier": "small",
+                "environment_id": "env-int",
+                "environment_revision_id": "rev-int",
             },
         )
         assert resp.status_code == 403
+        assert resp.json().get("error")
+        integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
 
     def test_job_history_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_list")
@@ -624,13 +589,6 @@ class TestAuthorizationIntegration:
         )
         assert resp.status_code == 403
 
-    def test_save_spec_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_project_write")
-        resp = client.post("/save-spec?projectId=proj-integration", data={
-            "spec_filename": "test.yaml",
-            "spec_content": "title: Test\n",
-        })
-        assert resp.status_code == 403
 
 
 class TestAuthMiddlewareIntegration:
@@ -659,56 +617,37 @@ class TestAuthMiddlewareIntegration:
 
 class TestCrossCuttingIntegration:
 
-    def test_max_jobs_enforced(self, client, integration_env):
-        """Jobs beyond the limit should be queued, not submitted."""
-        store = integration_env["store"]
-
-        # Create 2 active jobs (AUTODOC_MAX_JOBS=2)
-        for i in range(2):
-            jid = store.create_job(
-                "ds-integration", "snap-integration",
-                "integration_user", "main", "small", "/spec.yaml",
-                "", "",
-                project_id="proj-integration",
-            )
-            store.update_job("ds-integration", "snap-integration", jid, status="submitted", domino_run_id=f"run-{i}")
-
-        client.post(
+    def test_run_always_submits_to_domino(self, client, integration_env):
+        """POST /run always calls Domino submit; no local queue on the /run path."""
+        mock_client = integration_env["domino_client"]
+        before = mock_client.submit_job.call_count
+        resp = client.post(
             "/run?projectId=proj-integration",
-            data={
-                "spec_path": "dataset://autodoc-specs/spec.yaml",
+            json={
+                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
                 "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
                 "code_root": "/mnt/code",
-                "max_files": "50",
-                "workers": "4",
-                "planning_workers": "3",
-                "timeout": "120",
-                "max_retries": "5",
-                "initial_backoff": "10",
-                "max_backoff": "120",
-                "backoff_jitter": "0.2",
-                "verbose": "true",
+                "hardware_tier": "small",
+                "environment_id": "env-int",
+                "environment_revision_id": "rev-int",
+                "max_files": 50,
+                "workers": 4,
+                "planning_workers": 3,
+                "timeout": 120,
+                "max_retries": 5,
+                "initial_backoff": 10,
+                "max_backoff": 120,
+                "backoff_jitter": 0.2,
+                "verbose": True,
             },
         )
-
-        jobs = store.get_user_jobs("ds-integration", "snap-integration", "integration_user")
-        newest = jobs[0]
-        assert newest["status"] == "queued"
-
-    def test_cancel_then_history_reflects_change(self, client, integration_env):
-        """Cancel a job, then verify history endpoint shows updated status."""
-        store = integration_env["store"]
-        job_id = store.create_job(
-            "ds-integration", "snap-integration",
-            "integration_user", "main", "small", "/spec.yaml",
-            "", "",
-            project_id="proj-integration",
-        )
-
-        client.post("/cancel-queued-jobs")
-
-        # History should show cancelled
-        resp = client.get("/job-history")
         assert resp.status_code == 200
-        body = resp.text.upper()
-        assert "CANCELLED" in body
+        assert resp.json().get("ok") is True
+        assert mock_client.submit_job.call_count == before + 1
+
+    def test_cancel_then_history_empty_without_storage(self, client):
+        client.post("/cancel-queued-jobs?projectId=proj-integration")
+        resp = client.get("/job-history?projectId=proj-integration")
+        assert resp.status_code == 200
+        assert resp.json().get("jobs") == []

@@ -131,7 +131,7 @@ class LLMClient:
                 async def _request():
                     return await self.client.chat.completions.create(
                         model=self.model,
-                        max_tokens=max_tokens,
+                        max_completion_tokens=max_tokens,
                         temperature=temperature,
                         messages=[
                             {"role": "system", "content": system},
@@ -210,7 +210,7 @@ class LLMClient:
                 async def _request():
                     return await self.client.chat.completions.create(
                         model=self.model,
-                        max_tokens=max_tokens,
+                        max_completion_tokens=max_tokens,
                         response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": f"{system}\nAlways respond with valid JSON."},

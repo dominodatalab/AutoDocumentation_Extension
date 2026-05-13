@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -41,13 +41,11 @@ class JobRequest:
     filtered_model_names: str
     latest_only: bool
     verbose: bool
-    branch: str
     hardware_tier: str
     environment_id: str
     environment_revision_id: str
     project_id: str
     provider_base_url: str
-    language: str
     max_retries: int
     initial_backoff: float
     max_backoff: float
@@ -58,7 +56,7 @@ class JobRequest:
 _JR_DEFAULTS = {
     "spec_path": "",
     "provider": "anthropic",
-    "model": "",
+    "model": "gpt-4",
     "code_root": "/mnt/code",
     "max_files": 50,
     "workers": 4,
@@ -70,13 +68,11 @@ _JR_DEFAULTS = {
     "filtered_model_names": "",
     "latest_only": False,
     "verbose": False,
-    "branch": "",
-    "hardware_tier": "",
-    "environment_id": "",
-    "environment_revision_id": "",
+    "hardware_tier": "tier-default",
+    "environment_id": "env-default",
+    "environment_revision_id": "rev-default",
     "project_id": "",
     "provider_base_url": "",
-    "language": "auto",
     "max_retries": 5,
     "initial_backoff": 10.0,
     "max_backoff": 120.0,
@@ -94,7 +90,6 @@ class DominoJobRecord:
     id: str
     owner_id: str
     domino_run_id: Optional[str] = None
-    branch: Optional[str] = None
     hardware_tier: Optional[str] = None
     status: str = "queued"
     domino_status: Optional[str] = None
@@ -131,6 +126,17 @@ def _build_mock_state():
     mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
     mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
+
+    def _resolve_request_project_id(req):
+        for key in ("projectId", "project_id"):
+            raw = req.query_params.get(key)
+            if raw:
+                s = str(raw).strip()
+                if s:
+                    return s
+        return None
+
+    mock_state._resolve_request_project_id = _resolve_request_project_id
     return mock_state
 
 
@@ -209,18 +215,20 @@ async def test_parse_request_provider_base_url_preserved():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20240620",
             "provider_base_url": "https://a.example",
         }
     )
     jr = await je._parse_request(req)
     assert jr.provider_base_url == "https://a.example"
 
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "openai",
+            "model": "gpt-4o",
             "provider_base_url": "https://ok/v1",
         }
     )
@@ -235,18 +243,20 @@ async def test_parse_request_verbose_checkbox():
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
             "verbose": "true",
         }
     )
     jr = await je._parse_request(req)
     assert jr.verbose is True
 
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     jr2 = await je._parse_request(req)
@@ -254,57 +264,70 @@ async def test_parse_request_verbose_checkbox():
 
 
 @pytest.mark.asyncio
-async def test_parse_request_provider_defaults_to_openai_when_missing():
+async def test_parse_request_notebook_always_true_keeps_optional_path():
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(return_value={})
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+            "notebook_path": "/out/x.ipynb",
+            "notebook_from_cache": True,
+        }
+    )
     jr = await je._parse_request(req)
-    assert jr.provider == "openai"
+    assert jr.notebook is True
+    assert jr.notebook_path == "/out/x.ipynb"
+    assert jr.notebook_from_cache is True
 
 
 @pytest.mark.asyncio
-async def test_parse_request_language_defaults_to_auto_when_missing():
+async def test_parse_request_notebook_on_keeps_path_and_from_cache():
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
+            "notebook": True,
+            "notebook_path": "/out/x.ipynb",
+            "notebook_from_cache": True,
         }
     )
     jr = await je._parse_request(req)
-    assert jr.language == "auto"
+    assert jr.notebook is True
+    assert jr.notebook_path == "/out/x.ipynb"
+    assert jr.notebook_from_cache is True
 
 
 @pytest.mark.asyncio
-async def test_parse_request_language_allowed_and_invalid():
+async def test_parse_request_raises_when_model_missing():
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
-        return_value={
-            "provider": "anthropic",
-            "language": "sas",
-        }
-    )
-    jr = await je._parse_request(req)
-    assert jr.language == "sas"
+    req.json = AsyncMock(return_value={"provider": "anthropic"})
+    with pytest.raises(RuntimeError, match="model is required"):
+        await je._parse_request(req)
 
-    req.form = AsyncMock(
-        return_value={
-            "provider": "anthropic",
-            "language": "fortran",
-        }
-    )
-    jr2 = await je._parse_request(req)
-    assert jr2.language == "auto"
+
+@pytest.mark.asyncio
+async def test_parse_request_raises_when_provider_missing():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(return_value={})
+    with pytest.raises(RuntimeError, match="provider is required"):
+        await je._parse_request(req)
 
 
 @pytest.mark.asyncio
@@ -314,11 +337,12 @@ async def test_parse_request_project_id_only_from_query():
 
     req = MagicMock()
     req.query_params = {"projectId": "from-query"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "target_project": "form-should-not-win",
             "project_id": "hidden-should-not-win",
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     jr = await je._parse_request(req)
@@ -330,22 +354,25 @@ async def test_parse_request_project_id_only_from_query():
 
 
 @pytest.mark.asyncio
-async def test_parse_request_environment_fields():
+async def test_parse_request_environment_from_env_not_body(monkeypatch):
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
+    monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "env-from-env")
+    monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "rev-from-env")
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "provider": "anthropic",
+            "model": "gpt-4",
             "environment_id": "env123",
             "environment_revision_id": "rev456",
         }
     )
     jr = await je._parse_request(req)
-    assert jr.environment_id == "env123"
-    assert jr.environment_revision_id == "rev456"
+    assert jr.environment_id == "env-from-env"
+    assert jr.environment_revision_id == "rev-from-env"
 
 
 @pytest.mark.asyncio
@@ -355,10 +382,11 @@ async def test_parse_request_raises_when_no_query_project_id():
 
     req = MagicMock()
     req.query_params = {}
-    req.form = AsyncMock(
+    req.json = AsyncMock(
         return_value={
             "target_project": "only-form-not-enough",
             "provider": "anthropic",
+            "model": "gpt-4",
         }
     )
     with pytest.raises(RuntimeError, match="project ID"):
@@ -399,6 +427,8 @@ class TestBuildJobCommand:
         assert "--max-retries" in cmd
         assert cmd[cmd.index("--max-retries") + 1] == "5"
         assert "--backoff-jitter" in cmd
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "gpt-4"
 
     def test_notebook_unchecked_omits_flag(self):
         je = _import_job_engine()
@@ -519,24 +549,117 @@ class TestBuildJobCommand:
 
 
 # ---------------------------------------------------------------------------
+# _validate_job_inputs
+# ---------------------------------------------------------------------------
+
+
+class TestValidateJobInputs:
+    def test_accepts_defaults(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+        )
+        je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_unknown_provider(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="google",
+            project_id="proj-123",
+            code_root="/mnt/code",
+        )
+        with pytest.raises(ValueError, match="anthropic or openai"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_empty_model(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            model="",
+        )
+        with pytest.raises(ValueError, match="Model is required"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_max_files_out_of_range(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            max_files=0,
+        )
+        with pytest.raises(ValueError, match="max_files"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_workers_zero(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            workers=0,
+        )
+        with pytest.raises(ValueError, match="generation workers"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_timeout_non_positive(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            timeout=0.0,
+        )
+        with pytest.raises(ValueError, match="timeout"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_max_backoff_below_initial(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            initial_backoff=50.0,
+            max_backoff=10.0,
+        )
+        with pytest.raises(ValueError, match="max_backoff"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+    def test_rejects_negative_backoff_jitter(self):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            backoff_jitter=-0.1,
+        )
+        with pytest.raises(ValueError, match="backoff_jitter"):
+            je._validate_job_inputs(req, "/spec.yaml")
+
+
+# ---------------------------------------------------------------------------
 # _submit_domino_job
 # ---------------------------------------------------------------------------
 
 class TestSubmitDominoJob:
     @pytest.mark.asyncio
-    async def test_submit_immediate_when_under_limit(self, _mock_studio):
+    async def test_calls_domino_without_job_store(self, _mock_studio):
         je = _import_job_engine()
-        store = _mock_studio.domino_job_store
         client = _mock_studio.domino_client
-
-        store.create_job.return_value = "job-1"
-        store.count_active_jobs.return_value = 1
         client.submit_job.return_value = "run-abc"
         client.build_job_url.return_value = "https://domino/jobs/run-abc"
-        store.get_job.return_value = {
-            "id": "job-1", "owner_id": "test_user", "status": "submitted",
-            "domino_run_id": "run-abc",
-        }
 
         req = _jr(
             spec_path="/spec.yaml",
@@ -544,52 +667,26 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
-        assert result.id == "job-1"
-        store.update_job.assert_called_with("ds-1", "snap-1", "job-1", status="submitted", domino_run_id="run-abc", job_url="https://domino/jobs/run-abc")
-
-    @pytest.mark.asyncio
-    async def test_queued_when_over_limit(self, _mock_studio):
-        je = _import_job_engine()
-        store = _mock_studio.domino_job_store
-
-        store.create_job.return_value = "job-2"
-        store.count_active_jobs.return_value = 2
-        store.get_job.return_value = {
-            "id": "job-2", "owner_id": "test_user", "status": "queued",
-            "domino_run_id": None,
-        }
-
-        req = _jr(
-            spec_path="/spec.yaml",
-            provider="anthropic",
-            project_id="proj-123",
-            code_root="/mnt/code",
-        )
-        result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
-        assert result.status == "queued"
-        _mock_studio.domino_client.submit_job.assert_not_called()
+        rid, url = await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+        assert rid == "run-abc"
+        assert url == "https://domino/jobs/run-abc"
+        client.submit_job.assert_called_once()
+        cmd = client.submit_job.call_args[0][0]
+        assert "/domino/datasets/local/autodoc" in cmd
+        client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
 
     @pytest.mark.asyncio
     async def test_raises_when_no_spec(self, _mock_studio):
         je = _import_job_engine()
         req = _jr(provider="anthropic", project_id="proj-123")
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
 
     @pytest.mark.asyncio
-    async def test_submission_failure_marks_job_failed(self, _mock_studio):
+    async def test_launch_failure_propagates(self, _mock_studio):
         je = _import_job_engine()
-        store = _mock_studio.domino_job_store
         client = _mock_studio.domino_client
-
-        store.create_job.return_value = "job-3"
-        store.count_active_jobs.return_value = 1
         client.submit_job.side_effect = RuntimeError("API down")
-        store.get_job.return_value = {
-            "id": "job-3", "owner_id": "test_user", "status": "failed",
-            "domino_run_id": None,
-        }
 
         req = _jr(
             spec_path="/spec.yaml",
@@ -597,77 +694,68 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        result = await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
-        assert result.status == "failed"
+        with pytest.raises(RuntimeError, match="API down"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
 
     @pytest.mark.asyncio
-    async def test_dataset_spec_path_resolved(self, _mock_studio):
+    async def test_raises_when_missing_hardware_tier(self, _mock_studio):
         je = _import_job_engine()
-        store = _mock_studio.domino_job_store
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            hardware_tier="",
+        )
+        with pytest.raises(ValueError, match="Hardware tier"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_missing_environment(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            environment_id="",
+        )
+        with pytest.raises(ValueError, match="Environment is required"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_missing_environment_revision(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            environment_revision_id="",
+        )
+        with pytest.raises(ValueError, match="Environment revision"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_mount_path_empty(self, _mock_studio):
+        je = _import_job_engine()
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+        )
+        with pytest.raises(ValueError, match="mount path"):
+            await je._submit_domino_job(req, "")
+        with pytest.raises(ValueError, match="mount path"):
+            await je._submit_domino_job(req, "   ")
+
+    @pytest.mark.asyncio
+    async def test_absolute_spec_path_in_command(self, _mock_studio):
+        je = _import_job_engine()
         client = _mock_studio.domino_client
-        datasets = _mock_studio.domino_datasets
-
-        datasets.get_dataset_detail.return_value = {"datasetPath": "/mnt/data/my-dataset"}
-        datasets.get_dataset_mount_prefix.return_value = "/mnt/data"
-        store.create_job.return_value = "job-4"
-        store.count_active_jobs.return_value = 1
-        client.submit_job.return_value = "run-xyz"
-        client.build_job_url.return_value = "https://domino/jobs/run-xyz"
-        store.get_job.return_value = {
-            "id": "job-4", "owner_id": "test_user", "status": "submitted",
-            "domino_run_id": "run-xyz",
-        }
-
-        import dataset_manager
-        with patch.object(
-            dataset_manager.DatasetManager, "file_exists",
-            staticmethod(lambda snap, path: True),
-        ):
-            req = _jr(
-                spec_path="dataset://my-dataset/spec.yaml",
-                provider="anthropic",
-                project_id="proj-123",
-                code_root="/mnt/code",
-            )
-            await je._submit_domino_job(req, "test_user", "ds-test", "snap-test")
-        call_args = store.create_job.call_args
-        spec_in_db = call_args[1].get("spec_path") or call_args[0][4]
-        assert "/mnt/data/my-dataset/spec.yaml" in spec_in_db
-
-    @pytest.mark.asyncio
-    async def test_dataset_spec_deleted_externally_raises(self, _mock_studio):
-        je = _import_job_engine()
-        _mock_studio.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/mnt/data/autodoc"}
-        _mock_studio.domino_datasets.get_dataset_mount_prefix.return_value = "/mnt/data"
-
-        import dataset_manager
-        with patch.object(
-            dataset_manager.DatasetManager, "file_exists",
-            staticmethod(lambda snap, path: False),
-        ):
-            req = _jr(
-                spec_path="dataset://autodoc/specs/doc_spec.yaml",
-                provider="anthropic",
-                project_id="proj-123",
-                code_root="/mnt/code",
-            )
-            with pytest.raises(ValueError, match="no longer exists"):
-                await je._submit_domino_job(req, "test_user", "ds-test", "snap-test")
-        _mock_studio.domino_job_store.create_job.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_non_dataset_spec_path_skips_verification(self, _mock_studio):
-        je = _import_job_engine()
-        store = _mock_studio.domino_job_store
-        client = _mock_studio.domino_client
-
-        store.create_job.return_value = "job-5"
-        store.count_active_jobs.return_value = 1
         client.submit_job.return_value = "run-abc"
         client.build_job_url.return_value = "https://domino/jobs/run-abc"
-        store.get_job.return_value = {
-            "id": "job-5", "owner_id": "test_user", "status": "submitted",
-        }
 
         req = _jr(
             spec_path="/mnt/data/autodoc/specs/doc_spec.yaml",
@@ -675,8 +763,9 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
-        store.update_job.assert_called_with("ds-1", "snap-1", "job-5", status="submitted", domino_run_id="run-abc", job_url="https://domino/jobs/run-abc")
+        await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+        cmd = client.submit_job.call_args[0][0]
+        assert "doc_spec.yaml" in cmd
 
     @pytest.mark.asyncio
     async def test_requires_spec_path_field(self, _mock_studio):
@@ -689,60 +778,8 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        with pytest.raises(ValueError, match="spec path field"):
-            await je._submit_domino_job(req, "test_user", "ds-1", "snap-1")
+        with pytest.raises(ValueError, match="spec file is required"):
+            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
         spec_store.save_spec.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# sync_jobs_for (request-driven replacement for the background poller)
-# ---------------------------------------------------------------------------
-
-class TestSyncJobsFor:
-    def test_refreshes_active_jobs_for_owner(self, _mock_studio):
-        je = _import_job_engine()
-        store = _mock_studio.domino_job_store
-        client = _mock_studio.domino_client
-
-        store.get_active_jobs.return_value = [
-            {"id": "job-1", "owner_id": "alice", "domino_run_id": "run-1",
-             "status": "submitted", "domino_status": "Queued"},
-            {"id": "job-2", "owner_id": "bob", "domino_run_id": "run-2",
-             "status": "submitted", "domino_status": "Queued"},
-        ]
-        store.count_active_jobs.return_value = 0
-        store.get_oldest_queued_job.return_value = None
-        client.get_job_status.return_value = {
-            "domino_status": "Succeeded",
-            "local_status": "succeeded",
-        }
-
-        je.sync_jobs_for("alice", "ds-1", "snap-1")
-
-        client.get_job_status.assert_called_once_with("run-1")
-        store.update_job.assert_called()
-
-    def test_promotes_queued_jobs_for_owner(self, _mock_studio):
-        je = _import_job_engine()
-        store = _mock_studio.domino_job_store
-        client = _mock_studio.domino_client
-
-        store.get_active_jobs.return_value = []
-        store.count_active_jobs.return_value = 0
-        store.get_oldest_queued_job.return_value = {
-            "id": "queued-1", "command": "python main.py",
-            "branch": "main", "hardware_tier": None,
-            "project_id": "proj-123",
-        }
-        client.submit_job.return_value = "run-promoted"
-        client.build_job_url.return_value = "https://domino/jobs/run-promoted"
-
-        je.sync_jobs_for("alice", "ds-1", "snap-1")
-
-        client.submit_job.assert_called_once()
-        store.update_job.assert_called()
-
-    def test_swallows_errors(self, _mock_studio):
-        je = _import_job_engine()
-        _mock_studio.domino_job_store.get_active_jobs.side_effect = RuntimeError("boom")
-        je.sync_jobs_for("alice", "ds-1", "snap-1")

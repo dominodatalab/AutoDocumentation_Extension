@@ -1,4 +1,4 @@
-"""API routes: branches, hardware tiers, language detection, datasets, etc."""
+"""API routes: hardware tiers, datasets, etc."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from typing import Optional
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
+from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
 
 from .state import (
-    _get_default_code_root,
     _resolve_request_project_id,
     domino_client,
     domino_datasets,
@@ -38,22 +38,8 @@ def sanitize_dataset_subpath(raw: Optional[str]) -> str:
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
-    async def api_branches(req: Request):
-        project_id = req.query_params.get("projectId") or None
-        search = req.query_params.get("search", "")
-        if project_id:
-            branches = domino_client.list_branches_api(project_id, search=search)
-            if branches:
-                return Response(
-                    json.dumps([{"name": b["name"], "value": b["name"]} for b in branches]),
-                    media_type="application/json",
-                )
-        return Response(json.dumps([]), media_type="application/json")
-
-    rt("/api/branches")(api_branches)
-
     async def api_hardware_tiers(req: Request):
-        project_id = req.query_params.get("projectId") or None
+        project_id = _resolve_request_project_id(req)
         tiers = domino_client.list_hardware_tiers(project_id=project_id)
         default_tier = domino_client.get_project_default_tier()
         result = []
@@ -81,41 +67,11 @@ def register_api_routes(rt):
 
     rt("/api/environment-revisions")(api_environment_revisions)
 
-    def api_detect_language(req: Request):
-        from autodoc.core.models import detect_language as _detect_lang, LANGUAGE_PROFILES
-
-        code_root_param = req.query_params.get("code_root", "")
-        if code_root_param:
-            code_root = Path(code_root_param)
-        else:
-            code_root = _get_default_code_root()
-
-        profile, count = _detect_lang(code_root)
-        if profile:
-            return Response(
-                json.dumps({
-                    "language": profile.name,
-                    "display_name": profile.display_name,
-                    "file_count": count,
-                }),
-                media_type="application/json",
-            )
-        return Response(
-            json.dumps({
-                "language": None,
-                "display_name": None,
-                "file_count": 0,
-                "supported": list(LANGUAGE_PROFILES.keys()),
-            }),
-            media_type="application/json",
-        )
-
-    rt("/api/detect-language")(api_detect_language)
-
     async def api_datasets(req: Request):
         """List writable datasets for the project.
 
-        Each dataset includes datasetPath from the detail API.
+        Each item includes datasetPath from Domino's datasets-v2 list response
+        (see domino_datasets.list_datasets; includeStorageInfo on that API).
         """
         pid = _resolve_request_project_id(req)
         require_project_write(pid)
@@ -147,7 +103,7 @@ def register_api_routes(rt):
             )
 
         if not snapshot_id:
-            snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id, pid)
+            snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id)
         if not snapshot_id:
             return Response(
                 json.dumps({"error": "Could not resolve snapshot for dataset"}),
@@ -156,7 +112,7 @@ def register_api_routes(rt):
             )
 
         try:
-            files = domino_datasets.list_files(snapshot_id, path, pid)
+            files = domino_datasets.list_files(snapshot_id, path)
             return Response(json.dumps(files), media_type="application/json")
         except Exception as exc:
             return Response(
@@ -203,12 +159,42 @@ def register_api_routes(rt):
                 media_type="application/json",
             )
 
+        fn_low = filename.lower()
+        if fn_low.endswith((".yaml", ".yml")):
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                return Response(
+                    json.dumps({
+                        "error": "Spec file must be valid UTF-8",
+                        "valid": False,
+                        "errors": ["File is not valid UTF-8"],
+                    }),
+                    status_code=400,
+                    media_type="application/json",
+                )
+            val_errors = DocumentSpec.validate_spec(text)
+            if val_errors:
+                return Response(
+                    json.dumps({
+                        "error": "Spec validation failed",
+                        "valid": False,
+                        "errors": val_errors,
+                    }),
+                    status_code=400,
+                    media_type="application/json",
+                )
+
         try:
             from dataset_manager import DatasetManager
             upload_path = f"{rel_dir}/{filename}" if rel_dir else filename
             DatasetManager.write_file(dataset_id, upload_path, content)
             return Response(
-                json.dumps({"path": upload_path, "fileName": filename}),
+                json.dumps({
+                    "path": upload_path,
+                    "fileName": filename,
+                    "valid": True,
+                }),
                 media_type="application/json",
             )
         except Exception as exc:
@@ -233,7 +219,7 @@ def register_api_routes(rt):
     rt("/api/download-template")(api_download_template)
 
     async def api_code_root_options(req: Request):
-        pid = (req.query_params.get("projectId") or "").strip()
+        pid = (_resolve_request_project_id(req) or "").strip()
 
         def _error_payload(reason: str) -> dict:
             return {
