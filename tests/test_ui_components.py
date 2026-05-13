@@ -416,6 +416,23 @@ class TestInfoTooltipLayer:
         assert "closest('.info-tooltip')" in scripts
 
 
+class TestStudioTwoStepLayout:
+    def test_configure_and_history_two_columns_two_steps(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert web.count('Span("Step 1", cls="step-badge")') == 1
+        assert web.count('Span("Step 2", cls="step-badge")') == 1
+        assert "Step 3" not in web
+        assert 'H2("Documentation specification")' not in web
+        assert 'cls="studio-col-main"' in web
+        assert "studio-col-left" not in web
+        assert "studio-col-mid" not in web
+        assert ".studio-col-main" in styles
+        assert ".studio-col-left" not in styles
+        assert ".studio-col-mid" not in styles
+
+
 class TestSpecFileBrowserUi:
     def test_spec_list_fixed_height_and_parent_nav_in_scripts(self):
         root = Path(__file__).resolve().parent.parent

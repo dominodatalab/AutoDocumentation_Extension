@@ -305,22 +305,27 @@ a:hover { color: var(--primary-container); }
     display: contents;
 }
 
-/* ── 3-Column Grid ────────────────────────────────────────────────── */
+/* ── 2-Column Grid ────────────────────────────────────────────────── */
 .studio-grid {
     display: grid;
-    grid-template-columns: minmax(280px, 3fr) minmax(420px, 5fr) minmax(320px, 4fr);
+    grid-template-columns: minmax(360px, 1.45fr) minmax(280px, 0.85fr);
     gap: 1.25rem;
     align-items: stretch;
 }
-.studio-col-left,
-.studio-col-mid,
+.studio-col-main,
 .studio-col-right {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    gap: 1.25rem;
 }
-.studio-col-left > .bp-card,
-.studio-col-mid > .bp-card {
+.studio-col-main > .bp-card:first-of-type {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.studio-col-main > .bp-card:last-of-type {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
@@ -332,10 +337,7 @@ a:hover { color: var(--primary-container); }
 }
 @media (max-width: 1200px) {
     .studio-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-    .studio-grid .studio-col-right {
-        grid-column: 1 / -1;
+        grid-template-columns: 1fr;
     }
 }
 @media (max-width: 800px) {

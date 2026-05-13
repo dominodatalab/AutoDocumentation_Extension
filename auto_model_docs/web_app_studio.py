@@ -65,7 +65,7 @@ ensure_database()
 
 
 # ---------------------------------------------------------------------------
-# index() — Blueprint Enterprise 3-Column Layout
+# index() — Blueprint Enterprise 2-Column Layout
 # ---------------------------------------------------------------------------
 
 @rt("/")
@@ -229,10 +229,9 @@ async def index(req: Request):
             )
         )
 
-    # LEFT COLUMN: What to document
-    left_col_children = [
+    main_col_children = [
         Div(
-            H2("Documentation specification"),
+            H2("Configure and run"),
             Span("Step 1", cls="step-badge"),
             cls="col-header",
         ),
@@ -346,16 +345,7 @@ async def index(req: Request):
         )
     )
 
-    left_col_children.append(Div(*spec_card_children, cls="bp-card"))
-
-    # MIDDLE COLUMN: Configuration & Run
-    mid_col_children = [
-        Div(
-            H2("Configure and run"),
-            Span("Step 2", cls="step-badge"),
-            cls="col-header",
-        ),
-    ]
+    main_col_children.append(Div(*spec_card_children, cls="bp-card"))
 
     # Run settings card
     run_card_children = []
@@ -515,13 +505,12 @@ async def index(req: Request):
         )
     )
 
-    mid_col_children.append(Div(*run_card_children, cls="bp-card"))
+    main_col_children.append(Div(*run_card_children, cls="bp-card"))
 
-    # RIGHT COLUMN: History
     right_col_children = [
         Div(
             H2("History"),
-            Span("Step 3", cls="step-badge"),
+            Span("Step 2", cls="step-badge"),
             cls="col-header",
         ),
     ]
@@ -562,11 +551,7 @@ async def index(req: Request):
             *_render_warnings_banner(_STARTUP_WARNINGS),
             Form(
                 Div(
-                    # Left column
-                    Div(*left_col_children, cls="studio-col-left"),
-                    # Middle column
-                    Div(*mid_col_children, cls="studio-col-mid"),
-                    # Right column
+                    Div(*main_col_children, cls="studio-col-main"),
                     Div(*right_col_children, cls="studio-col-right"),
                     cls="studio-grid",
                 ),
