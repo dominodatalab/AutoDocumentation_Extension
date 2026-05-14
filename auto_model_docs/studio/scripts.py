@@ -1,20 +1,16 @@
-"""All JavaScript code for the Stitch UI."""
+"""All JavaScript code for the AutoDoc Studio wizard UI."""
 
 from __future__ import annotations
 
 
 MAIN_DOM_JS = r"""
-    // ── Shared fetch helper: check response status before parsing ──
+    // ── Shared fetch helper ──────────────────────────────────────────
     function _checkResp(r) {
         if (!r.ok) throw new Error('Server error (' + r.status + ')');
         return r;
     }
 
-    // ── URL prefixing for Domino app proxy ──
-    // Domino serves this app under /apps/<id>/ (or /apps-internal/<id>/).
-    // The served page URL has no trailing slash, so relative URLs like
-    // "api/datasets" resolve to "/apps/api/datasets" and break. We derive
-    // the prefix from window.location.pathname and prepend it ourselves.
+    // ── URL prefixing for Domino app proxy ──────────────────────────
     var _AD_APP_BASE = (function() {
         var m = (window.location.pathname || '').match(/^(\/apps(?:-internal)?\/[^/]+)/i);
         return m ? m[1] + '/' : '';
@@ -23,8 +19,6 @@ MAIN_DOM_JS = r"""
         if (!_AD_APP_BASE) return rel;
         return _AD_APP_BASE + (rel.charAt(0) === '/' ? rel.slice(1) : rel);
     }
-    // Rewrite any element with data-app-rel="path" to use the full prefix.
-    // Applies to <a href> and <form action>.
     function _adApplyPrefix(root) {
         var scope = root || document;
         scope.querySelectorAll('[data-app-rel]').forEach(function(el) {
@@ -39,25 +33,21 @@ MAIN_DOM_JS = r"""
 
     document.addEventListener('DOMContentLoaded', function() {
 
+        // ── Info tooltip ───────────────────────────────────────────────
         (function() {
             var tip = document.createElement('div');
             tip.id = 'studio-info-tooltip';
             tip.setAttribute('role', 'tooltip');
             document.body.appendChild(tip);
             var active = null;
-            function hide() {
-                tip.classList.remove('visible');
-                tip.textContent = '';
-                active = null;
-            }
+            function hide() { tip.classList.remove('visible'); tip.textContent = ''; active = null; }
             function position() {
                 if (!active || !tip.classList.contains('visible')) return;
                 var r = active.getBoundingClientRect();
                 var gap = 6;
                 tip.style.visibility = 'hidden';
                 tip.style.display = 'block';
-                var tw = tip.offsetWidth;
-                var th = tip.offsetHeight;
+                var tw = tip.offsetWidth, th = tip.offsetHeight;
                 var left = r.left + r.width / 2 - tw / 2;
                 var top = r.top - th - gap;
                 if (top < 8) top = r.bottom + gap;
@@ -94,7 +84,7 @@ MAIN_DOM_JS = r"""
             window.addEventListener('resize', hide);
         })();
 
-        // ── Ensure projectId is on the page URL (reload if we only have hash / postMessage) ──
+        // ── projectId resolver ─────────────────────────────────────────
         (function() {
             function setProjectId(pid) {
                 if (!pid) return;
@@ -103,19 +93,14 @@ MAIN_DOM_JS = r"""
                     if (u.searchParams.get('projectId') === pid) return;
                     u.searchParams.set('projectId', pid);
                     window.location.replace(u.toString());
-                } catch (e) { /* ignore */ }
+                } catch (e) {}
             }
-            var pid = null;
-            // 1. Own query string (direct / non-proxied access)
-            pid = new URLSearchParams(window.location.search).get('projectId');
-            // 2. Own hash fragment (#projectId=xxx — survives proxies)
+            var pid = new URLSearchParams(window.location.search).get('projectId');
             if (!pid && window.location.hash) {
                 var h = window.location.hash.substring(1);
                 if (h.charAt(0) === '?') h = h.substring(1);
                 pid = new URLSearchParams(h).get('projectId');
             }
-            // 3. Parent frame (same-origin deployments where parent
-            //    and iframe share the same host)
             if (!pid && window.parent !== window) {
                 try {
                     var pLoc = window.parent.location;
@@ -125,12 +110,9 @@ MAIN_DOM_JS = r"""
                         if (ph.charAt(0) === '?') ph = ph.substring(1);
                         pid = new URLSearchParams(ph).get('projectId');
                     }
-                } catch(e) { /* cross-origin — ignore */ }
+                } catch(e) {}
             }
-            if (pid) {
-                setProjectId(pid);
-            }
-            // 4. Listen for postMessage from Domino parent frame
+            if (pid) { setProjectId(pid); }
             window.addEventListener('message', function(e) {
                 if (e.data && typeof e.data === 'object' && e.data.projectId) {
                     setProjectId(e.data.projectId);
@@ -138,7 +120,12 @@ MAIN_DOM_JS = r"""
             });
         })();
 
-        // ── Language detection ────────────────────────────────────────────
+        function resolvedProjectId() {
+            var params = new URLSearchParams(window.location.search);
+            return params.get('projectId') || params.get('project_id') || '';
+        }
+
+        // ── Language detection ─────────────────────────────────────────
         var langRow = document.getElementById('lang-detection-row');
         var langName = document.getElementById('lang-detected-name');
         var langCount = document.getElementById('lang-detected-count');
@@ -196,36 +183,117 @@ MAIN_DOM_JS = r"""
             }
             detectLanguage(val);
         }
-
         detectLanguageFromCodeRoot();
 
-        const providerSelect    = document.getElementById('field-provider');
-        const modelNameField    = document.getElementById('model-name-field');
-
-        // ── Dataset spec browser (Domino mode) ───────────────────────────
-        var specDatasetSelect = document.getElementById('spec-dataset-select');
-        var specFileList = document.getElementById('spec-file-list');
-        var specBreadcrumb = document.getElementById('spec-breadcrumb');
-        var specSelectedIndicator = document.getElementById('spec-selected-indicator');
-        var specMachineUpload = document.getElementById('spec-machine-upload');
-        var specUploadStatus = document.getElementById('spec-upload-status');
-        var specPathField = document.getElementById('field-spec_path');
-
-        // State
-        var _specDatasets = [];
-        var _specCurrentDatasetId = '';
-        var _specCurrentDatasetName = '';
-        var _specCurrentSnapshotId = '';
-        var _specCurrentDatasetPath = '';
-        var _specCurrentPath = '';
-        var _specAutoDocSpecsId = '';
-        var _specBrowseAbort = null;
-
-        function resolvedProjectId() {
-            var params = new URLSearchParams(window.location.search);
-            return params.get('projectId') || params.get('project_id') || '';
+        // ── Provider / model toggles ───────────────────────────────────
+        var providerSelect = document.getElementById('field-provider');
+        var OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
+        var ANTHROPIC_DEFAULT_MODEL = 'claude-haiku-4-5';
+        function toggleOpenAIFields() {
+            var isOpenAI = providerSelect && providerSelect.value === 'openai';
+            var pbuInput = document.getElementById('field-provider_base_url');
+            if (pbuInput) {
+                var dkey = isOpenAI ? 'data-default-openai' : 'data-default-anthropic';
+                var dflt = pbuInput.getAttribute(dkey);
+                if (dflt) pbuInput.value = dflt;
+            }
+            var modelInput = document.getElementById('field-model');
+            if (modelInput) {
+                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+            }
+        }
+        if (providerSelect) {
+            providerSelect.addEventListener('change', toggleOpenAIFields);
+            toggleOpenAIFields();
         }
 
+        // ── Notebook path enable/disable ───────────────────────────────
+        (function() {
+            var nbCb = document.getElementById('field-notebook');
+            var pathInput = document.getElementById('field-notebook_path');
+            var pathWrap = document.getElementById('notebook-path-field-wrap');
+            function syncNotebookPathEnabled() {
+                var on = nbCb && nbCb.checked;
+                if (pathInput) pathInput.disabled = !on;
+                if (pathWrap) pathWrap.classList.toggle('notebook-path-disabled', !on);
+            }
+            if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
+            syncNotebookPathEnabled();
+        })();
+
+        // ── Code root options ──────────────────────────────────────────
+        (function() {
+            var prefix = document.getElementById('code-root-prefix');
+            var suffix = document.getElementById('code-root-suffix');
+            var hidden = document.getElementById('field-code_root');
+            function basePath() {
+                if (!prefix) return '';
+                if (prefix.tagName === 'SELECT') return (prefix.value || '').trim();
+                return (prefix.textContent || '').trim();
+            }
+            function sync() {
+                if (!hidden) return;
+                var base = basePath();
+                var sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
+                hidden.value = sub ? base + '/' + sub : base;
+            }
+            function showCodeRootError() {
+                if (!prefix || prefix.tagName !== 'SELECT') return;
+                prefix.innerHTML = '';
+                var opt = document.createElement('option');
+                opt.value = ''; opt.textContent = 'Could not retrieve source code';
+                opt.disabled = true; opt.selected = true;
+                prefix.appendChild(opt);
+                prefix.classList.remove('code-root-loading');
+                prefix.classList.add('code-root-error');
+                if (hidden) hidden.value = '';
+                sync(); detectLanguageFromCodeRoot();
+            }
+            function loadCodeRootOptions() {
+                if (!prefix || prefix.tagName !== 'SELECT') return;
+                var pid = resolvedProjectId();
+                if (!pid) { showCodeRootError(); return; }
+                var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
+                fetch(url)
+                    .then(_checkResp).then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data && data.error) { showCodeRootError(); return; }
+                        var opts = (data && data.options) || [];
+                        var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
+                        if (!opts.length) { showCodeRootError(); return; }
+                        prefix.classList.remove('code-root-error', 'code-root-loading');
+                        prefix.innerHTML = '';
+                        for (var i = 0; i < opts.length; i++) {
+                            var o = opts[i];
+                            var opt = document.createElement('option');
+                            opt.value = o.value || ''; opt.textContent = o.label || o.value || '';
+                            prefix.appendChild(opt);
+                        }
+                        var found = false;
+                        for (var j = 0; j < prefix.options.length; j++) {
+                            if (prefix.options[j].value === defRoot) { prefix.selectedIndex = j; found = true; break; }
+                        }
+                        if (!found) prefix.selectedIndex = 0;
+                        sync(); detectLanguageFromCodeRoot();
+                    })
+                    .catch(function() { showCodeRootError(); });
+            }
+            if (suffix) {
+                suffix.addEventListener('input', sync);
+                var langTimer = null;
+                suffix.addEventListener('input', function() {
+                    clearTimeout(langTimer);
+                    langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
+                });
+            }
+            if (prefix && prefix.tagName === 'SELECT') {
+                prefix.addEventListener('change', function() { sync(); detectLanguageFromCodeRoot(); });
+            }
+            sync();
+            loadCodeRootOptions();
+        })();
+
+        // ── Environment revision reload ────────────────────────────────
         window.reloadEnvironmentRevisions = function(sel) {
             var envId = sel && sel.value ? sel.value : '';
             var slot = document.getElementById('environment-revision-slot');
@@ -256,10 +324,311 @@ MAIN_DOM_JS = r"""
                 .catch(function() {});
         };
 
-        function queryApiDatasets() {
-            var pid = resolvedProjectId();
-            return pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+        // ═══════════════════════════════════════════════════════════════
+        // WIZARD STATE
+        // ═══════════════════════════════════════════════════════════════
+
+        var _builtinTemplates = [];      // loaded from API
+        var _selectedTemplateSlug = null;  // currently selected template slug
+        var _customSpecSelected = false;  // user selected a file from dataset browser
+
+        // Dataset state (shared between spec browser and form submission)
+        var _specDatasets = [];
+        var _specCurrentDatasetId = '';
+        var _specCurrentDatasetName = '';
+        var _specCurrentSnapshotId = '';
+        var _specCurrentDatasetPath = '';
+        var _specCurrentPath = '';
+        var _specBrowseAbort = null;
+
+        // Always use spacious layout: drawer history + inline preview
+        var _layoutMode = 'B';
+
+        function _applyLayoutMode() {
+            var historyDetails = document.getElementById('history-details');
+            if (historyDetails) historyDetails.style.display = 'none';
+            renderHistoryBtn();
         }
+
+        function renderHistoryBtn() {
+            var slot = document.getElementById('history-btn-slot');
+            if (!slot) return;
+            slot.innerHTML = '<button type="button" id="history-drawer-open-btn" class="history-drawer-btn">'
+                + '<span class="material-symbols-outlined">history</span>History'
+                + '</button>';
+            var btn = slot.querySelector('#history-drawer-open-btn');
+            if (btn) btn.addEventListener('click', openHistoryDrawer);
+        }
+
+        // ── Drawer open/close ──────────────────────────────────────────
+        function openHistoryDrawer() {
+            var overlay = document.getElementById('history-drawer-overlay');
+            var drawer = document.getElementById('history-drawer');
+            if (overlay) overlay.classList.add('open');
+            if (drawer) drawer.classList.add('open');
+        }
+
+        function closeHistoryDrawer() {
+            var overlay = document.getElementById('history-drawer-overlay');
+            var drawer = document.getElementById('history-drawer');
+            if (overlay) overlay.classList.remove('open');
+            if (drawer) drawer.classList.remove('open');
+        }
+
+        (function() {
+            var closeBtn = document.getElementById('history-drawer-close');
+            if (closeBtn) closeBtn.addEventListener('click', closeHistoryDrawer);
+            var overlay = document.getElementById('history-drawer-overlay');
+            if (overlay) overlay.addEventListener('click', closeHistoryDrawer);
+        })();
+
+        // ── Advanced options modal ─────────────────────────────────────
+        (function() {
+            var overlay = document.getElementById('adv-opts-overlay');
+            var openBtn = document.getElementById('adv-opts-open-btn');
+            var closeBtn = document.getElementById('adv-opts-close-btn');
+            var doneBtn = document.getElementById('adv-opts-done-btn');
+            function open() { if (overlay) overlay.classList.add('open'); }
+            function close() { if (overlay) overlay.classList.remove('open'); }
+            if (openBtn) openBtn.addEventListener('click', open);
+            if (closeBtn) closeBtn.addEventListener('click', close);
+            if (doneBtn) doneBtn.addEventListener('click', close);
+            if (overlay) overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) close();
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') close();
+            });
+        })();
+
+        // ── Browse spec modal ──────────────────────────────────────────
+        var _browseSelectedFile = null;
+
+        function openBrowseModal() {
+            var overlay = document.getElementById('browse-modal-overlay');
+            if (overlay) overlay.classList.add('open');
+        }
+        window.openBrowseModal = openBrowseModal;
+
+        function closeBrowseModal() {
+            var overlay = document.getElementById('browse-modal-overlay');
+            if (overlay) overlay.classList.remove('open');
+        }
+        window.closeBrowseModal = closeBrowseModal;
+
+        function selectBrowseFile(el) {
+            document.querySelectorAll('.browse-item-file').forEach(function(r) {
+                r.classList.remove('browse-item-selected');
+            });
+            el.classList.add('browse-item-selected');
+            _browseSelectedFile = el.dataset.filename;
+            var label = document.getElementById('browse-selected-label');
+            if (label) label.textContent = _browseSelectedFile;
+            var btn = document.getElementById('browse-confirm-btn');
+            if (btn) btn.disabled = false;
+        }
+        window.selectBrowseFile = selectBrowseFile;
+
+        function confirmBrowseSelection() {
+            if (!_browseSelectedFile) return;
+            _showSpecConfirm(_browseSelectedFile, 'browse');
+            closeBrowseModal();
+        }
+        window.confirmBrowseSelection = confirmBrowseSelection;
+
+        // ── Upload YAML spec ───────────────────────────────────────────
+        var _uploadedSpecFile = null;
+
+        function handleYamlUpload(input) {
+            var file = input.files && input.files[0];
+            if (!file) return;
+            _uploadedSpecFile = file;
+            _showSpecConfirm(file.name, 'upload');
+            input.value = '';
+        }
+        window.handleYamlUpload = handleYamlUpload;
+
+        function removeUploadedSpec() {
+            _uploadedSpecFile = null;
+            _browseSelectedFile = null;
+            var bar = document.getElementById('spec-confirm-bar');
+            if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
+        }
+        window.removeUploadedSpec = removeUploadedSpec;
+
+        function _showSpecConfirm(filename, source) {
+            var bar = document.getElementById('spec-confirm-bar');
+            if (!bar) return;
+            var icon = source === 'upload' ? 'upload_file' : 'description';
+            bar.innerHTML =
+                '<span class="spec-confirm-icon material-symbols-outlined">' + icon + '</span>' +
+                '<span class="spec-confirm-name">' + filename + '</span>' +
+                '<span class="spec-confirm-source">' + (source === 'upload' ? 'Uploaded' : 'From dataset') + '</span>' +
+                '<button type="button" class="spec-confirm-remove" onclick="removeUploadedSpec()" title="Remove">' +
+                '  <span class="material-symbols-outlined" style="font-size:15px">close</span>' +
+                '</button>';
+            bar.style.display = 'flex';
+        }
+
+        // ── Wizard navigation ──────────────────────────────────────────
+        function showStep1() {
+            var s1 = document.getElementById('wizard-step1');
+            var s2 = document.getElementById('wizard-step2');
+            if (s1) s1.style.display = '';
+            if (s2) s2.style.display = 'none';
+            closeHistoryDrawer();
+        }
+
+        function showStep2() {
+            var s1 = document.getElementById('wizard-step1');
+            var s2 = document.getElementById('wizard-step2');
+            if (s1) s1.style.display = 'none';
+            if (s2) s2.style.display = '';
+            _applyLayoutMode();
+        }
+
+        var backBtn = document.getElementById('btn-back-to-templates');
+        if (backBtn) {
+            backBtn.addEventListener('click', function() {
+                showStep1();
+            });
+        }
+
+        // ── Generate button state ──────────────────────────────────────
+        function updateGenerateButton() {
+            var btn = document.getElementById('generate-btn');
+            if (!btn) return;
+            var hasTemplate = !!_selectedTemplateSlug;
+            var hasCustomSpec = _customSpecSelected;
+            var canGenerate = hasTemplate || hasCustomSpec;
+            btn.disabled = !canGenerate;
+
+        }
+
+        // ── Template gallery ───────────────────────────────────────────
+        function loadBuiltinTemplates() {
+            var pid = resolvedProjectId();
+            var url = _adUrl('api/built-in-templates');
+            if (pid) url += '?projectId=' + encodeURIComponent(pid);
+            fetch(url)
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(templates) {
+                    _builtinTemplates = templates;
+                    renderTemplateGallery(templates);
+                })
+                .catch(function() {
+                    var gallery = document.getElementById('template-gallery');
+                    if (gallery) {
+                        gallery.innerHTML = '<div class="gallery-loading">'
+                            + '<span class="material-symbols-outlined gallery-loading-icon">error</span>'
+                            + '<span class="gallery-loading-text">Could not load templates.</span>'
+                            + '</div>';
+                    }
+                });
+        }
+
+        function _esc(s) {
+            return String(s || '')
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function renderTemplateGallery(templates) {
+            var gallery = document.getElementById('template-gallery');
+            if (!gallery) return;
+            if (!templates || !templates.length) {
+                gallery.innerHTML = '<div class="gallery-loading"><span class="gallery-loading-text">No templates found.</span></div>';
+                return;
+            }
+            var html = '';
+            for (var i = 0; i < templates.length; i++) {
+                var t = templates[i];
+                var sectionCount = (t.sections || []).length;
+                html += '<div class="template-card" data-slug="' + _esc(t.slug) + '" tabindex="0" role="button" aria-pressed="false">'
+                    + '<div class="template-card-header">'
+                    + '<span class="template-card-name">' + _esc(t.name) + '</span>'
+                    + '<span class="material-symbols-outlined template-card-check">check_circle</span>'
+                    + '</div>'
+                    + '<p class="template-card-desc">' + _esc(t.description) + '</p>'
+                    + '<div class="template-card-meta">'
+                    + '<span class="template-card-badge">' + sectionCount + ' sections</span>'
+                    + '</div>'
+                    + '</div>';
+            }
+            gallery.innerHTML = html;
+
+            // Wire click/keyboard handlers
+            var cards = gallery.querySelectorAll('.template-card');
+            for (var j = 0; j < cards.length; j++) {
+                (function(card) {
+                    card.addEventListener('click', function() {
+                        selectTemplate(card.getAttribute('data-slug'));
+                    });
+                    card.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            selectTemplate(card.getAttribute('data-slug'));
+                        }
+                    });
+                })(cards[j]);
+            }
+        }
+
+        function selectTemplate(slug) {
+            _selectedTemplateSlug = slug;
+            _customSpecSelected = false;
+
+            // Update card UI
+            var cards = document.querySelectorAll('.template-card');
+            for (var i = 0; i < cards.length; i++) {
+                var isSelected = cards[i].getAttribute('data-slug') === slug;
+                cards[i].classList.toggle('selected', isSelected);
+                cards[i].setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            }
+
+            // Render preview
+            var tpl = null;
+            for (var j = 0; j < _builtinTemplates.length; j++) {
+                if (_builtinTemplates[j].slug === slug) { tpl = _builtinTemplates[j]; break; }
+            }
+            if (tpl) renderTemplatePreview(tpl);
+
+            updateGenerateButton();
+        }
+
+        function renderTemplatePreview(tpl) {
+            var panel = document.getElementById('template-preview-panel');
+            if (!panel) return;
+            var sections = tpl.sections || [];
+            var perModel = tpl.per_model_sections || [];
+            var perModelSet = {};
+            for (var k = 0; k < perModel.length; k++) perModelSet[perModel[k]] = true;
+
+            var sectionsHtml = '';
+            for (var i = 0; i < sections.length; i++) {
+                var badge = perModelSet[sections[i]]
+                    ? '<span class="preview-section-badge">once per model</span>' : '';
+                sectionsHtml += '<div class="preview-section-item">'
+                    + '<span class="preview-section-num">' + (i + 1) + '</span>'
+                    + '<span class="preview-section-name">' + _esc(sections[i]) + '</span>'
+                    + badge
+                    + '</div>';
+            }
+
+            panel.innerHTML = '<div class="preview-header">'
+                + '<div class="preview-title">' + _esc(tpl.name) + '</div>'
+                + '<div class="preview-description">' + _esc(tpl.description) + '</div>'
+                + '</div>'
+                + '<div class="preview-sections">' + sectionsHtml + '</div>';
+        }
+
+        // ── Dataset auto-resolution ────────────────────────────────────
+        // The project's autodoc dataset is resolved automatically from the
+        // project ID — no user selection required.
+        var specFileList = document.getElementById('spec-file-list');
+        var specBreadcrumb = document.getElementById('spec-breadcrumb');
+        var specMachineUpload = document.getElementById('spec-machine-upload');
+        var specUploadStatus = document.getElementById('spec-upload-status');
+        var specPathField = document.getElementById('field-spec_path');
 
         function queryApiDatasetFiles(relPath) {
             var parts = [];
@@ -280,80 +649,45 @@ MAIN_DOM_JS = r"""
             return parts.length ? ('?' + parts.join('&')) : '';
         }
 
-        function loadDatasets() {
-            if (!specDatasetSelect) return;
-            var pid = resolvedProjectId();
-            if (!pid) {
-                specDatasetSelect.innerHTML = '<option value="">Set a project ID first</option>';
-                return;
+        function _applyDataset(ds) {
+            _specCurrentDatasetId   = ds.id   || '';
+            _specCurrentDatasetName = ds.name  || '';
+            _specCurrentSnapshotId  = ds.rwSnapshotId  || '';
+            _specCurrentDatasetPath = ds.datasetPath   || '';
+            _specCurrentPath = '';
+            if (specPathField && !_selectedTemplateSlug) specPathField.value = '';
+            if (_specCurrentDatasetId) {
+                browseFiles('');
             }
-            console.log('[spec-browser] Loading writable datasets...');
+            updateGenerateButton();
+        }
+
+        function loadDatasets() {
+            var pid = resolvedProjectId();
+            if (!pid) return;
             fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
-                    if (datasets.error) {
-                        console.error('[spec-browser] Error loading datasets:', datasets.error);
-                        specDatasetSelect.innerHTML = '<option value="">Error: ' + datasets.error + '</option>';
-                        return;
-                    }
+                    if (!datasets || datasets.error || !datasets.length) return;
                     _specDatasets = datasets;
-                    console.log('[spec-browser] Loaded ' + datasets.length + ' datasets:', datasets.map(function(d) { return d.name; }));
-                    if (datasets.length === 0) {
-                        specDatasetSelect.innerHTML = '<option value="">No datasets found</option>';
-                        console.warn('[spec-browser] No writable datasets returned');
-                        return;
-                    }
-                    var html = '';
+                    // Prefer a dataset named 'autodoc', otherwise use the first one
+                    var chosen = datasets[0];
                     for (var i = 0; i < datasets.length; i++) {
-                        html += '<option value="' + datasets[i].id + '" data-name="' + datasets[i].name + '" data-snapshot="' + (datasets[i].rwSnapshotId || '') + '" data-path="' + (datasets[i].datasetPath || '') + '">'
-                            + datasets[i].name + '</option>';
+                        if (datasets[i].name === 'autodoc') { chosen = datasets[i]; break; }
                     }
-                    specDatasetSelect.innerHTML = html;
-
-                    var j;
-                    for (j = 0; j < datasets.length; j++) {
-                        if (datasets[j].name === 'autodoc') {
-                            specDatasetSelect.value = datasets[j].id;
-                            _specAutoDocSpecsId = datasets[j].id;
-                            onDatasetChange();
-                            return;
-                        }
-                    }
-                    specDatasetSelect.selectedIndex = 0;
-                    _specAutoDocSpecsId = datasets[0].id;
-                    onDatasetChange();
+                    _applyDataset(chosen);
+                    fetchJobHistory();
                 })
-                .catch(function(err) {
-                    console.error('[spec-browser] Failed to load datasets:', err);
-                    specDatasetSelect.innerHTML = '<option value="">Failed to load datasets</option>';
-                });
+                .catch(function() { /* silently ignore — dataset is optional for template-based flow */ });
         }
 
-        function onDatasetChange() {
-            if (!specDatasetSelect) return;
-            var opt = specDatasetSelect.options[specDatasetSelect.selectedIndex];
-            console.log('[spec-browser] Dataset selected:', opt ? opt.getAttribute('data-name') : 'none');
-            _specCurrentDatasetId = specDatasetSelect.value;
-            _specCurrentDatasetName = opt ? opt.getAttribute('data-name') || '' : '';
-            _specCurrentSnapshotId = opt ? opt.getAttribute('data-snapshot') || '' : '';
-            _specCurrentDatasetPath = opt ? opt.getAttribute('data-path') || '' : '';
-            _specCurrentPath = '';
-            if (specPathField) specPathField.value = '';
-            var svm = document.getElementById('spec-validation-msg');
-            if (svm) svm.remove();
-            if (_specCurrentDatasetId) {
-                browseFiles('');
-            } else {
-                if (_specBrowseAbort) { _specBrowseAbort.abort(); _specBrowseAbort = null; }
-                if (specFileList) specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
-                if (specBreadcrumb) specBreadcrumb.innerHTML = '';
-            }
-        }
+        loadDatasets();
 
+        // ── Spec file browser ──────────────────────────────────────────
         function specParentPath(p) {
             if (!p) return null;
             var parts = p.split('/').filter(Boolean);
-            if (parts.length === 0) return null;
+            if (!parts.length) return null;
             parts.pop();
             return parts.join('/');
         }
@@ -362,12 +696,10 @@ MAIN_DOM_JS = r"""
             _specCurrentPath = path;
             if (!specFileList) return Promise.resolve();
             if (!_specCurrentDatasetId) {
-                specFileList.innerHTML = '<span class="spec-file-empty">Select a dataset to browse spec files</span>';
+                specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">Select a dataset first</span></div>';
                 return Promise.resolve();
             }
-            console.log('[spec-browser] Browsing path:', path || '(root)', 'in dataset:', _specCurrentDatasetName);
             renderBreadcrumb(path);
-
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
             specFileList.classList.add('spec-file-list-pending');
@@ -375,27 +707,8 @@ MAIN_DOM_JS = r"""
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
                     if (!Array.isArray(files)) {
-                        if (files && files.error) {
-                            console.error('[spec-browser] File listing error:', files.error);
-                            specFileList.innerHTML = '<span class="spec-file-empty">Error: ' + files.error + '</span>';
-                        } else {
-                            specFileList.innerHTML = '<span class="spec-file-empty">Unexpected response from server</span>';
-                        }
-                        return;
-                    }
-                    console.log('[spec-browser] Found ' + files.length + ' items at path:', path || '(root)');
-                    if (files.length === 0) {
-                        var emptyMsg = 'No YAML files found in this location';
-                        var pPath = specParentPath(path);
-                        if (pPath !== null) {
-                            var up = '<div class="spec-file-item spec-file-parent" data-path="' + pPath + '" data-dir="true" data-name=".." data-parent="true">'
-                                + '<span class="spec-file-icon">\ud83d\udcc1</span><span class="spec-file-name">..</span><span class="spec-file-size"></span></div>';
-                            specFileList.innerHTML = up + '<span class="spec-file-empty">' + emptyMsg + '</span>';
-                            var upEl = specFileList.querySelector('.spec-file-parent');
-                            if (upEl) upEl.addEventListener('click', onFileClick);
-                        } else {
-                            specFileList.innerHTML = '<span class="spec-file-empty">' + emptyMsg + '</span>';
-                        }
+                        specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">'
+                            + (files && files.error ? 'Error: ' + files.error : 'Unexpected response') + '</span></div>';
                         return;
                     }
                     var html = '';
@@ -405,6 +718,10 @@ MAIN_DOM_JS = r"""
                             + '<span class="spec-file-icon">\ud83d\udcc1</span>'
                             + '<span class="spec-file-name">..</span>'
                             + '<span class="spec-file-size"></span></div>';
+                    }
+                    if (!files.length && parentPath === null) {
+                        specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">No YAML files found</span></div>';
+                        return;
                     }
                     files.sort(function(a, b) {
                         if (a.isDirectory && !b.isDirectory) return -1;
@@ -423,7 +740,6 @@ MAIN_DOM_JS = r"""
                             + '</div>';
                     }
                     specFileList.innerHTML = html;
-
                     var items = specFileList.querySelectorAll('.spec-file-item');
                     for (var j = 0; j < items.length; j++) {
                         items[j].addEventListener('click', onFileClick);
@@ -431,7 +747,7 @@ MAIN_DOM_JS = r"""
                 })
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
-                    specFileList.innerHTML = '<span class="spec-file-empty">Failed to load files</span>';
+                    specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">Failed to load files</span></div>';
                 })
                 .finally(function() {
                     if (specFileList && _specBrowseAbort === ctrl) {
@@ -447,11 +763,10 @@ MAIN_DOM_JS = r"""
             if (isDir) {
                 browseFiles(path);
             } else {
-                // Select this file
-                var items = specFileList.querySelectorAll('.spec-file-item');
+                var items = specFileList ? specFileList.querySelectorAll('.spec-file-item') : [];
                 for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
                 el.classList.add('selected');
-                selectSpecFile(path);
+                selectCustomSpecFile(path);
             }
         }
 
@@ -463,11 +778,18 @@ MAIN_DOM_JS = r"""
             return rel || '';
         }
 
-        function selectSpecFile(relFilePath) {
+        function selectCustomSpecFile(relFilePath) {
             var abs = absoluteSpecFromRelative(relFilePath);
-            console.log('[spec-browser] Selected:', abs);
-            if (specSelectedIndicator) specSelectedIndicator.style.display = 'flex';
             if (specPathField) specPathField.value = abs;
+            _selectedTemplateSlug = null;
+            _customSpecSelected = true;
+            // Deselect template cards
+            var cards = document.querySelectorAll('.template-card');
+            for (var i = 0; i < cards.length; i++) {
+                cards[i].classList.remove('selected');
+                cards[i].setAttribute('aria-pressed', 'false');
+            }
+            updateGenerateButton();
         }
 
         function renderBreadcrumb(path) {
@@ -494,25 +816,21 @@ MAIN_DOM_JS = r"""
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         }
 
-        // Global for breadcrumb onclick
         window._specBrowse = function(path) { browseFiles(path); };
 
-        // Upload from machine → autodoc dataset
+        // ── Machine upload ─────────────────────────────────────────────
         if (specMachineUpload) {
             specMachineUpload.addEventListener('change', function(e) {
                 var file = e.target.files[0];
                 if (!file) return;
-                console.log('[spec-browser] Upload from machine:', file.name, '(' + file.size + ' bytes)');
-                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; specUploadStatus.style.color = ''; specUploadStatus.className = 'spec-upload-status'; }
-                // Validate spec content before uploading
-                if (typeof validateSpecContent === 'function') validateSpecContent(file);
-
-                var uploadDsId = _specCurrentDatasetId || _specAutoDocSpecsId;
+                if (specUploadStatus) { specUploadStatus.textContent = 'Uploading ' + file.name + '...'; }
+                var uploadDsId = _specCurrentDatasetId;
                 if (!uploadDsId) {
-                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                    if (specUploadStatus) { specUploadStatus.textContent = 'Select a dataset first'; }
                     return;
                 }
-                var qs = queryApiDatasets();
+                var _pid = resolvedProjectId();
+                var qs = _pid ? ('?projectId=' + encodeURIComponent(_pid)) : '';
                 var fd = new FormData();
                 fd.append('datasetId', uploadDsId);
                 fd.append('relativeDir', _specCurrentPath || '');
@@ -521,79 +839,16 @@ MAIN_DOM_JS = r"""
                     .then(_checkResp).then(function(r) { return r.json(); })
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
-                        console.log('[spec-browser] Upload success:', result.fileName, '→', result.path);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; specUploadStatus.className = 'spec-upload-status spec-validation-success'; specUploadStatus.style.color = ''; }
-                        var savedPath = result.path;
-                        selectSpecFile(savedPath);
-                        return browseFiles(_specCurrentPath).then(function() {
-                            if (!savedPath || !specFileList) return;
-                            var rows = specFileList.querySelectorAll('.spec-file-item');
-                            for (var ri = 0; ri < rows.length; ri++) {
-                                if (rows[ri].getAttribute('data-dir') === 'true') continue;
-                                if (rows[ri].getAttribute('data-path') === savedPath) {
-                                    for (var rj = 0; rj < rows.length; rj++) rows[rj].classList.remove('selected');
-                                    rows[ri].classList.add('selected');
-                                    break;
-                                }
-                            }
-                        });
+                        if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; }
+                        selectCustomSpecFile(result.path);
+                        browseFiles(_specCurrentPath);
                     })
                     .catch(function(err) {
-                        console.error('[spec-browser] Upload failed:', err.message);
-                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; specUploadStatus.className = 'spec-upload-status spec-validation-empty'; specUploadStatus.style.color = ''; }
+                        if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; }
                     })
-                    .finally(function() {
-                        specMachineUpload.value = '';
-                    });
+                    .finally(function() { specMachineUpload.value = ''; });
             });
         }
-
-        // Wire dataset select change; refresh job history when dataset changes
-        if (specDatasetSelect) {
-            specDatasetSelect.addEventListener('change', function() {
-                onDatasetChange();
-                fetchJobHistory();
-            });
-            loadDatasets();
-        }
-
-        // ── Toggle base URL and model name fields based on provider selection
-        var OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
-        var ANTHROPIC_DEFAULT_MODEL = 'claude-haiku-4-5';
-        function toggleOpenAIFields() {
-            const isOpenAI = providerSelect && providerSelect.value === 'openai';
-            var pbuInput = document.getElementById('field-provider_base_url');
-            if (pbuInput) {
-                var dkey = isOpenAI ? 'data-default-openai' : 'data-default-anthropic';
-                var dflt = pbuInput.getAttribute(dkey);
-                if (dflt) pbuInput.value = dflt;
-            }
-            if (modelNameField) {
-                modelNameField.style.display = 'flex';
-            }
-            var modelInput = document.getElementById('field-model');
-            if (modelInput) {
-                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
-            }
-        }
-
-        if (providerSelect) {
-            providerSelect.addEventListener('change', toggleOpenAIFields);
-            toggleOpenAIFields();
-        }
-
-        (function() {
-            var nbCb = document.getElementById('field-notebook');
-            var pathInput = document.getElementById('field-notebook_path');
-            var pathWrap = document.getElementById('notebook-path-field-wrap');
-            function syncNotebookPathEnabled() {
-                var on = nbCb && nbCb.checked;
-                if (pathInput) pathInput.disabled = !on;
-                if (pathWrap) pathWrap.classList.toggle('notebook-path-disabled', !on);
-            }
-            if (nbCb) nbCb.addEventListener('change', syncNotebookPathEnabled);
-            syncNotebookPathEnabled();
-        })();
 
         // ── Spec validation helper ────────────────────────────────────
         window._specValid = true;
@@ -601,7 +856,7 @@ MAIN_DOM_JS = r"""
             var fd = new FormData();
             fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
-            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating spec...</span>';
+            if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating...</span>';
             fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(data) {
@@ -612,288 +867,431 @@ MAIN_DOM_JS = r"""
                     } else {
                         var items = (data.errors || []).map(function(e) { return '<li>' + e + '</li>'; }).join('');
                         resultEl.innerHTML = '<div class="spec-validation-error">'
-                            + '<span class="spec-selected-value">Spec validation failed</span>'
+                            + '<span>Spec validation failed</span>'
                             + '<ul class="spec-validation-error-list">' + items + '</ul>'
                             + '</div>';
                     }
                 })
-                .catch(function() {
-                    if (resultEl) resultEl.innerHTML = '';
-                    window._specValid = true;
-                });
+                .catch(function() { if (resultEl) resultEl.innerHTML = ''; });
         }
 
-        // ── Code root prefix select + suffix sync / browseCode options ─────
-        (function() {
-            const prefix = document.getElementById('code-root-prefix');
-            const suffix = document.getElementById('code-root-suffix');
-            const hidden = document.getElementById('field-code_root');
-            function basePath() {
-                if (!prefix) return '';
-                if (prefix.tagName === 'SELECT') {
-                    return (prefix.value || '').trim();
-                }
-                return (prefix.textContent || '').trim();
-            }
-            function sync() {
-                if (!hidden) return;
-                const base = basePath();
-                const sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
-                hidden.value = sub ? base + '/' + sub : base;
-            }
-            function showCodeRootError() {
-                if (!prefix || prefix.tagName !== 'SELECT') return;
-                prefix.innerHTML = '';
-                var opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = 'Could not retrieve source code';
-                opt.disabled = true;
-                opt.selected = true;
-                prefix.appendChild(opt);
-                prefix.classList.remove('code-root-loading');
-                prefix.classList.add('code-root-error');
-                if (hidden) hidden.value = '';
-                sync();
-                detectLanguageFromCodeRoot();
-            }
-            function showCodeRootLoading() {
-                if (!prefix || prefix.tagName !== 'SELECT') return;
-                prefix.innerHTML = '';
-                var opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = 'Loading...';
-                opt.disabled = true;
-                opt.selected = true;
-                prefix.appendChild(opt);
-                prefix.classList.remove('code-root-error');
-                prefix.classList.add('code-root-loading');
-                if (hidden) hidden.value = '';
-                sync();
-            }
-            function loadCodeRootOptions() {
-                if (!prefix || prefix.tagName !== 'SELECT') return;
-                var pid = new URLSearchParams(window.location.search).get('projectId');
-                if (!pid) { showCodeRootError(); return; }
-                showCodeRootLoading();
-                var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
-                fetch(url)
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data && data.error) { showCodeRootError(); return; }
-                        var opts = (data && data.options) || [];
-                        var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
-                        if (!opts.length) { showCodeRootError(); return; }
-                        prefix.classList.remove('code-root-error');
-                        prefix.classList.remove('code-root-loading');
-                        prefix.innerHTML = '';
-                        for (var i = 0; i < opts.length; i++) {
-                            var o = opts[i];
-                            var opt = document.createElement('option');
-                            opt.value = o.value || '';
-                            opt.textContent = o.label || o.value || '';
-                            prefix.appendChild(opt);
-                        }
-                        var pick = defRoot;
-                        var found = false;
-                        for (var j = 0; j < prefix.options.length; j++) {
-                            if (prefix.options[j].value === pick) {
-                                prefix.selectedIndex = j;
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) prefix.selectedIndex = 0;
-                        sync();
-                        detectLanguageFromCodeRoot();
-                    })
-                    .catch(function() { showCodeRootError(); });
-            }
-            if (suffix) {
-                suffix.addEventListener('input', sync);
-                var langTimer = null;
-                suffix.addEventListener('input', function() {
-                    clearTimeout(langTimer);
-                    langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
-                });
-            }
-            if (prefix && prefix.tagName === 'SELECT') {
-                prefix.addEventListener('change', function() {
-                    sync();
-                    detectLanguageFromCodeRoot();
-                });
-            }
-            sync();
-            loadCodeRootOptions();
-        })();
+        // ═══════════════════════════════════════════════════════════════
+        // JOB HISTORY RENDERING
+        // ═══════════════════════════════════════════════════════════════
 
-        // ── Job history rendering ─────────────────────────────────────
-        var _ACTIVE_STATUSES = {queued: true, submitted: true, pending: true, running: true};
+        var _ACTIVE_STATUSES = { queued: true, submitted: true, pending: true, running: true };
 
-        function _esc(s) {
-            return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
-
-        function _jobRow(j, pid) {
+        function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
-            var branch = j.branch || '—';
-            var tier = j.hardware_tier || '—';
-            var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '—';
-            var linkCell = j.job_url
-                ? '<td><a href="' + _esc(j.job_url) + '" target="_blank">View →</a></td>'
-                : '<td>—</td>';
+            var branch = j.branch || '\u2014';
+            var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '\u2014';
+            var jobCell = j.job_url
+                ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener">View \u2192</a></td>'
+                : '<td>\u2014</td>';
+            var isActive = _ACTIVE_STATUSES[status];
+            var docCell;
+            if (status === 'succeeded' && j.dataset_url) {
+                docCell = '<td><a href="' + _esc(j.dataset_url) + '" target="_blank" rel="noopener">Open \u2192</a></td>';
+            } else if (isActive) {
+                docCell = '<td class="history-pending-cell">Pending\u2026</td>';
+            } else {
+                docCell = '<td>\u2014</td>';
+            }
             return '<tr>'
                 + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
-                + '<td title="' + _esc(tier) + '">' + _esc(tier) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
-                + linkCell
+                + jobCell
+                + docCell
                 + '</tr>';
         }
 
-        function _maxJobsWarning(jobs) {
-            var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
-            if (!hasQueued) return '';
-            return '<div class="inline-callout inline-callout-warning" role="alert">'
-                + '<span>⚠ </span>'
-                + '<span>Job queued — a slot is occupied. It will start automatically when one opens. '
-                + 'To free a slot, stop a running job or use </span>'
-                + '<span class="spec-selected-value">Cancel queued</span>'
-                + '<span> below.</span>'
-                + '</div>';
-        }
-
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Branch</th><th>Tier</th><th>Status</th><th>Submitted</th><th>Link</th></tr></thead>';
-            var rows = jobs.map(function(j) { return _jobRow(j, resolvedProjectId()); }).join('');
+            var header = '<thead><tr><th>Branch</th><th>Status</th><th>Submitted</th><th>Job</th><th>AutoDoc file</th></tr></thead>';
+            var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
 
-        function renderJobHistory(jobs) {
-            var el = document.getElementById('job-history-content');
-            if (!el) return;
+        function renderResultsPanel(jobs) {
+            var panel = document.getElementById('results-panel');
+            if (!panel) return;
+            if (!jobs || !jobs.length) return;
 
-            var prevDetailsOpen = false;
-            var prevCompletedCount = 0;
-            var details = el.querySelector('details');
-            if (details) {
-                prevDetailsOpen = details.open;
-                prevCompletedCount = details.querySelectorAll('tbody tr').length;
+            var latestJob = jobs[0];
+            var status = latestJob.status || 'queued';
+
+            var html = '<div class="results-job-card">';
+
+            // Header row
+            html += '<div class="results-job-header">';
+            html += '<div class="results-job-info">';
+            if (_selectedTemplateSlug) {
+                var tplName = '';
+                for (var i = 0; i < _builtinTemplates.length; i++) {
+                    if (_builtinTemplates[i].slug === _selectedTemplateSlug) { tplName = _builtinTemplates[i].name; break; }
+                }
+                if (tplName) html += '<div class="results-job-template">Template</div><div class="results-job-title">' + _esc(tplName) + '</div>';
+            } else {
+                html += '<div class="results-job-title">Documentation</div>';
+            }
+            html += '</div>';
+            html += '<div class="results-status-col">';
+            html += '<span class="terminal-status terminal-status-' + _esc(status) + '">' + _esc(status.toUpperCase()) + '</span>';
+            html += '</div>';
+            html += '</div>'; // end results-job-header
+
+            // State-specific content
+            if (status === 'succeeded') {
+                html += '<div class="results-success">';
+                var autodocLink = latestJob.dataset_url
+                    ? '<a href="' + _esc(latestJob.dataset_url) + '" target="_blank" rel="noopener" class="success-open-btn">'
+                        + '<span class="material-symbols-outlined" style="font-size:15px">folder_open</span>Open AutoDoc file</a>'
+                    : '';
+                html += '<div class="results-success-banner">'
+                    + '<span class="material-symbols-outlined results-success-icon">check_circle</span>'
+                    + '<div class="results-success-text">'
+                    + '<div class="results-success-headline">Documentation generated successfully</div>'
+                    + '</div>'
+                    + (autodocLink ? autodocLink : '')
+                    + '</div>';
+                // Inline preview (always spacious layout)
+                html += '<div class="doc-preview-inline">'
+                    + '<div class="doc-preview-inline-header"><span class="material-symbols-outlined">description</span>Document preview</div>'
+                    + '<div id="doc-preview-content" class="doc-preview-content">'
+                    + '<div class="doc-preview-loading"><span class="material-symbols-outlined rotating-icon">autorenew</span> Loading preview\u2026</div>'
+                    + '</div>'
+                    + '</div>';
+                html += '</div>';
+            } else if (status === 'failed') {
+                html += '<div class="results-failed">';
+                html += '<div class="results-failed-banner">'
+                    + '<span class="material-symbols-outlined results-failed-icon">error</span>'
+                    + '<div class="results-failed-text">'
+                    + '<div class="results-failed-headline">Generation failed</div>'
+                    + '<div class="results-failed-detail">'
+                    + (latestJob.domino_status ? _esc(latestJob.domino_status) : 'Check the job logs in Domino for details.')
+                    + '</div>'
+                    + '</div></div>';
+                html += '</div>';
+            } else if (status === 'cancelled') {
+                html += '<div class="results-failed">'
+                    + '<div class="results-failed-banner">'
+                    + '<span class="material-symbols-outlined results-failed-icon">cancel</span>'
+                    + '<div class="results-failed-text">'
+                    + '<div class="results-failed-headline">Job cancelled</div>'
+                    + '</div></div></div>';
+            } else {
+                // running / queued / submitted / pending
+                var isQueued = status === 'queued' && !latestJob.domino_run_id;
+                html += '<div class="results-running">';
+                html += '<div class="results-running-banner">'
+                    + '<span class="material-symbols-outlined results-running-spinner">autorenew</span>'
+                    + '<div>'
+                    + '<div class="results-running-headline">' + (isQueued ? 'Job queued' : 'Generating documentation\u2026') + '</div>'
+                    + '<div class="results-running-sub">'
+                    + (isQueued
+                        ? 'Waiting for a job slot. This will start automatically when one opens.'
+                        : 'Scanning code, planning sections, and writing content via LLM.')
+                    + '</div>'
+                    + '</div></div>';
+
+                // Single animated progress bar
+                var _progressStages = ['Scanning code\u2026', 'Planning sections\u2026', 'Generating content\u2026', 'Finalizing document\u2026'];
+                var _stageIdx = isQueued ? 0 : (status === 'running' ? 1 : 0);
+                html += '<div class="job-progress-wrap">'
+                    + '<div class="job-progress-track">'
+                    + '<div class="job-progress-fill' + (status === 'running' ? ' animating' : '') + '" id="job-progress-fill"></div>'
+                    + '</div>'
+                    + '<div class="job-progress-label" id="job-progress-label">' + _progressStages[_stageIdx] + '</div>'
+                    + '</div>';
+
+                html += '</div>';
             }
 
-            if (!jobs || !jobs.length) {
-                el.innerHTML = '<div class="spec-file-empty"><span class="material-symbols-outlined spec-file-empty-icon">description</span><span class="spec-file-list-empty">No autodocs generated yet.</span></div>';
+            html += '</div>'; // end results-job-card
+            panel.innerHTML = html;
+
+            // Start or stop the progress label cycle
+            if (status === 'running' || status === 'submitted' || status === 'pending') {
+                _startProgressCycle();
+            } else {
+                _stopProgressCycle();
+            }
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════
+        // DOC PREVIEW (mammoth.js)
+        // ═══════════════════════════════════════════════════════════════
+
+        function _fetchAndRenderPreview(latestJob, previewContent) {
+            var dsId = latestJob.dataset_id || _specCurrentDatasetId;
+            var snapId = _specCurrentSnapshotId;
+            if (!dsId || !snapId) {
+                previewContent.innerHTML = '<p class="doc-preview-error">Dataset not available for preview.</p>';
                 return;
             }
-
             var pid = resolvedProjectId();
-            var activeJobs = jobs.filter(function(j) { return _ACTIVE_STATUSES[j.status || 'queued']; });
-            var completedJobs = jobs.filter(function(j) { return !_ACTIVE_STATUSES[j.status || 'queued']; });
-            var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
-
-            var html = _maxJobsWarning(jobs);
-
-            if (activeJobs.length) {
-                html += '<div class="history-table-wrap">' + _tableHtml(activeJobs) + '</div>';
-            }
-            if (completedJobs.length) {
-                var n = completedJobs.length;
-                var label = 'Show ' + n + ' completed job' + (n !== 1 ? 's' : '');
-                var autoOpen = !activeJobs.length || prevDetailsOpen || completedJobs.length > prevCompletedCount;
-                html += '<details' + (autoOpen ? ' open' : '') + '>'
-                    + '<summary class="history-toggle">' + label + '</summary>'
-                    + '<div class="history-table-wrap">' + _tableHtml(completedJobs) + '</div>'
-                    + '</details>';
-            }
-
-            var actions = '<a class="terminal-action" title="Refresh job status from Domino" id="job-history-refresh-btn" href="#">Refresh</a>';
-            if (hasQueued) {
-                actions += ' <a class="terminal-action" title="Cancel all queued jobs that haven\'t been submitted yet" id="job-cancel-queued-btn" href="#">Cancel queued</a>';
-            }
-            html += '<div class="history-actions">' + actions + '</div>';
-
-            el.innerHTML = html;
-
-            // Wire refresh button
-            var refreshBtn = el.querySelector('#job-history-refresh-btn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    fetchJobHistory();
+            var qs = '?datasetId=' + encodeURIComponent(dsId)
+                + '&snapshotId=' + encodeURIComponent(snapId)
+                + (pid ? '&projectId=' + encodeURIComponent(pid) : '');
+            fetch(_adUrl('api/doc-content') + qs)
+                .then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.arrayBuffer();
+                })
+                .then(function(buf) {
+                    if (typeof mammoth === 'undefined') {
+                        previewContent.innerHTML = '<p class="doc-preview-error">Preview library not loaded.</p>';
+                        return;
+                    }
+                    return mammoth.convertToHtml({ arrayBuffer: buf }).then(function(result) {
+                        previewContent.innerHTML = '<div class="doc-preview-body">' + result.value + '</div>';
+                    });
+                })
+                .catch(function(err) {
+                    previewContent.innerHTML = '<p class="doc-preview-error">Could not load preview: ' + _esc(String(err)) + '</p>';
                 });
+        }
+
+        function _attachDocPreview(latestJob) {
+            var previewContent = document.getElementById('doc-preview-content');
+            if (!previewContent) return;
+            _fetchAndRenderPreview(latestJob, previewContent);
+        }
+
+        function renderJobHistory(jobs) {
+            // Write to the correct container depending on layout mode
+            var elA = document.getElementById('job-history-content');        // accordion (Layout A)
+            var elB = document.getElementById('job-history-drawer-content'); // drawer   (Layout B)
+
+            function _render(el) {
+                if (!el) return;
+                if (!jobs || !jobs.length) {
+                    el.innerHTML = '<div class="spec-file-empty">'
+                        + '<span class="material-symbols-outlined spec-file-empty-icon">description</span>'
+                        + '<span class="spec-file-list-empty">No history yet.</span></div>';
+                    return;
+                }
+                var hasQueued = jobs.some(function(j) { return j.status === 'queued' && !j.domino_run_id; });
+                var html = '';
+                if (hasQueued) {
+                    html += '<div class="inline-callout inline-callout-warning" role="alert">'
+                        + '\u26a0 Job queued \u2014 waiting for a slot to open.'
+                        + '</div>';
+                }
+                html += '<div class="history-table-wrap">' + _tableHtml(jobs) + '</div>';
+                var actions = '<a class="terminal-action" id="job-history-refresh-btn-' + el.id + '" href="#">Refresh</a>';
+                if (hasQueued) {
+                    actions += ' <a class="terminal-action" id="job-cancel-queued-btn-' + el.id + '" href="#">Cancel queued</a>';
+                }
+                html += '<div class="history-actions">' + actions + '</div>';
+                el.innerHTML = html;
+
+                var refreshBtn = el.querySelector('[id^="job-history-refresh-btn"]');
+                if (refreshBtn) refreshBtn.addEventListener('click', function(e) { e.preventDefault(); fetchJobHistory(); });
+                var cancelBtn = el.querySelector('[id^="job-cancel-queued-btn"]');
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
+                            .then(_checkResp).then(function(r) { return r.json(); })
+                            .then(function(data) { onJobsUpdated(data.jobs || []); })
+                            .catch(function() {});
+                    });
+                }
             }
 
-            // Wire cancel queued button
-            var cancelBtn = el.querySelector('#job-cancel-queued-btn');
-            if (cancelBtn) {
-                cancelBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
-                        .then(_checkResp).then(function(r) { return r.json(); })
-                        .then(function(data) { renderJobHistory(data.jobs || []); })
-                        .catch(function() {});
-                });
+            // Always update both containers so switching layout shows current data
+            _render(elA);
+            _render(elB);
+        }
+
+        function onJobsUpdated(jobs) {
+            renderResultsPanel(jobs);
+            renderJobHistory(jobs);
+            if (jobs && jobs.length && jobs[0].status === 'succeeded') {
+                _attachDocPreview(jobs[0]);
             }
         }
 
         function fetchJobHistory() {
             fetch(_adUrl('job-history') + queryJobHistory())
                 .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) { renderJobHistory(data.jobs || []); })
+                .then(function(data) { onJobsUpdated(data.jobs || []); })
                 .catch(function() {});
         }
 
-        // Poll job history every 10 seconds
-        setInterval(fetchJobHistory, 10000);
+        // Cycle progress label through stages while job is running
+        var _progressInterval = null;
+        var _progressStageList = ['Scanning code\u2026', 'Planning sections\u2026', 'Generating content\u2026', 'Finalizing document\u2026'];
+        var _progressStageIdx = 0;
+        function _startProgressCycle() {
+            _progressStageIdx = 0;
+            clearInterval(_progressInterval);
+            _progressInterval = setInterval(function() {
+                _progressStageIdx = Math.min(_progressStageIdx + 1, _progressStageList.length - 1);
+                var el = document.getElementById('job-progress-label');
+                if (el) el.textContent = _progressStageList[_progressStageIdx];
+                if (_progressStageIdx >= _progressStageList.length - 1) clearInterval(_progressInterval);
+            }, 5500);
+        }
+        function _stopProgressCycle() { clearInterval(_progressInterval); }
 
+        // Poll job history every 10 seconds when on step 2
+        setInterval(function() {
+            var s2 = document.getElementById('wizard-step2');
+            if (s2 && s2.style.display !== 'none') {
+                fetchJobHistory();
+            }
+        }, 10000);
 
-        // ── Form submission ───────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // FORM SUBMISSION
+        // ═══════════════════════════════════════════════════════════════
+
+        function showWizardError(msg) {
+            var errEl = document.getElementById('wizard-error');
+            if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
+        }
+        function hideWizardError() {
+            var errEl = document.getElementById('wizard-error');
+            if (errEl) errEl.style.display = 'none';
+        }
+
+        // Save a built-in template YAML to the dataset before submitting
+        function saveBuiltinSpec(tpl) {
+            return new Promise(function(resolve, reject) {
+                if (!_specCurrentDatasetId) {
+                    reject(new Error('No dataset selected. Please expand Advanced options and select a dataset.'));
+                    return;
+                }
+                var pid = resolvedProjectId();
+                var qs = pid ? ('?projectId=' + encodeURIComponent(pid)
+                    + '&datasetId=' + encodeURIComponent(_specCurrentDatasetId)
+                    + '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId))
+                    : ('?datasetId=' + encodeURIComponent(_specCurrentDatasetId)
+                    + '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
+
+                var fd = new FormData();
+                fd.append('spec_filename', tpl.slug + '.yaml');
+                fd.append('spec_content', tpl.yaml_content);
+
+                fetch(_adUrl('save-spec') + qs, { method: 'POST', body: fd })
+                    .then(_checkResp).then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.error) { reject(new Error(data.error)); return; }
+                        // data.saved is the absolute path in the dataset
+                        resolve(data.saved);
+                    })
+                    .catch(reject);
+            });
+        }
+
         var mainForm = document.getElementById('main-form');
         if (mainForm) {
             mainForm.addEventListener('submit', function(e) {
                 e.preventDefault();
+                hideWizardError();
 
-                var specPath = document.getElementById('field-spec_path');
-                var specUpload = document.getElementById('spec-machine-upload');
-                var hasSpec = (specPath && specPath.value.trim()) ||
-                              (specUpload && specUpload.files && specUpload.files.length > 0);
-                if (!hasSpec) {
-                    var msg = 'Please select or upload a spec file before generating documentation.';
-                    var existing = document.getElementById('spec-validation-msg');
-                    if (!existing) {
-                        var indicator = document.getElementById('spec-selected-indicator');
-                        if (indicator) {
-                            var msgEl = document.createElement('div');
-                            msgEl.id = 'spec-validation-msg';
-                            msgEl.className = 'spec-validation-msg';
-                            msgEl.textContent = msg;
-                            indicator.parentNode.insertBefore(msgEl, indicator.nextSibling);
-                        } else {
-                            alert(msg);
-                        }
-                    }
+                if (!_specCurrentDatasetId) {
+                    showWizardError('No dataset selected. Expand Advanced options and select a dataset.');
+                    // Open advanced options so user sees it
+                    var advOpts = document.getElementById('wizard-advanced-opts');
+                    if (advOpts) advOpts.open = true;
                     return;
                 }
-                var existingMsg = document.getElementById('spec-validation-msg');
-                if (existingMsg) existingMsg.remove();
 
-                var fd = new FormData(mainForm);
-                var pid = resolvedProjectId();
-                if (pid && !fd.get('projectId')) fd.append('projectId', pid);
-                if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
-                if (_specCurrentSnapshotId && !fd.get('snapshotId')) fd.append('snapshotId', _specCurrentSnapshotId);
-                if (_specCurrentDatasetPath && !fd.get('datasetPath')) fd.append('datasetPath', _specCurrentDatasetPath);
+                var btn = document.getElementById('generate-btn');
+                if (btn) btn.disabled = true;
 
-                var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
-                var submitBtn = mainForm.querySelector('[type=submit]');
-                if (submitBtn) submitBtn.disabled = true;
+                function doSubmit(specPath) {
+                    if (specPathField) specPathField.value = specPath;
 
-                fetch(_adUrl('run') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(data) { renderJobHistory(data.jobs || []); })
-                    .catch(function() {})
-                    .finally(function() { if (submitBtn) submitBtn.disabled = false; });
+                    var fd = new FormData(mainForm);
+                    var pid = resolvedProjectId();
+                    if (pid && !fd.get('projectId')) fd.append('projectId', pid);
+                    if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
+                    if (_specCurrentSnapshotId && !fd.get('snapshotId')) fd.append('snapshotId', _specCurrentSnapshotId);
+                    if (_specCurrentDatasetPath && !fd.get('datasetPath')) fd.append('datasetPath', _specCurrentDatasetPath);
+
+                    // Transition to step 2 immediately
+                    showStep2();
+                    var panel = document.getElementById('results-panel');
+                    if (panel) {
+                        panel.innerHTML = '<div class="results-submitting">'
+                            + '<span class="material-symbols-outlined results-submitting-icon">rocket_launch</span>'
+                            + '<span class="results-submitting-text">Submitting job\u2026</span>'
+                            + '</div>';
+                    }
+
+                    var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+                    fetch(_adUrl('run') + qs, { method: 'POST', body: fd })
+                        .then(_checkResp).then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.error) {
+                                if (panel) {
+                                    panel.innerHTML = '<div class="results-failed">'
+                                        + '<div class="results-failed-banner">'
+                                        + '<span class="material-symbols-outlined results-failed-icon">error</span>'
+                                        + '<div class="results-failed-text">'
+                                        + '<div class="results-failed-headline">Submission failed</div>'
+                                        + '<div class="results-failed-detail">' + _esc(data.error) + '</div>'
+                                        + '</div></div></div>';
+                                }
+                            }
+                            onJobsUpdated(data.jobs || []);
+                        })
+                        .catch(function(err) {
+                            if (panel) {
+                                panel.innerHTML = '<div class="results-failed">'
+                                    + '<div class="results-failed-banner">'
+                                    + '<span class="material-symbols-outlined results-failed-icon">error</span>'
+                                    + '<div class="results-failed-text">'
+                                    + '<div class="results-failed-headline">Submission failed</div>'
+                                    + '<div class="results-failed-detail">' + _esc(err.message || String(err)) + '</div>'
+                                    + '</div></div></div>';
+                            }
+                        })
+                        .finally(function() {
+                            if (btn) btn.disabled = false;
+                            updateGenerateButton();
+                        });
+                }
+
+                if (_selectedTemplateSlug) {
+                    // Find the template and save it to the dataset first
+                    var tpl = null;
+                    for (var i = 0; i < _builtinTemplates.length; i++) {
+                        if (_builtinTemplates[i].slug === _selectedTemplateSlug) { tpl = _builtinTemplates[i]; break; }
+                    }
+                    if (!tpl) {
+                        showWizardError('Selected template not found. Please refresh the page.');
+                        if (btn) btn.disabled = false;
+                        updateGenerateButton();
+                        return;
+                    }
+                    saveBuiltinSpec(tpl)
+                        .then(function(savedPath) { doSubmit(savedPath); })
+                        .catch(function(err) {
+                            showWizardError('Could not save template: ' + err.message);
+                            if (btn) btn.disabled = false;
+                            updateGenerateButton();
+                        });
+                } else if (_customSpecSelected && specPathField && specPathField.value.trim()) {
+                    doSubmit(specPathField.value.trim());
+                } else {
+                    showWizardError('Please select a template or a custom spec file.');
+                    if (btn) btn.disabled = false;
+                    updateGenerateButton();
+                }
             });
         }
-    });
+
+        // ── Init ───────────────────────────────────────────────────────
+        loadBuiltinTemplates();
+        updateGenerateButton();
+
+    }); // end DOMContentLoaded
 """

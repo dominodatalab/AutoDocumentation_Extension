@@ -89,6 +89,7 @@ def create_job(
     command: Optional[str] = None,
     job_id: Optional[str] = None,
     project_id: Optional[str] = None,
+    dataset_url: Optional[str] = None,
 ) -> str:
     jid = job_id or str(uuid4())
     jobs = _read_index(dataset_id, snapshot_id)
@@ -101,6 +102,8 @@ def create_job(
         "status": "queued",
         "domino_status": None,
         "job_url": None,
+        "dataset_id": _json_safe_optional_str(dataset_id),
+        "dataset_url": _json_safe_optional_str(dataset_url),
         "spec_path": _json_safe_optional_str(spec_path),
         "command": _json_safe_optional_str(command),
         "submitted_at": _now_iso(),

@@ -35,6 +35,83 @@ def sanitize_dataset_subpath(raw: Optional[str]) -> str:
     return "/".join(parts)
 
 
+_BUILTIN_TEMPLATE_FILES = [
+    {
+        "slug": "standard_ml",
+        "name": "Standard ML Model Doc",
+        "description": "Full documentation for production ML models with MLflow experiment tracking.",
+        "icon": "model_training",
+        "file": "doc_spec.yaml",
+    },
+    {
+        "slug": "llm_eval",
+        "name": "LLM Evaluation Report",
+        "description": "Evaluation results for large language model deployments across benchmarks and tasks.",
+        "icon": "psychology",
+        "file": "doc_spec_llm_eval.yaml",
+    },
+    {
+        "slug": "fairness",
+        "name": "Fairness & Bias Report",
+        "description": "Bias analysis, fairness metrics, and mitigation documentation for regulated use cases.",
+        "icon": "balance",
+        "file": "doc_spec_fairness.yaml",
+    },
+    {
+        "slug": "executive",
+        "name": "Executive Summary",
+        "description": "High-level model summary written for non-technical stakeholders and leadership.",
+        "icon": "summarize",
+        "file": "doc_spec_executive.yaml",
+    },
+]
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_builtin_templates() -> list:
+    """Load all built-in templates, parsing their YAML for section metadata."""
+    import yaml as _yaml  # type: ignore
+
+    result = []
+    for meta in _BUILTIN_TEMPLATE_FILES:
+        path = _TEMPLATES_DIR / meta["file"]
+        try:
+            raw = path.read_text(encoding="utf-8")
+            parsed = _yaml.safe_load(raw)
+        except Exception:
+            continue
+
+        sections_raw = parsed.get("sections", [])
+        sections = []
+        per_model = []
+        for s in sections_raw:
+            if isinstance(s, str):
+                if ": per_model" in s:
+                    name = s.replace(": per_model", "").strip()
+                    sections.append(name)
+                    per_model.append(name)
+                else:
+                    sections.append(s)
+            elif isinstance(s, dict):
+                name = s.get("name", "")
+                sections.append(name)
+                if s.get("per_model"):
+                    per_model.append(name)
+
+        result.append({
+            "slug": meta["slug"],
+            "name": parsed.get("card_title") or meta["name"],
+            "description": parsed.get("card_description") or meta["description"],
+            "icon": meta["icon"],
+            "sections": sections,
+            "per_model_sections": per_model,
+            "yaml_content": raw,
+            "filename": meta["file"],
+        })
+    return result
+
+
 def register_api_routes(rt):
     """Register all /api/* routes on the given rt decorator."""
 
@@ -273,3 +350,55 @@ def register_api_routes(rt):
             )
 
     rt("/api/code-root-options")(api_code_root_options)
+
+    def api_builtin_templates(req: Request):
+        """Return metadata and YAML content for all built-in spec templates."""
+        templates = _load_builtin_templates()
+        return Response(json.dumps(templates), media_type="application/json")
+
+    rt("/api/built-in-templates")(api_builtin_templates)
+
+    async def api_doc_content(req: Request):
+        """Proxy the newest .docx from docs/ in the selected dataset snapshot.
+
+        Query params: datasetId, snapshotId, projectId (optional).
+        Returns the raw .docx bytes as application/octet-stream so the frontend
+        can pass them to mammoth.js for inline HTML rendering.
+        """
+        from dataset_manager import DatasetManager
+
+        snapshot_id = (req.query_params.get("snapshotId") or "").strip()
+        if not snapshot_id:
+            return Response("snapshotId required", status_code=400)
+
+        try:
+            files = DatasetManager.list_files(snapshot_id, "docs")
+        except Exception as exc:
+            logger.warning("api_doc_content: could not list docs/: %s", exc)
+            return Response(f"Could not list docs/: {exc}", status_code=502)
+
+        docx_files = [
+            f for f in files
+            if not f.get("isDirectory") and f.get("fileName", "").lower().endswith(".docx")
+        ]
+        if not docx_files:
+            return Response("No .docx files found in docs/", status_code=404)
+
+        # Sort by name desc — filenames embed timestamp (model_docs_YYYYMMDD_HHMMSS.docx)
+        docx_files.sort(key=lambda f: f.get("fileName", ""), reverse=True)
+        newest = docx_files[0]["fileName"]
+        path = f"docs/{newest}"
+
+        try:
+            content = DatasetManager.read_file(snapshot_id, path)
+        except Exception as exc:
+            logger.warning("api_doc_content: could not read %s: %s", path, exc)
+            return Response(f"Could not read {path}: {exc}", status_code=502)
+
+        return Response(
+            content,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{newest}"'},
+        )
+
+    rt("/api/doc-content")(api_doc_content)

@@ -1,0 +1,63 @@
+card_title: "LLM Evaluation Report"
+card_description: "Evaluation results for large language model deployments across benchmarks and tasks."
+
+title: "LLM Evaluation Report"
+authors: "AI Platform Team"
+
+sections:
+  - Executive Summary
+  - Model Overview
+  - Evaluation Methodology
+  - "Benchmark Results: per_model"
+  - "Task-Specific Performance: per_model"
+  - Safety & Alignment Testing
+  - Hallucination & Factuality Analysis
+  - Latency & Cost Analysis
+  - Recommendations
+  - Appendix
+
+hints:
+  "Executive Summary": >
+    Summarize the key LLM evaluation findings, highlight top-performing models,
+    and provide a clear recommendation for deployment. Keep it concise and
+    actionable for both technical and non-technical stakeholders.
+
+  "Model Overview": >
+    Describe each evaluated model including provider, version, parameter count,
+    context window size, and intended use cases. Note any known strengths or
+    limitations documented by the provider.
+
+  "Evaluation Methodology": >
+    Explain the evaluation framework, benchmark datasets used, scoring criteria,
+    and any human evaluation components. Describe how prompts were constructed
+    and any chain-of-thought or few-shot techniques applied.
+
+  "Benchmark Results": >
+    Present quantitative benchmark scores across standard LLM benchmarks such as
+    MMLU, HellaSwag, or domain-specific evals. Include comparisons to baseline
+    models where available. Visualize results in tables.
+
+  "Task-Specific Performance": >
+    Detail performance on tasks relevant to the deployment use case such as
+    summarization, classification, code generation, extraction, or Q&A. Report
+    precision, recall, BLEU, ROUGE, or other task-appropriate metrics.
+
+  "Safety & Alignment Testing": >
+    Document results of safety evaluations including refusal rates for harmful
+    requests, jailbreak resistance, and alignment with organizational policies.
+    Include examples of failure modes observed.
+
+  "Hallucination & Factuality Analysis": >
+    Present hallucination rates and factuality scores. Include examples of
+    hallucination patterns observed, the severity of errors, and any grounding
+    or retrieval techniques applied to mitigate them.
+
+  "Latency & Cost Analysis": >
+    Compare inference latency (p50, p95, p99 in ms) and estimated cost per
+    1K tokens across evaluated models. Include throughput analysis and any
+    batching or caching optimizations considered.
+
+  "Recommendations": >
+    Provide clear model selection recommendations with justification,
+    deployment considerations, monitoring strategy, and suggested
+    re-evaluation cadence as new model versions are released.

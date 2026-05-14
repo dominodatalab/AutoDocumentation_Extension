@@ -144,6 +144,8 @@ class DominoJobRecord:
     status: str = "queued"               # queued | submitted | running | succeeded | failed | cancelled
     domino_status: Optional[str] = None
     job_url: Optional[str] = None
+    dataset_id: Optional[str] = None     # dataset where output is written
+    dataset_url: Optional[str] = None    # Domino UI link to the dataset docs/ folder
     spec_path: Optional[str] = None
     submitted_at: Optional[str] = None
     completed_at: Optional[str] = None

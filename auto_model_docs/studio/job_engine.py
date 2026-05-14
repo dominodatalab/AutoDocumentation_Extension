@@ -276,6 +276,7 @@ async def _submit_domino_job(
 
     command_str = _build_job_command_str(req, spec_path, dataset_path)
 
+    dataset_url = domino_client.build_dataset_url(dataset_id, req.project_id or "")
     job_id = domino_job_store.create_job(
         dataset_id, snapshot_id,
         owner_id=owner_id,
@@ -286,6 +287,7 @@ async def _submit_domino_job(
         environment_revision_id=_domino_id_str(req.environment_revision_id),
         command=command_str,
         project_id=req.project_id,
+        dataset_url=dataset_url,
     )
 
     active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)

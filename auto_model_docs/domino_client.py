@@ -712,3 +712,14 @@ def build_job_url(run_id: str, project_id: str) -> str | None:
     if not powner or not pname:
         return None
     return f"{_ui_host}/jobs/{powner}/{pname}/{run_id}/logs?status=all"
+
+
+def build_dataset_url(dataset_id: str, project_id: str) -> str | None:
+    """Return the Domino UI URL for the dataset docs/ folder."""
+    if not _ui_host or not dataset_id:
+        return None
+
+    _, pname, powner = get_project_context(project_id)
+    if not powner or not pname:
+        return None
+    return f"{_ui_host}/u/{powner}/{pname}/datasets/{dataset_id}/browse?path=docs"
