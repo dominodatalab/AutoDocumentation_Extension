@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import logging
 from typing import Any
 
@@ -28,6 +29,33 @@ AUTODOC_DATASET_DESCRIPTION = (
 
 def _get_auth_headers() -> dict[str, str]:
     return _current_auth().to_headers()
+
+
+def _bytes_from_snapshot_preview_response(resp: httpx.Response) -> bytes:
+    content = resp.content or b""
+    ctype = (resp.headers.get("content-type") or "").lower()
+    if "json" in ctype or content[:1] == b"{":
+        try:
+            text = content.decode("utf-8")
+            payload = json.loads(text)
+        except Exception:
+            return content
+        if isinstance(payload, str) and payload.strip():
+            return payload.encode("utf-8")
+        if isinstance(payload, dict):
+            for key in ("content", "fileContent", "body", "text", "data", "fileData"):
+                val = payload.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.encode("utf-8")
+            for nested_key in ("file", "result", "payload", "preview"):
+                inner = payload.get(nested_key)
+                if isinstance(inner, dict):
+                    for key in ("content", "fileContent", "body", "text", "data"):
+                        val = inner.get(key)
+                        if isinstance(val, str) and val.strip():
+                            return val.encode("utf-8")
+        return content
+    return content
 
 
 class DatasetManager:
@@ -126,7 +154,7 @@ class DatasetManager:
                 headers=_get_auth_headers(),
             )
             resp.raise_for_status()
-        return resp.content
+        return _bytes_from_snapshot_preview_response(resp)
 
     @staticmethod
     def read_file_meta(snapshot_id: str, path: str) -> dict[str, Any]:

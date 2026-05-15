@@ -87,3 +87,32 @@ class TestLocalDataManager:
             sub_files = local_data_manager.list_files(tmp, "sub")
             assert len(sub_files) == 1
             assert sub_files[0]["fileName"] == "b.txt"
+
+
+class TestDatasetManagerReadFileJson:
+    def test_read_file_unwraps_json_content_envelope(self, monkeypatch):
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+
+        class Resp:
+            content = b'{"content":"slug: z\\ncard_title: ZZ\\n"}'
+            headers = {"content-type": "application/json"}
+
+            def raise_for_status(self):
+                return None
+
+        class Inner:
+            def get(self, *a, **k):
+                return Resp()
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+        assert DatasetManager.read_file("snap", "spec-templates/x.yaml") == b"slug: z\ncard_title: ZZ\n"

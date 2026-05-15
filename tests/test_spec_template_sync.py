@@ -43,6 +43,81 @@ def test_card_meta_default_slug_from_filename_stem():
     assert meta["section_count"] == 1
 
 
+def test_section_count_from_dict_sections():
+    assert st.section_count_from_spec_dict({"sections": {"A": 1, "B": 2}}) == 2
+
+
+def test_catalog_merges_section_count_from_repo_when_dataset_yaml_omits_sections(
+    tmp_path,
+    monkeypatch,
+):
+    import domino_datasets as dd
+
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    (tmp_path / "doc_spec_executive.yaml").write_text(
+        "slug: executive\ncard_title: Executive Summary\n"
+        "card_description: High-level.\n"
+        "sections:\n  - A\n  - B\n  - C\n  - D\n  - E\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        dd,
+        "list_files",
+        lambda snap, prefix: [{"fileName": "doc_spec_executive.yaml", "isDirectory": False}],
+    )
+    monkeypatch.setattr(
+        "dataset_manager.DatasetManager.read_file",
+        staticmethod(
+            lambda snap, rel: (
+                b"slug: executive\ncard_title: Executive Summary\n"
+                b"card_description: High-level.\n"
+            ),
+        ),
+    )
+    got = st.catalog_from_dataset("snap-1")
+    assert len(got) == 1
+    assert got[0]["section_count"] == 5
+
+
+def test_card_meta_ignores_doc_title_for_card_name():
+    raw = b'card_description: "D"\ntitle: "Document Title Only"\n'
+    meta = st.card_meta_from_yaml(raw, default_slug="s")
+    assert meta["name"] == "Template"
+    assert meta["description"] == "D"
+
+
+def test_card_meta_scalar_root_becomes_empty_dict():
+    meta = st.card_meta_from_yaml(b"just-a-string\n", default_slug="stem")
+    assert meta["slug"] == "stem"
+    assert meta["name"] == "Template"
+    assert meta["section_count"] == 0
+
+
+def test_catalog_falls_back_to_repo_yaml(tmp_path, monkeypatch):
+    import domino_datasets as dd
+
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    (tmp_path / "doc_spec.yaml").write_text(
+        "slug: rv-slug\ncard_title: RV Title\ncard_description: RV Desc\nsections:\n  - a\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        dd,
+        "list_files",
+        lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+    )
+    monkeypatch.setattr(
+        "dataset_manager.DatasetManager.read_file",
+        staticmethod(lambda snap, rel: b"scalar-only"),
+    )
+    got = st.catalog_from_dataset("snap-1")
+    assert len(got) == 1
+    assert got[0]["slug"] == "rv-slug"
+    assert got[0]["name"] == "RV Title"
+    assert got[0]["description"] == "RV Desc"
+    assert got[0]["section_count"] == 1
+
+
 def test_catalog_from_dataset(monkeypatch):
     import domino_datasets as dd
 
