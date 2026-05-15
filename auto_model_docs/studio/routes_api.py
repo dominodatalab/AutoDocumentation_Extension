@@ -324,9 +324,7 @@ def register_api_routes(rt):
         pid = (_resolve_request_project_id(req) or "").strip()
         if not pid:
             return Response("projectId required", status_code=400)
-        raw_param = (
-            (req.query_params.get("template_file") or req.query_params.get("filename") or "").strip()
-        )
+        raw_param = (req.query_params.get("template_file") or "").strip()
         base = raw_param.replace("\\", "/").split("/")[-1]
         if not base:
             return Response("template_file required", status_code=400)

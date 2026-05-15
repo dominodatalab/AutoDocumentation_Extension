@@ -510,12 +510,20 @@ MAIN_DOM_JS = r"""
             var pid = resolvedProjectId();
             var url = _adUrl('api/built-in-templates');
             if (pid) url += '?projectId=' + encodeURIComponent(pid);
-            fetch(url)
+            return fetch(url)
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(templates) {
                     if (!Array.isArray(templates)) throw new Error('bad response');
                     _builtinTemplates = templates;
                     renderTemplateGallery(templates);
+                    var sel = _selectedTemplateSlug;
+                    if (sel) {
+                        var still = false;
+                        for (var k = 0; k < templates.length; k++) {
+                            if (templates[k].slug === sel) { still = true; break; }
+                        }
+                        if (still) selectTemplate(sel);
+                    }
                 })
                 .catch(function() {
                     var gallery = document.getElementById('template-gallery');
@@ -853,8 +861,7 @@ MAIN_DOM_JS = r"""
                         if (result.error) throw new Error(result.error);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; }
                         selectCustomSpecFile(result.path);
-                        browseFiles(_specCurrentPath);
-                        loadBuiltinTemplates();
+                        return browseFiles(_specCurrentPath).then(function() { return loadBuiltinTemplates(); });
                     })
                     .catch(function(err) {
                         if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; }
@@ -1262,6 +1269,9 @@ MAIN_DOM_JS = r"""
                         return;
                     }
                     saveBuiltinSpec(tpl)
+                        .then(function(savedPath) {
+                            return loadBuiltinTemplates().then(function() { return savedPath; });
+                        })
                         .then(function(savedPath) { doSubmit(savedPath); })
                         .catch(function(err) {
                             showWizardError('Could not save template: ' + err.message);

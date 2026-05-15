@@ -29,17 +29,18 @@ def test_card_meta_from_yaml_reads_slug_sections():
         b'card_description: "D"\n'
         b"sections:\n  - a\n  - b\n"
     )
-    meta = st.card_meta_from_yaml(raw, default_slug="fallback")
+    meta = st.card_meta_from_yaml(raw)
     assert meta["slug"] == "my-slug"
     assert meta["name"] == "T"
     assert meta["description"] == "D"
     assert meta["section_count"] == 2
 
 
-def test_card_meta_default_slug_from_filename_stem():
+def test_card_meta_empty_slug_when_slug_missing_in_yaml():
     raw = b"card_title: X\nsections:\n  - one\n"
-    meta = st.card_meta_from_yaml(raw, default_slug="fromfile")
-    assert meta["slug"] == "fromfile"
+    meta = st.card_meta_from_yaml(raw)
+    assert meta["slug"] == ""
+    assert meta["name"] == "X"
     assert meta["section_count"] == 1
 
 
@@ -70,9 +71,14 @@ def test_catalog_from_dataset_uses_section_list_from_dataset_bytes_only(monkeypa
     assert got[0]["section_count"] == 5
 
 
-def test_catalog_from_dataset_unparseable_yaml_uses_dataset_only(monkeypatch):
+def test_catalog_from_dataset_ignores_packaged_dir_even_if_present(tmp_path, monkeypatch):
     import domino_datasets as dd
 
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    (tmp_path / "doc_spec.yaml").write_text(
+        "slug: packaged-only\ncard_title: Packaged Title\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
         dd,
         "list_files",
@@ -83,22 +89,43 @@ def test_catalog_from_dataset_unparseable_yaml_uses_dataset_only(monkeypatch):
         staticmethod(lambda snap, rel: b"scalar-only"),
     )
     got = st.catalog_from_dataset("snap-1")
+    assert len(got) == 0
+
+
+def test_catalog_section_count_zero_when_dataset_yaml_has_no_sections(monkeypatch):
+    import domino_datasets as dd
+
+    monkeypatch.setattr(
+        dd,
+        "list_files",
+        lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+    )
+    monkeypatch.setattr(
+        "dataset_manager.DatasetManager.read_file",
+        staticmethod(
+            lambda snap, rel: (
+                b"slug: s\ncard_title: Titled\n"
+                b"card_description: Described\n"
+            ),
+        ),
+    )
+    got = st.catalog_from_dataset("snap-1")
     assert len(got) == 1
-    assert got[0]["name"] == "Template"
+    assert got[0]["name"] == "Titled"
     assert got[0]["section_count"] == 0
 
 
 def test_card_meta_ignores_doc_title_for_card_name():
     raw = b'card_description: "D"\ntitle: "Document Title Only"\n'
-    meta = st.card_meta_from_yaml(raw, default_slug="s")
-    assert meta["name"] == "Template"
+    meta = st.card_meta_from_yaml(raw)
+    assert meta["name"] == ""
     assert meta["description"] == "D"
 
 
-def test_card_meta_scalar_root_becomes_empty_dict():
-    meta = st.card_meta_from_yaml(b"just-a-string\n", default_slug="stem")
-    assert meta["slug"] == "stem"
-    assert meta["name"] == "Template"
+def test_card_meta_scalar_root_yields_empty_identifiers():
+    meta = st.card_meta_from_yaml(b"just-a-string\n")
+    assert meta["slug"] == ""
+    assert meta["name"] == ""
     assert meta["section_count"] == 0
 
 

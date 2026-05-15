@@ -41,15 +41,9 @@ def section_count_from_spec_dict(data: dict[str, Any]) -> int:
     return 0
 
 
-def card_meta_from_yaml(content: bytes, *, default_slug: str = "") -> dict[str, Any]:
-    text = (content or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
-    parsed = yaml.safe_load(text)
-    if not isinstance(parsed, dict):
-        data: dict[str, Any] = {}
-    else:
-        data = parsed
-    slug = str(data.get("slug") or data.get("template_slug") or default_slug or "").strip()
-    name = str(data.get("card_title") or "Template").strip()
+def card_meta_from_spec_dict(data: dict[str, Any]) -> dict[str, Any]:
+    slug = str(data.get("slug") or "").strip()
+    name = str(data.get("card_title") or "").strip()
     desc = str(data.get("card_description") or "").strip()
     section_count = section_count_from_spec_dict(data)
     return {
@@ -58,6 +52,27 @@ def card_meta_from_yaml(content: bytes, *, default_slug: str = "") -> dict[str, 
         "description": desc,
         "section_count": section_count,
     }
+
+
+def card_meta_from_yaml(content: bytes) -> dict[str, Any]:
+    text = (content or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
+    try:
+        parsed = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return {
+            "slug": "",
+            "name": "",
+            "description": "",
+            "section_count": 0,
+        }
+    if not isinstance(parsed, dict):
+        return {
+            "slug": "",
+            "name": "",
+            "description": "",
+            "section_count": 0,
+        }
+    return card_meta_from_spec_dict(parsed)
 
 
 def sync_builtins_to_autodoc_dataset(dataset_id: str) -> None:
@@ -96,23 +111,24 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
         except Exception:
             logger.warning("read_file failed for %s", filename, exc_info=True)
             continue
-        default_slug = Path(filename).stem
+        text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
         try:
-            meta = card_meta_from_yaml(raw, default_slug=default_slug)
-        except Exception:
-            logger.warning("yaml parse failed for %s", filename, exc_info=True)
-            meta = {
-                "slug": default_slug,
-                "name": filename,
-                "description": "",
-                "section_count": 0,
-            }
-        slug = (meta.get("slug") or default_slug).strip() or default_slug
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError:
+            logger.warning("yaml parse failed for %s", filename)
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        meta = card_meta_from_spec_dict(parsed)
+        slug = meta.get("slug") or ""
+        name = meta.get("name") or ""
+        if not slug.strip() or not name.strip():
+            continue
         out.append(
             {
-                "slug": slug,
-                "name": meta.get("name") or filename,
-                "description": meta.get("description") or "",
+                "slug": slug.strip(),
+                "name": name.strip(),
+                "description": str(meta.get("description") or "").strip(),
                 "template_file": filename,
                 "section_count": int(meta.get("section_count") or 0),
             }
