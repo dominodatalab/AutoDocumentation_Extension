@@ -65,8 +65,6 @@ _static_dir = pathlib.Path(__file__).parent / "static"
 _static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
-ensure_database()
-
 
 # ---------------------------------------------------------------------------
 # Helper: build the advanced-options panel (collapsed <details>)
@@ -691,6 +689,7 @@ async def _on_startup():
     import studio.state as _state
     from artifact_layout import init_layout
 
+    ensure_database()
     init_layout()
     _state._STARTUP_WARNINGS = _validate_environment()
 
