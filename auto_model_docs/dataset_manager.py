@@ -8,6 +8,7 @@ shared state across requests.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -31,30 +32,125 @@ def _get_auth_headers() -> dict[str, str]:
     return _current_auth().to_headers()
 
 
+def _try_base64_decode_utf8(s: str) -> str | None:
+    raw = s.replace("\n", "").replace("\r", "").strip()
+    if not raw:
+        return None
+    try:
+        decoded = base64.b64decode(raw, validate=False)
+    except Exception:
+        return None
+    try:
+        return decoded.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+_PREVIEW_BODY_KEYS = (
+    "content",
+    "fileContent",
+    "body",
+    "text",
+    "data",
+    "yaml",
+    "spec",
+    "blob",
+    "raw",
+    "value",
+)
+
+
+def _decode_preview_json_string(s: str) -> str | None:
+    u = s.lstrip("\ufeff")
+    if not u.strip():
+        return None
+    lead = u.lstrip()
+    if not lead or lead[0] not in "{[":
+        return u
+    try:
+        inner = json.loads(u)
+    except Exception:
+        return u
+    if isinstance(inner, (dict, list)):
+        hit = _preview_payload_to_file_text(inner)
+        return hit or u
+    if isinstance(inner, str):
+        nested = _decode_preview_json_string(inner)
+        return nested or u
+    return u
+
+
+def _preview_payload_to_file_text(obj: Any) -> str | None:
+    if isinstance(obj, dict):
+        for nk in ("file", "result", "payload", "preview"):
+            inner = obj.get(nk)
+            if isinstance(inner, (dict, list)):
+                hit = _preview_payload_to_file_text(inner)
+                if hit:
+                    return hit
+        for key in _PREVIEW_BODY_KEYS:
+            val = obj.get(key)
+            if isinstance(val, str) and val.strip():
+                hit = _decode_preview_json_string(val)
+                if hit:
+                    return hit
+            if isinstance(val, (dict, list)):
+                hit = _preview_payload_to_file_text(val)
+                if hit:
+                    return hit
+        for key in ("contentBase64", "base64Content", "fileContentBase64", "encodedContent"):
+            val = obj.get(key)
+            if isinstance(val, str) and val.strip():
+                dec = _try_base64_decode_utf8(val)
+                if dec is not None:
+                    return dec
+        data_val = obj.get("data")
+        if isinstance(data_val, str) and data_val.strip():
+            hit = _decode_preview_json_string(data_val)
+            if hit:
+                return hit
+        for _k, v in obj.items():
+            if isinstance(v, (dict, list)):
+                hit = _preview_payload_to_file_text(v)
+                if hit:
+                    return hit
+            if isinstance(v, str) and v.strip():
+                lead = v.lstrip("\ufeff").lstrip()
+                if lead and lead[0] in "{[":
+                    hit = _decode_preview_json_string(v)
+                    if hit:
+                        return hit
+    if isinstance(obj, list):
+        for item in obj:
+            hit = _preview_payload_to_file_text(item)
+            if hit:
+                return hit
+    return None
+
+
 def _bytes_from_snapshot_preview_response(resp: httpx.Response) -> bytes:
     content = resp.content or b""
     ctype = (resp.headers.get("content-type") or "").lower()
-    if "json" in ctype or content[:1] == b"{":
-        try:
-            text = content.decode("utf-8")
-            payload = json.loads(text)
-        except Exception:
-            return content
-        if isinstance(payload, str) and payload.strip():
-            return payload.encode("utf-8")
-        if isinstance(payload, dict):
-            for key in ("content", "fileContent", "body", "text", "data", "fileData"):
-                val = payload.get(key)
-                if isinstance(val, str) and val.strip():
-                    return val.encode("utf-8")
-            for nested_key in ("file", "result", "payload", "preview"):
-                inner = payload.get(nested_key)
-                if isinstance(inner, dict):
-                    for key in ("content", "fileContent", "body", "text", "data"):
-                        val = inner.get(key)
-                        if isinstance(val, str) and val.strip():
-                            return val.encode("utf-8")
+    if "json" not in ctype and content[:1] != b"{":
         return content
+    try:
+        text = content.decode("utf-8")
+        payload = json.loads(text)
+    except Exception:
+        return content
+    if isinstance(payload, str) and payload.strip():
+        hit = _decode_preview_json_string(payload)
+        if hit:
+            return hit.encode("utf-8")
+        return payload.lstrip("\ufeff").encode("utf-8")
+    if isinstance(payload, dict):
+        hit = _preview_payload_to_file_text(payload)
+        if hit:
+            return hit.encode("utf-8")
+    if isinstance(payload, list):
+        hit = _preview_payload_to_file_text(payload)
+        if hit:
+            return hit.encode("utf-8")
     return content
 
 
@@ -154,7 +250,16 @@ class DatasetManager:
                 headers=_get_auth_headers(),
             )
             resp.raise_for_status()
-        return _bytes_from_snapshot_preview_response(resp)
+        data = resp.content or b""
+        ctype = (resp.headers.get("content-type") or "").lower()
+        for _ in range(8):
+            fake = httpx.Response(200, headers={"content-type": ctype or "application/json"}, content=data)
+            nxt = _bytes_from_snapshot_preview_response(fake)
+            if nxt == data:
+                return data
+            data = nxt
+            ctype = ""
+        return data
 
     @staticmethod
     def read_file_meta(snapshot_id: str, path: str) -> dict[str, Any]:

@@ -116,3 +116,103 @@ class TestDatasetManagerReadFileJson:
 
         monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
         assert DatasetManager.read_file("snap", "spec-templates/x.yaml") == b"slug: z\ncard_title: ZZ\n"
+
+    def test_read_file_unwraps_deeply_nested_yaml(self, monkeypatch):
+        import json
+
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+
+        inner = {"response": {"file": {"meta": "x", "blob": "slug: deep\ncard_title: Deep\n"}}}
+        body = json.dumps(inner).encode()
+
+        class Resp:
+            content = body
+            headers = {"content-type": "application/json"}
+
+            def raise_for_status(self):
+                return None
+
+        class Inner:
+            def get(self, *a, **k):
+                return Resp()
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+        assert DatasetManager.read_file("snap", "spec-templates/y.yaml") == b"slug: deep\ncard_title: Deep\n"
+
+    def test_read_file_unwraps_base64_yaml_field(self, monkeypatch):
+        import base64
+        import json
+
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+
+        raw = b"slug: b64\ncard_title: B\n"
+        b64 = base64.b64encode(raw).decode("ascii")
+        body = json.dumps({"contentBase64": b64}).encode()
+
+        class Resp:
+            content = body
+            headers = {"content-type": "application/json"}
+
+            def raise_for_status(self):
+                return None
+
+        class Inner:
+            def get(self, *a, **k):
+                return Resp()
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+        assert DatasetManager.read_file("snap", "spec-templates/z.yaml") == raw
+
+    def test_read_file_multi_pass_json_string_holding_inner_json(self, monkeypatch):
+        import json
+
+        import dataset_manager as dm
+
+        monkeypatch.setattr(dm, "_resolve_api_host", lambda: "https://api.example")
+        monkeypatch.setattr(dm, "_get_auth_headers", lambda: {})
+
+        inner = json.dumps({"content": "slug: layer\ncard_title: Layer\n"})
+        body = json.dumps({"envelope": inner}).encode()
+
+        class Resp:
+            content = body
+            headers = {"content-type": "application/json"}
+
+            def raise_for_status(self):
+                return None
+
+        class Inner:
+            def get(self, *a, **k):
+                return Resp()
+
+        class Client:
+            def __enter__(self):
+                return Inner()
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(dm.httpx, "Client", lambda **kw: Client())
+        assert DatasetManager.read_file("snap", "spec-templates/layer.yaml") == (
+            b"slug: layer\ncard_title: Layer\n"
+        )

@@ -95,10 +95,11 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
 
     names: set[str] = set()
     for row in rows:
-        fn = (row.get("fileName") or "").strip()
-        if row.get("isDirectory") or not fn.lower().endswith((".yaml", ".yml")):
+        fn_raw = (row.get("fileName") or "").strip().replace("\\", "/")
+        if row.get("isDirectory") or not fn_raw.lower().endswith((".yaml", ".yml")):
             continue
-        if "/" in fn:
+        fn = fn_raw.split("/")[-1]
+        if not fn:
             continue
         names.add(fn)
 

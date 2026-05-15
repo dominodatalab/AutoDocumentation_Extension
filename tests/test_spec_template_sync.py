@@ -157,6 +157,33 @@ def test_catalog_from_dataset(monkeypatch):
     assert got[0]["section_count"] == 3
 
 
+def test_catalog_from_dataset_matches_builtin_when_fileName_is_full_path(monkeypatch):
+    import domino_datasets as dd
+
+    monkeypatch.setattr(
+        dd,
+        "list_files",
+        lambda snap, prefix: [
+            {"fileName": "spec-templates/doc_spec.yaml", "isDirectory": False},
+        ],
+    )
+    monkeypatch.setattr(
+        "dataset_manager.DatasetManager.read_file",
+        staticmethod(
+            lambda snap, rel: (
+                b"slug: path-slug\n"
+                b"card_title: Path Title\n"
+                b"card_description: PD\n"
+                b"sections:\n  - a\n"
+            ),
+        ),
+    )
+    got = st.catalog_from_dataset("snap-1")
+    assert len(got) == 1
+    assert got[0]["slug"] == "path-slug"
+    assert got[0]["name"] == "Path Title"
+
+
 @patch.object(st, "DatasetManager")
 def test_sync_builtins_writes_each_template(mock_dm, tmp_path, monkeypatch):
     monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
