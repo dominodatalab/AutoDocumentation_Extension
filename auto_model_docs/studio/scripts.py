@@ -1195,26 +1195,36 @@ MAIN_DOM_JS = r"""
                 e.preventDefault();
                 hideWizardError();
 
-                if (!_specCurrentDatasetId) {
-                    showWizardError('No dataset selected. Expand Advanced options and select a dataset.');
-                    // Open advanced options so user sees it
-                    var advOpts = document.getElementById('wizard-advanced-opts');
-                    if (advOpts) advOpts.open = true;
-                    return;
-                }
-
                 var btn = document.getElementById('generate-btn');
                 if (btn) btn.disabled = true;
 
                 function doSubmit(specPath) {
                     if (specPathField) specPathField.value = specPath;
 
-                    var fd = new FormData(mainForm);
+                    function val(id) {
+                        var el = document.getElementById(id);
+                        return el ? String(el.value || '').trim() : '';
+                    }
+                    function chk(id) {
+                        var el = document.getElementById(id);
+                        return !!(el && el.checked);
+                    }
+                    var jsonPayload = {
+                        spec_path: specPath,
+                        provider: val('field-provider'),
+                        model: val('field-model'),
+                        code_root: val('field-code_root'),
+                        notebook: true,
+                        notebook_path: '',
+                        notebook_from_cache: false,
+                        filtered_experiment_names: val('filter-experiment-names'),
+                        filtered_model_names: val('filter-model-names'),
+                        latest_only: chk('filter-latest-only'),
+                        hardware_tier: val('field-hardware_tier'),
+                        provider_base_url: val('field-provider_base_url'),
+                    };
+
                     var pid = resolvedProjectId();
-                    if (pid && !fd.get('projectId')) fd.append('projectId', pid);
-                    if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
-                    if (_specCurrentSnapshotId && !fd.get('snapshotId')) fd.append('snapshotId', _specCurrentSnapshotId);
-                    if (_specCurrentDatasetPath && !fd.get('datasetPath')) fd.append('datasetPath', _specCurrentDatasetPath);
 
                     // Transition to step 2 immediately
                     showStep2();
@@ -1227,7 +1237,11 @@ MAIN_DOM_JS = r"""
                     }
 
                     var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
-                    fetch(_adUrl('run') + qs, { method: 'POST', body: fd })
+                    fetch(_adUrl('run') + qs, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(jsonPayload),
+                    })
                         .then(_checkResp).then(function(r) { return r.json(); })
                         .then(function(data) {
                             if (data.error) {
