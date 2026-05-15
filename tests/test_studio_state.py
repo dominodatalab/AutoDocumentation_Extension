@@ -77,6 +77,14 @@ def state_module():
             sys.modules[key] = val
 
 
+class TestLoggingSetup:
+    def test_httpx_httpcore_noise_suppressed(self, state_module):
+        import logging
+
+        assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+        assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
+
+
 # ---------------------------------------------------------------------------
 # Dataclass structure
 # ---------------------------------------------------------------------------
@@ -90,15 +98,15 @@ class TestJobRequest:
             "code_root", "max_files", "workers",
             "planning_workers", "timeout", "notebook", "notebook_path",
             "filtered_experiment_names", "filtered_model_names", "latest_only", "verbose",
-            "branch", "hardware_tier",
+            "hardware_tier",
             "environment_id", "environment_revision_id",
-            "project_id", "provider_base_url", "language",
+            "project_id", "provider_base_url",
             "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
             "notebook_from_cache",
         }
         assert expected.issubset(field_names)
 
-    def test_job_request_accepts_explicit_language(self, state_module):
+    def test_job_request_constructible(self, state_module):
         jr = state_module.JobRequest(
             spec_path="",
             provider="anthropic",
@@ -114,20 +122,18 @@ class TestJobRequest:
             filtered_model_names="",
             latest_only=False,
             verbose=False,
-            branch="",
             hardware_tier="",
             environment_id="",
             environment_revision_id="",
             project_id="",
             provider_base_url="",
-            language="auto",
             max_retries=5,
             initial_backoff=10.0,
             max_backoff=120.0,
             backoff_jitter=0.2,
             notebook_from_cache=False,
         )
-        assert jr.language == "auto"
+        assert jr.provider == "anthropic"
 
 
 class TestDominoJobRecord:
@@ -136,26 +142,6 @@ class TestDominoJobRecord:
         assert rec.status == "queued"
         assert rec.domino_run_id is None
         assert rec.project_id is None
-
-
-class TestLogBuffer:
-    def test_captures_log_records(self, state_module):
-        import logging
-        state_module.log_buffer.buffer.clear()
-        logging.getLogger("test.buffer").warning("hello-buffer-123")
-        snap = state_module.log_buffer.snapshot()
-        assert any("hello-buffer-123" in line for line in snap)
-
-    def test_respects_capacity(self, state_module):
-        import logging
-        state_module.log_buffer.buffer.clear()
-        cap = state_module.log_buffer.buffer.maxlen
-        logger = logging.getLogger("test.buffer")
-        logger.setLevel(logging.DEBUG)
-        for i in range(cap + 50):
-            logger.warning("line-%d", i)
-        snap = state_module.log_buffer.snapshot()
-        assert len(snap) == cap
 
 
 class TestEnvironmentWarning:

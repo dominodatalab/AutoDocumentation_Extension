@@ -1,4 +1,6 @@
 DEFAULT_PROVIDER = "openai"
+DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 DEFAULT_MAX_FILES = 50
 DEFAULT_GENERATION_WORKERS = 4
 DEFAULT_PLANNING_WORKERS = 4
@@ -11,3 +13,4 @@ DEFAULT_LLM_MAX_BACKOFF = 120.0
 DEFAULT_LLM_BACKOFF_JITTER = 0.2
 
 ALLOWED_LANGUAGES = frozenset({"auto", "python", "r", "sas", "matlab"})
+ALLOWED_PROVIDERS = frozenset({"anthropic", "openai"})

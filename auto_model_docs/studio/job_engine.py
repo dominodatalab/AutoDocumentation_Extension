@@ -1,10 +1,11 @@
-"""Domino job submission, command building, and background polling."""
+"""Domino job submission and command building."""
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from starlette.requests import Request
 
@@ -13,7 +14,7 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 from default_consts import (
-    ALLOWED_LANGUAGES,
+    ALLOWED_PROVIDERS,
     DEFAULT_GENERATION_WORKERS,
     DEFAULT_LANGUAGE,
     DEFAULT_LLM_BACKOFF_JITTER,
@@ -22,35 +23,23 @@ from default_consts import (
     DEFAULT_LLM_MAX_RETRIES,
     DEFAULT_MAX_FILES,
     DEFAULT_PLANNING_WORKERS,
-    DEFAULT_PROVIDER,
     DEFAULT_TIMEOUT,
 )
 
+_MAX_JOB_MAX_FILES = 1_000_000
+_MAX_JOB_WORKERS = 512
+_MAX_JOB_TIMEOUT_SEC = 7 * 24 * 3600
+_MAX_JOB_MAX_RETRIES = 100
 from .state import (
     JobRequest,
-    DominoJobRecord,
-    _max_jobs,
+    _resolve_request_project_id,
     domino_client,
-    domino_job_store,
-    domino_datasets,
     logger,
 )
 from .ui_components import (
     _sanitize_optional_int,
     _sanitize_optional_float,
-    _db_record_to_dataclass,
 )
-
-
-def _validate_job_inputs(req: JobRequest, dataset_path: str, spec_path: str) -> None:
-    if not spec_path or not str(spec_path).strip():
-        raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
-    if not (dataset_path or "").strip():
-        raise ValueError("Dataset mount path is required. Ensure a dataset is selected.")
-    if not (req.code_root or "").strip():
-        raise ValueError("Code root is required. Choose a source code root path before generating documentation.")
-    if not (req.provider or "").strip():
-        raise ValueError("Provider is required.")
 
 
 def _checkbox_truthy(raw: Any) -> bool:
@@ -73,6 +62,46 @@ def _domino_id_str(raw: Any) -> str:
     return raw.strip()
 
 
+def _validate_job_inputs(req: JobRequest, spec_path: str) -> None:
+    if not spec_path or not str(spec_path).strip():
+        raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
+    if not (req.code_root or "").strip():
+        raise ValueError("Code root is required. Choose a source code root path before generating documentation.")
+    if not _domino_id_str(req.project_id):
+        raise ValueError("Project ID is required.")
+    prov = (req.provider or "").strip().lower()
+    if not prov:
+        raise ValueError("Provider is required.")
+    if prov not in ALLOWED_PROVIDERS:
+        raise ValueError("Provider must be anthropic or openai.")
+    if not (req.model or "").strip():
+        raise ValueError("Model is required. Choose a model before generating documentation.")
+    if not _domino_id_str(req.hardware_tier):
+        raise ValueError("Hardware tier is required. Select a hardware tier before generating documentation.")
+    if not _domino_id_str(req.environment_id):
+        raise ValueError("Environment is required. Select an environment before generating documentation.")
+    if not _domino_id_str(req.environment_revision_id):
+        raise ValueError("Environment revision is required. Select an environment revision before generating documentation.")
+    if req.max_files < 1 or req.max_files > _MAX_JOB_MAX_FILES:
+        raise ValueError(f"max_files must be between 1 and {_MAX_JOB_MAX_FILES}.")
+    if req.workers < 1 or req.workers > _MAX_JOB_WORKERS:
+        raise ValueError(f"generation workers must be between 1 and {_MAX_JOB_WORKERS}.")
+    if req.planning_workers < 1 or req.planning_workers > _MAX_JOB_WORKERS:
+        raise ValueError(f"planning workers must be between 1 and {_MAX_JOB_WORKERS}.")
+    if req.timeout <= 0 or req.timeout > _MAX_JOB_TIMEOUT_SEC:
+        raise ValueError(f"timeout must be positive and at most {_MAX_JOB_TIMEOUT_SEC} seconds.")
+    if req.max_retries < 0 or req.max_retries > _MAX_JOB_MAX_RETRIES:
+        raise ValueError(f"max_retries must be between 0 and {_MAX_JOB_MAX_RETRIES}.")
+    if req.initial_backoff < 0:
+        raise ValueError("initial_backoff must be non-negative.")
+    if req.max_backoff < 0:
+        raise ValueError("max_backoff must be non-negative.")
+    if req.max_backoff < req.initial_backoff:
+        raise ValueError("max_backoff must be greater than or equal to initial_backoff.")
+    if req.backoff_jitter < 0:
+        raise ValueError("backoff_jitter must be non-negative.")
+
+
 def _form_int(form: Any, key: str, default: int) -> int:
     v = _sanitize_optional_int(form.get(key))
     return default if v is None else v
@@ -88,46 +117,55 @@ def _form_float(form: Any, key: str, default: float) -> float:
 # ---------------------------------------------------------------------------
 
 async def _parse_request(req: Request) -> JobRequest:
-    form = await req.form()
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
 
-    project_id = (
-        (req.query_params.get("projectId") or req.query_params.get("project_id") or "").strip()
-        or None
-    )
+    project_id = _resolve_request_project_id(req)
     if not project_id:
-        raise RuntimeError("No target project ID available. The app requires ?projectId= on the request URL.")
+        raise RuntimeError(
+            "No target project ID available. The app requires projectId (or project_id) on the request query string."
+        )
 
-    _prov = (_form_str(form, "provider") or DEFAULT_PROVIDER).strip().lower()
-    _lang_raw = (_form_str(form, "language") or DEFAULT_LANGUAGE).strip().lower()
-    _language = _lang_raw if _lang_raw in ALLOWED_LANGUAGES else DEFAULT_LANGUAGE
+    _prov = _form_str(body, "provider").strip().lower()
+    if not _prov:
+        raise RuntimeError("provider is required in the JSON body")
+    _model = _form_str(body, "model").strip()
+    if not _model:
+        raise RuntimeError("model is required in the JSON body")
+
+    notebook = True
+    notebook_path = _form_str(body, "notebook_path")
+    notebook_from_cache = _checkbox_truthy(body.get("notebook_from_cache"))
 
     return JobRequest(
-        spec_path=_form_str(form, "spec_path"),
+        spec_path=_form_str(body, "spec_path"),
         provider=_prov,
-        model=_form_str(form, "model"),
-        code_root=_form_str(form, "code_root"),
-        max_files=_form_int(form, "max_files", DEFAULT_MAX_FILES),
-        workers=_form_int(form, "workers", DEFAULT_GENERATION_WORKERS),
-        planning_workers=_form_int(form, "planning_workers", DEFAULT_PLANNING_WORKERS),
-        timeout=_form_float(form, "timeout", DEFAULT_TIMEOUT),
-        notebook=form.get("notebook") in ("on", "true", "1", "yes"),
-        notebook_path=_form_str(form, "notebook_path"),
-        filtered_experiment_names=_form_str(form, "filtered_experiment_names"),
-        filtered_model_names=_form_str(form, "filtered_model_names"),
-        latest_only=_checkbox_truthy(form.get("latest_only")),
-        verbose=_checkbox_truthy(form.get("verbose")),
-        branch=_form_str(form, "branch"),
-        hardware_tier=_form_str(form, "hardware_tier"),
-        environment_id=_form_str(form, "environment_id"),
-        environment_revision_id=_form_str(form, "environment_revision_id"),
+        model=_model,
+        code_root=_form_str(body, "code_root"),
+        max_files=_form_int(body, "max_files", DEFAULT_MAX_FILES),
+        workers=_form_int(body, "workers", DEFAULT_GENERATION_WORKERS),
+        planning_workers=_form_int(body, "planning_workers", DEFAULT_PLANNING_WORKERS),
+        timeout=_form_float(body, "timeout", DEFAULT_TIMEOUT),
+        notebook=notebook,
+        notebook_path=notebook_path,
+        filtered_experiment_names=_form_str(body, "filtered_experiment_names"),
+        filtered_model_names=_form_str(body, "filtered_model_names"),
+        latest_only=_checkbox_truthy(body.get("latest_only")),
+        verbose=_checkbox_truthy(body.get("verbose")),
+        hardware_tier=_form_str(body, "hardware_tier"),
+        environment_id=(os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip(),
+        environment_revision_id=(os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip(),
         project_id=project_id,
-        provider_base_url=_form_str(form, "provider_base_url"),
-        language=_language,
-        max_retries=_form_int(form, "max_retries", DEFAULT_LLM_MAX_RETRIES),
-        initial_backoff=_form_float(form, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
-        max_backoff=_form_float(form, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
-        backoff_jitter=_form_float(form, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
-        notebook_from_cache=_checkbox_truthy(form.get("notebook_from_cache")),
+        provider_base_url=_form_str(body, "provider_base_url"),
+        max_retries=_form_int(body, "max_retries", DEFAULT_LLM_MAX_RETRIES),
+        initial_backoff=_form_float(body, "initial_backoff", DEFAULT_LLM_INITIAL_BACKOFF),
+        max_backoff=_form_float(body, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
+        backoff_jitter=_form_float(body, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
+        notebook_from_cache=notebook_from_cache,
     )
 
 
@@ -145,7 +183,7 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
 
     command = [
         "python",
-        "/mnt/code/auto_model_docs/main.py",
+        "/mnt/imported/code/AutoDocumentation_Extension/auto_model_docs/main.py", #TODO: Change this to the correct path
         "--spec",
         spec_path,
         "--dataset-path",
@@ -155,7 +193,7 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
         "--provider",
         req.provider.strip().lower(),
         "--language",
-        req.language,
+        DEFAULT_LANGUAGE,
         "--max-files",
         str(req.max_files),
         "--generation-workers",
@@ -172,9 +210,9 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
         str(req.max_backoff),
         "--backoff-jitter",
         str(req.backoff_jitter),
+        "--model",
+        (req.model or "").strip(),
     ]
-    if req.model:
-        command += ["--model", req.model]
     if req.provider_base_url:
         command += ["--provider-base-url", req.provider_base_url]
     if (req.filtered_experiment_names or "").strip():
@@ -200,21 +238,6 @@ def _build_job_command_str(req: JobRequest, spec_path: str, dataset_path: str = 
     return " ".join(shlex.quote(p) for p in parts)
 
 
-def _resolve_spec_field_to_cli_path(raw_from_field: str, dataset_path: str) -> str:
-    raw = (raw_from_field or "").strip()
-    if not raw:
-        return ""
-    if raw.startswith("dataset://"):
-        parts = raw[len("dataset://"):].split("/", 1)
-        dataset_name = parts[0]
-        file_path = parts[1] if len(parts) > 1 else ""
-        if (dataset_path or "").strip():
-            return f"{dataset_path}/{file_path}"
-        mount_prefix = domino_datasets.get_dataset_mount_prefix()
-        return f"{mount_prefix}/{dataset_name}/{file_path}"
-    return raw
-
-
 # ---------------------------------------------------------------------------
 # Domino job submission
 # ---------------------------------------------------------------------------
@@ -222,7 +245,6 @@ def _resolve_spec_field_to_cli_path(raw_from_field: str, dataset_path: str) -> s
 def launch_domino_job_run(
     command_str: str,
     *,
-    branch: Optional[str] = None,
     tier_id: str,
     project_id: str,
     environment_id: str,
@@ -230,7 +252,7 @@ def launch_domino_job_run(
 ) -> tuple[str, str]:
     run_id = domino_client.submit_job(
         command_str,
-        branch=branch,
+        branch=None,
         tier_id=tier_id,
         project_id=project_id,
         environment_id=environment_id,
@@ -240,153 +262,30 @@ def launch_domino_job_run(
     return run_id, job_url
 
 
-async def _submit_domino_job(
-    req: JobRequest, owner_id: str, dataset_id: str, snapshot_id: str,
-) -> DominoJobRecord:
-    spec_path = ""
-    dataset_path = ""
-
-    if dataset_id:
-        try:
-            detail = domino_datasets.get_dataset_detail(dataset_id)
-            dataset_path = detail.get("datasetPath", "")
-        except Exception:
-            pass
-
-    field_raw = (req.spec_path or "").strip()
-    if field_raw:
-        spec_path = _resolve_spec_field_to_cli_path(field_raw, dataset_path)
+async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> tuple[str, str]:
+    spec_path = (req.spec_path or "").strip()
+    mount = (dataset_mount_path or "").strip()
 
     if not spec_path:
         raise ValueError(
             "A spec file is required. Set the spec path field (select a file in the browser or enter a path) before running."
         )
+    if not mount:
+        raise ValueError("Dataset mount path could not be resolved for this project.")
 
-    _validate_job_inputs(req, dataset_path, spec_path)
+    _validate_job_inputs(req, spec_path)
 
-    if req.spec_path and req.spec_path.startswith("dataset://") and snapshot_id:
-        ds_relative = req.spec_path[len("dataset://"):].split("/", 1)
-        if len(ds_relative) > 1:
-            from dataset_manager import DatasetManager
-            if not DatasetManager.file_exists(snapshot_id, ds_relative[1]):
-                raise ValueError(
-                    "The selected spec file no longer exists in the dataset. "
-                    "It may have been deleted. Please select or upload a spec file and try again."
-                )
-
-    command_str = _build_job_command_str(req, spec_path, dataset_path)
-
-    dataset_url = domino_client.build_dataset_url(dataset_id, req.project_id or "")
-    job_id = domino_job_store.create_job(
-        dataset_id, snapshot_id,
-        owner_id=owner_id,
-        branch=req.branch,
-        tier=req.hardware_tier,
-        spec_path=spec_path,
-        environment_id=_domino_id_str(req.environment_id),
-        environment_revision_id=_domino_id_str(req.environment_revision_id),
-        command=command_str,
-        project_id=req.project_id,
-        dataset_url=dataset_url,
-    )
-
-    active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
-    if active > _max_jobs():
-        row = domino_job_store.get_job(dataset_id, snapshot_id, job_id)
-        return _db_record_to_dataclass(row)
+    command_str = _build_job_command_str(req, spec_path, mount)
 
     try:
         run_id, job_url = launch_domino_job_run(
             command_str,
-            branch=req.branch or None,
             tier_id=_domino_id_str(req.hardware_tier),
             project_id=_domino_id_str(req.project_id),
             environment_id=_domino_id_str(req.environment_id),
             environment_revision_id=_domino_id_str(req.environment_revision_id),
         )
-        domino_job_store.update_job(
-            dataset_id, snapshot_id, job_id,
-            status="submitted",
-            domino_run_id=run_id,
-            job_url=job_url,
-        )
+        return run_id, job_url or ""
     except Exception as exc:
-        domino_job_store.update_job(
-            dataset_id, snapshot_id, job_id,
-            status="failed",
-            domino_status=str(exc),
-        )
         logger.error("Domino job submission failed: %s", exc, exc_info=True)
-
-    row = domino_job_store.get_job(dataset_id, snapshot_id, job_id)
-    return _db_record_to_dataclass(row)
-
-
-# ---------------------------------------------------------------------------
-# Request-driven job sync
-# ---------------------------------------------------------------------------
-
-def _refresh_active_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
-    from datetime import datetime, timezone
-
-    active_jobs = [
-        j for j in domino_job_store.get_active_jobs(dataset_id, snapshot_id)
-        if j.get("owner_id") == owner_id
-    ]
-    for row in active_jobs:
-        run_id = row.get("domino_run_id")
-        if not run_id:
-            continue
-        try:
-            status_info = domino_client.get_job_status(run_id)
-            domino_status = status_info.get("domino_status", "")
-            mapped = status_info.get("local_status", "submitted")
-            updates: dict[str, Any] = {}
-            if domino_status != row.get("domino_status"):
-                updates["domino_status"] = domino_status
-            if mapped != row.get("status"):
-                updates["status"] = mapped
-            if mapped in ("succeeded", "failed", "cancelled"):
-                updates["completed_at"] = datetime.now(tz=timezone.utc).isoformat()
-            if updates:
-                domino_job_store.update_job(dataset_id, snapshot_id, row["id"], **updates)
-        except Exception as exc:
-            logger.warning("Status sync failed for run %s: %s", run_id, exc)
-
-
-def _promote_queued_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
-    active = domino_job_store.count_active_jobs(dataset_id, snapshot_id, owner_id)
-    if active > _max_jobs():
-        return
-    oldest = domino_job_store.get_oldest_queued_job(dataset_id, snapshot_id, owner_id)
-    if not oldest or oldest.get("domino_run_id"):
-        return
-    try:
-        cmd = oldest.get("command", "")
-        run_id = domino_client.submit_job(
-            cmd,
-            branch=oldest.get("branch"),
-            tier_id=_domino_id_str(oldest.get("hardware_tier")),
-            project_id=_domino_id_str(oldest.get("project_id")),
-            environment_id=_domino_id_str(oldest.get("environment_id")),
-            environment_revision_id=_domino_id_str(oldest.get("environment_revision_id")),
-        )
-        job_url = domino_client.build_job_url(
-            run_id, project_id=_domino_id_str(oldest.get("project_id")),
-        )
-        domino_job_store.update_job(
-            dataset_id, snapshot_id, oldest["id"],
-            status="submitted",
-            domino_run_id=run_id,
-            job_url=job_url,
-        )
-    except Exception as exc:
-        logger.warning("Failed to promote queued job %s: %s", oldest["id"], exc)
-
-
-def sync_jobs_for(owner_id: str, dataset_id: str, snapshot_id: str) -> None:
-    try:
-        _refresh_active_jobs_for(owner_id, dataset_id, snapshot_id)
-        _promote_queued_jobs_for(owner_id, dataset_id, snapshot_id)
-    except Exception as exc:
-        logger.warning("sync_jobs_for(%s) failed: %s", owner_id, exc)
+        raise

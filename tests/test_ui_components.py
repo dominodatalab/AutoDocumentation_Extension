@@ -54,7 +54,6 @@ def _mock_dependencies(monkeypatch):
         id: str
         owner_id: str
         domino_run_id: Optional[str] = None
-        branch: Optional[str] = None
         hardware_tier: Optional[str] = None
         status: str = "queued"
         domino_status: Optional[str] = None
@@ -184,7 +183,6 @@ class TestDbRecordToDataclass:
             "id": "job-1",
             "owner_id": "alice",
             "domino_run_id": "run-1",
-            "branch": "main",
             "hardware_tier": "tier-1",
             "status": "running",
             "domino_status": "Executing",
@@ -263,8 +261,8 @@ class TestValidateEnvironment:
 class TestFieldId:
     def test_prefix(self):
         ui = _import_ui()
-        assert ui._field_id("branch") == "field-branch"
         assert ui._field_id("model") == "field-model"
+        assert ui._field_id("hardware_tier") == "field-hardware_tier"
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +328,44 @@ class TestRenderDominoStatus:
         assert result is not None
 
 
+class TestValidateStudioComputeEnvironment:
+    def test_missing_both_env_vars(self, monkeypatch, _mock_dependencies):
+        monkeypatch.delenv("DOMINO_ENVIRONMENT_ID", raising=False)
+        monkeypatch.delenv("DOMINO_ENVIRONMENT_REVISION_ID", raising=False)
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(MagicMock())
+        assert len(out) == 2
+        assert "administrator" in " ".join(out).lower()
+
+    def test_revision_not_accessible(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "need-this")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.return_value = [{"id": "other-rev"}]
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(mock_c)
+        mock_c.list_environment_revisions.assert_called_once_with("e1")
+        assert len(out) == 2
+
+    def test_api_raises_returns_friendly(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "r1")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.side_effect = RuntimeError("network")
+        ui = _import_ui()
+        out = ui.validate_studio_domino_compute_environment(mock_c)
+        assert len(out) == 2
+        assert "try again" in " ".join(out).lower()
+
+    def test_ok_empty_list(self, monkeypatch, _mock_dependencies):
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "e1")
+        monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "r1")
+        mock_c = MagicMock()
+        mock_c.list_environment_revisions.return_value = [{"id": "r1", "number": 1}]
+        ui = _import_ui()
+        assert ui.validate_studio_domino_compute_environment(mock_c) == []
+
+
 # ---------------------------------------------------------------------------
 # _render_job_history_table
 # ---------------------------------------------------------------------------
@@ -337,16 +373,35 @@ class TestStudioPageInsightBanner:
     def test_insight_card_is_single_full_width_banner_before_grid(self):
         root = Path(__file__).resolve().parent.parent
         src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
         assert src.count('cls="insight-card"') == 1
         assert "studio-page-insight" in src
         assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
-
-    def test_version_and_logs_footer_after_main_form_not_in_header(self):
-        root = Path(__file__).resolve().parent.parent
-        src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        assert "studio-footer-meta" in src
-        assert 'cls="header-meta"' not in src
-        assert src.index('id="main-form"') < src.index("studio-footer-meta")
+        assert 'id="studio-errors-panel"' in src
+        assert "access_log=False" in src
+        assert src.index('cls="insight-card"') < src.index('cls="studio-page-insight"')
+        assert "spec-validation-result" not in src
+        assert "function setStudioErrorSlot" in scripts
+        assert "_studioErrorSlotOrder" in scripts
+        assert "['computeEnv', 'generate']" in scripts
+        assert "studio-errors-panel--visible" in scripts
+        assert ".studio-errors-panel" in styles
+        assert 'field-environment_id' not in src
+        assert "validate_studio_domino_compute_environment" in src
+        assert "studio-compute-env-json" in src
+        assert "reloadEnvironmentRevisions" not in scripts
+        assert "computeEnv" in scripts
+        assert "studio-error-dismiss" in scripts
+        assert "studio-error-dismiss-row" in scripts
+        assert "studio-error-toast-title" in scripts
+        assert "function setStudioUploadBanner" in scripts
+        assert "studio-success-toast" in scripts
+        assert "12000" in scripts
+        assert "60000" in scripts
+        assert "label.primary" in styles and "a.primary" in styles
+        assert "studio-error-dismiss-row" in styles
+        assert "studio-success-toast" in styles
 
 
 class TestInfoTooltipLayer:
@@ -361,6 +416,32 @@ class TestInfoTooltipLayer:
         assert "closest('.info-tooltip')" in scripts
 
 
+class TestStudioTwoStepLayout:
+    def test_configure_and_history_two_columns_two_steps(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert "step-badge" not in web
+        assert "Step 3" not in web
+        assert 'H2("Documentation specification")' not in web
+        assert web.count('cls="bp-card"') == 1
+        assert "configure_card_children.extend(run_card_children)" in web
+        assert ".studio-col-main > .bp-card:first-of-type" not in styles
+        assert 'cls="studio-col-main"' in web
+        assert "studio-col-left" not in web
+        assert "studio-col-mid" not in web
+        assert web.index('cls="target-project-row"') < web.index("Spec file selection")
+        assert 'H4("Spec file selection"' in web
+        assert "studio-spec-block" in web
+        assert "spec-hint-download-row" in web
+        assert "Hr(cls=" not in web
+        assert ".studio-spec-block" in styles
+        assert ".spec-section-heading" in styles
+        assert ".spec-hint-download-row" in styles
+        assert ".studio-col-left" not in styles
+        assert ".studio-col-mid" not in styles
+
+
 class TestSpecFileBrowserUi:
     def test_spec_list_fixed_height_and_parent_nav_in_scripts(self):
         root = Path(__file__).resolve().parent.parent
@@ -370,6 +451,8 @@ class TestSpecFileBrowserUi:
         assert "calc(5 * var(--spec-file-row))" in styles
         assert "specParentPath" in scripts
         assert "spec-file-parent" in scripts
+        assert "fa-folder-open spec-file-icon" in scripts
+        assert "fa-file-lines spec-file-icon" in scripts
         assert "data-parent" in scripts
         assert ".spec-file-list > .spec-file-item:last-of-type" in styles
         assert "spec-file-list-pending" in scripts
@@ -377,7 +460,36 @@ class TestSpecFileBrowserUi:
         assert 'id="spec-file-list"' in web
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
-        assert 'Summary("Advanced settings"' in web
+        assert "runJobJsonPayloadFromMainForm" in scripts
+        assert "<th>Document</th>" in scripts
+        assert "renderJobHistory(data.jobs || [], data.document_url" in scripts
+        assert "(documentUrl && statusKey === 'succeeded')" in scripts
+        assert "api/detect-language" not in scripts
+        assert "field-language" not in scripts
+        assert "field-environment_id" not in web
+        assert "environment-revision-slot" not in web
+        assert 'id="studio-advanced-modal"' in web
+        assert "studio-modal-overlay" in web
+        assert "openAdvancedModal" in scripts
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web
-        assert 'id="field-model", type="text", value=""' in web
+        assert 'id="field-model"' in web
+        assert "DEFAULT_OPENAI_MODEL" in web
+        assert 'id="spec-upload-trigger"' in web
+        assert 'id="spec-machine-upload"' in web
+        assert "generate-actions" in web
+        assert web.index('id="spec-file-list"') < web.index("spec-upload-trigger")
+        assert web.index("spec-upload-trigger") < web.index('id="field-spec_path"')
+        assert "#generate-btn" in styles
+
+    def test_spec_dataset_select_excludes_autodoc_name(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "__AUTODOC_DATASET_NAME__" in scripts_src
+        assert "_SPEC_BROWSER_EXCLUDE_DATASET_NAME" in scripts_src
+        assert "if (datasets[di].name !== ex) specUi.push(datasets[di]);" in scripts_src
+        from dataset_manager import AUTODOC_DATASET_NAME
+        from studio.scripts import MAIN_DOM_JS
+
+        assert "__AUTODOC_DATASET_NAME__" not in MAIN_DOM_JS
+        assert f'_SPEC_BROWSER_EXCLUDE_DATASET_NAME = "{AUTODOC_DATASET_NAME}"' in MAIN_DOM_JS

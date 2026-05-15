@@ -138,6 +138,3 @@ domino-apps-guidelines/
 
 # FastHTML session key (generated at runtime)
 auto_model_docs/.sesskey
-
-# Vendored JS dependencies (downloaded at runtime by app_studio.sh)
-auto_model_docs/static/vendor/*.js

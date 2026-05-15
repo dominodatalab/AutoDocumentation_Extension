@@ -8,6 +8,7 @@ Two-step wizard:
 
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 from typing import Optional
@@ -22,24 +23,29 @@ configure_auth(user_auth)
 
 _LOGO_SVG = (pathlib.Path(__file__).parent.parent / "domino-logo.svg").read_text()
 
+from default_consts import DEFAULT_OPENAI_MODEL
 
 from studio.state import (
     _STARTUP_WARNINGS,
+    _resolve_request_project_id,
     domino_client,
-    log_buffer,
-    logger,
 )
 from studio.styles import STUDIO_CSS
 from studio.scripts import MAIN_DOM_JS
 from studio.ui_components import (
     _render_warnings_banner,
     _validate_environment,
+    validate_studio_domino_compute_environment,
+)
+from studio.font_assets import (
+    STUDIO_FONT_BASE_PATCH_JS,
+    fontawesome_faces_css,
+    register_font_assets,
 )
 from studio.routes_api import register_api_routes
-from studio.routes_spec import register_spec_routes
 from studio.routes_job import register_job_routes
 
-from temporary_versioning import get_deploy_version_label
+from domino_job_store import ensure_database
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +65,8 @@ _static_dir = pathlib.Path(__file__).parent / "static"
 _static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
+ensure_database()
+
 
 # ---------------------------------------------------------------------------
 # Helper: build the advanced-options panel (collapsed <details>)
@@ -69,7 +77,6 @@ def _build_advanced_options(tier_options):
     _default_anthropic_base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 
     return Div(
-            # ── Hardware tier ───────────────────────────────────────────
             Div(
                 Div(
                     Label("Hardware tier", for_="field-hardware_tier"),
@@ -80,7 +87,6 @@ def _build_advanced_options(tier_options):
                 cls="field",
             ),
 
-            # ── Provider ────────────────────────────────────────────────
             Div(
                 Label("Provider", for_="field-provider"),
                 Select(
@@ -93,7 +99,6 @@ def _build_advanced_options(tier_options):
                 cls="field",
             ),
 
-            # ── Provider API base URL ────────────────────────────────────
             Div(
                 Div(
                     Label("Provider API base URL", for_="field-provider_base_url"),
@@ -117,14 +122,19 @@ def _build_advanced_options(tier_options):
                 id="provider-base-url-field",
             ),
 
-            # ── Model ────────────────────────────────────────────────────
             Div(
                 Div(
                     Label("Model", for_="field-model"),
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Model name. Leave blank for the provider default."),
                     cls="label-row",
                 ),
-                Input(name="model", id="field-model", type="text", value="", placeholder=""),
+                Input(
+                    name="model",
+                    id="field-model",
+                    type="text",
+                    value=DEFAULT_OPENAI_MODEL,
+                    placeholder=DEFAULT_OPENAI_MODEL,
+                ),
                 cls="field",
                 id="model-name-field",
             ),
@@ -143,19 +153,23 @@ async def index(req: Request):
     scheme = req.headers.get("x-forwarded-proto", "https")
     domino_client.set_ui_host(host, scheme)
 
-    project_id = req.query_params.get("projectId") or None
+    project_id = _resolve_request_project_id(req)
     if not project_id:
         return (
             Title("ModelDoc — Domino"),
+            Style(fontawesome_faces_css()),
+            Script(STUDIO_FONT_BASE_PATCH_JS),
             Style(STUDIO_CSS),
             Script(r"""
                 (function() {
                     var pid = null;
+
                     if (window.location.hash) {
                         var h = window.location.hash.substring(1);
                         if (h.charAt(0) === '?') h = h.substring(1);
                         pid = new URLSearchParams(h).get('projectId');
                     }
+
                     if (!pid && window.parent !== window) {
                         try {
                             var pLoc = window.parent.location;
@@ -165,17 +179,22 @@ async def index(req: Request):
                                 if (ph.charAt(0) === '?') ph = ph.substring(1);
                                 pid = new URLSearchParams(ph).get('projectId');
                             }
+                        } catch(e) { /* cross-origin */ }
+                    }
+
+                    if (!pid && document.referrer) {
+                        try {
+                            pid = new URL(document.referrer).searchParams.get('projectId');
                         } catch(e) {}
                     }
-                    if (!pid && document.referrer) {
-                        try { pid = new URL(document.referrer).searchParams.get('projectId'); } catch(e) {}
-                    }
+
                     if (pid) {
                         var url = new URL(window.location.href);
                         url.searchParams.set('projectId', pid);
                         window.location.replace(url.toString());
                         return;
                     }
+
                     var allowedOrigin = window.location.origin;
                     window.addEventListener('message', function(e) {
                         if (e.origin !== allowedOrigin) return;
@@ -185,6 +204,7 @@ async def index(req: Request):
                             window.location.replace(url.toString());
                         }
                     });
+
                     setTimeout(function() {
                         var el = document.getElementById('project-id-error');
                         if (el) el.style.display = '';
@@ -240,35 +260,29 @@ async def index(req: Request):
 
     advanced_opts = _build_advanced_options(tier_options)
 
-    # ── Build the page ────────────────────────────────────────────────
-
     _is_mock = bool(os.environ.get("AUTODOC_MOCK_MODE"))
+
+    compute_env_errors = validate_studio_domino_compute_environment(domino_client)
 
     return (
         Title("ModelDoc — Domino"),
-        # Header
+        Style(fontawesome_faces_css()),
+        Script(STUDIO_FONT_BASE_PATCH_JS),
         Div(
             Div(NotStr(_LOGO_SVG), cls="domino-header-inner"),
-            Span("local · mock data", cls="header-mock-badge") if _is_mock else None,
+            Span("local \u00b7 mock data", cls="header-mock-badge") if _is_mock else None,
             cls="domino-header",
         ),
-        # Page (full-height column below the Domino header)
         Div(
             *_render_warnings_banner(_STARTUP_WARNINGS),
-            # (wizard-step1 fills remaining height; no page padding needed)
 
-            # ── Main form (wraps both wizard steps) ─────────────────────
             Form(
-                # Always-present hidden fields
                 Input(type="hidden", name="detected_language", id="field-detected-language", value="python"),
                 Input(name="spec_path", id="field-spec_path", type="hidden", value=""),
 
-                # ── STEP 1: Template selection ──────────────────────────
                 Div(
                     Div(
-                        # LEFT: gallery
                         Div(
-                            # Page title row (moved inside gallery column)
                             Div(
                                 Span("ModelDoc", cls="page-title-text"),
                                 Span(
@@ -278,7 +292,6 @@ async def index(req: Request):
                                 cls="page-title-row",
                             ),
 
-                            # Gallery header row: title + Browse/Upload actions
                             Div(
                                 Div(
                                     H2("Choose a template", cls="wizard-col-title"),
@@ -315,10 +328,8 @@ async def index(req: Request):
                                 cls="gallery-header-row",
                             ),
 
-                            # Uploaded spec confirmation (hidden until a file is chosen)
                             Div(id="spec-confirm-bar", cls="spec-confirm-bar", style="display:none"),
 
-                            # Template cards — JS will render these via the API
                             Div(
                                 Div(
                                     Span("description", cls="material-symbols-outlined gallery-loading-icon"),
@@ -329,7 +340,6 @@ async def index(req: Request):
                                 cls="template-gallery",
                             ),
 
-                            # Filters accordion (below template cards)
                             Details(
                                 Summary(
                                     Span("filter_list", cls="material-symbols-outlined", style="font-size:16px"),
@@ -337,7 +347,6 @@ async def index(req: Request):
                                     cls="adv-opts-accordion-summary",
                                 ),
                                 Div(
-                                    # Model names
                                     Div(
                                         Label(
                                             "Model names",
@@ -354,7 +363,6 @@ async def index(req: Request):
                                         ),
                                         cls="filter-field",
                                     ),
-                                    # Experiment names
                                     Div(
                                         Label(
                                             "Experiment names",
@@ -371,7 +379,6 @@ async def index(req: Request):
                                         ),
                                         cls="filter-field",
                                     ),
-                                    # Latest version only
                                     Label(
                                         Input(
                                             type="checkbox",
@@ -391,10 +398,8 @@ async def index(req: Request):
                             cls="wizard-col-gallery",
                         ),
 
-                        # RIGHT: preview panel (full height, sticky)
                         Div(
                             Div(
-                                # Preview panel header
                                 Div(
                                     Span(
                                         Span("Document outline", cls="preview-panel-label"),
@@ -403,7 +408,6 @@ async def index(req: Request):
                                     ),
                                     cls="preview-panel-header",
                                 ),
-                                # Template preview content
                                 Div(
                                     Div(
                                         Span("description", cls="material-symbols-outlined preview-empty-icon"),
@@ -421,7 +425,6 @@ async def index(req: Request):
                         cls="wizard-layout",
                     ),
 
-                    # ── Footer: Advanced options (left) + Generate (right) ──
                     Div(
                         Button(
                             Span("tune", cls="material-symbols-outlined", style="font-size:14px"),
@@ -447,92 +450,90 @@ async def index(req: Request):
                     id="wizard-step1",
                 ),
 
-                # ── Advanced options modal ────────────────────────────────
                 Div(
                     Div(
-                        Div(
-                            Span(
-                                "Advanced options",
-                                cls="modal-title",
-                            ),
-                            Button(
-                                Span("close", cls="material-symbols-outlined"),
-                                type="button",
-                                id="adv-opts-close-btn",
-                                cls="modal-close-btn",
-                                aria_label="Close",
-                            ),
-                            cls="modal-header",
+                        Span(
+                            "Advanced options",
+                            cls="modal-title",
                         ),
-                        Div(
-                            advanced_opts,
-                            cls="modal-body",
+                        Button(
+                            Span("close", cls="material-symbols-outlined"),
+                            type="button",
+                            id="adv-opts-close-btn",
+                            cls="modal-close-btn",
+                            aria_label="Close",
                         ),
-                        Div(
-                            Button(
-                                "Done",
-                                type="button",
-                                id="adv-opts-done-btn",
-                                cls="primary",
-                            ),
-                            cls="modal-footer",
-                        ),
-                        cls="adv-opts-modal",
+                        cls="modal-header",
                     ),
-                    id="adv-opts-overlay",
-                    cls="modal-overlay",
+                    Div(
+                        advanced_opts,
+                        cls="modal-body",
+                    ),
+                    Div(
+                        Button(
+                            "Done",
+                            type="button",
+                            id="adv-opts-done-btn",
+                            cls="primary",
+                        ),
+                        cls="modal-footer",
+                    ),
+                    cls="adv-opts-modal",
                 ),
+                id="adv-opts-overlay",
+                cls="modal-overlay",
+            ),
 
-                # ── Browse-spec modal ────────────────────────────────────
+            Div(
                 Div(
                     Div(
-                        Div(
-                            Span("Browse spec files", cls="modal-title"),
-                            Button(
-                                Span("close", cls="material-symbols-outlined"),
-                                type="button",
-                                cls="modal-close-btn",
-                                aria_label="Close",
-                                onclick="closeBrowseModal()",
-                            ),
-                            cls="modal-header",
+                        Span("Browse spec files", cls="modal-title"),
+                        Button(
+                            Span("close", cls="material-symbols-outlined"),
+                            type="button",
+                            cls="modal-close-btn",
+                            aria_label="Close",
+                            onclick="closeBrowseModal()",
                         ),
-                        Div(
-                            # Breadcrumb
-                            Div(
-                                A("root", href="#", cls="browse-crumb-link",
-                                  onclick="event.preventDefault()"),
-                                cls="browse-breadcrumb-bar",
-                            ),
-                            # File tree list — populated by JS via /api/dataset-files
-                            Div(
-                                Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
-                                Span("Select a dataset to browse its files", cls="spec-file-list-empty"),
-                                cls="spec-file-empty",
-                                id="browse-file-list",
-                            ),
-                            cls="modal-body browse-modal-body",
-                        ),
-                        Div(
-                            Span("", id="browse-selected-label", cls="browse-selected-label"),
-                            Button(
-                                "Select",
-                                type="button",
-                                id="browse-confirm-btn",
-                                cls="primary",
-                                onclick="confirmBrowseSelection()",
-                                disabled=True,
-                            ),
-                            cls="browse-footer",
-                        ),
-                        cls="adv-opts-modal browse-modal",
+                        cls="modal-header",
                     ),
-                    id="browse-modal-overlay",
-                    cls="modal-overlay",
-                    onclick="if(event.target===this)closeBrowseModal()",
+                    Div(
+                        Div(
+                            Label("Dataset", Span(" *", cls="required-star")),
+                            Select(
+                                Option("Loading datasets...", value="", disabled=True, selected=True),
+                                id="browse-dataset-select",
+                            ),
+                            cls="field",
+                        ),
+                        Div(id="browse-breadcrumb", cls="spec-breadcrumb"),
+                        Div(
+                            Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
+                            Span("Select a dataset to browse its files", cls="spec-file-list-empty"),
+                            cls="spec-file-empty",
+                            id="browse-file-list",
+                        ),
+                        cls="modal-body browse-modal-body",
+                    ),
+                    Div(
+                        Span("", id="browse-selected-label", cls="browse-selected-label"),
+                        Button(
+                            "Select",
+                            type="button",
+                            id="browse-confirm-btn",
+                            cls="primary",
+                            onclick="confirmBrowseSelection()",
+                            disabled=True,
+                        ),
+                        cls="browse-footer",
+                    ),
+                    cls="adv-opts-modal browse-modal",
                 ),
+                id="browse-modal-overlay",
+                cls="modal-overlay",
+                onclick="if(event.target===this)closeBrowseModal()",
+            ),
 
-                # ── STEP 2: Results ─────────────────────────────────────
                 Div(
                     Div(
                         Button(
@@ -546,13 +547,11 @@ async def index(req: Request):
                             project_display_name or project_id,
                             cls="project-context-chip",
                         ) if (project_display_name or project_id) else None,
-                        # Layout switcher + history button — populated by JS
                         Div(id="layout-switcher-slot", cls="layout-switcher-slot"),
                         Div(id="history-btn-slot", cls="history-btn-slot"),
                         cls="results-nav-row",
                     ),
 
-                    # Results panel (populated by JS after submission)
                     Div(
                         Div(
                             Span("rocket_launch", cls="material-symbols-outlined results-submitting-icon"),
@@ -563,7 +562,6 @@ async def index(req: Request):
                         cls="results-panel",
                     ),
 
-                    # Layout A: History accordion (hidden in Layout B by JS)
                     Details(
                         Summary("History", cls="advanced-section-summary"),
                         Div(
@@ -584,7 +582,6 @@ async def index(req: Request):
                     style="display:none",
                 ),
 
-                # Layout B: History drawer (always in DOM, shown/hidden by JS)
                 Div(id="history-drawer-overlay", cls="history-drawer-overlay"),
                 Div(
                     Div(
@@ -617,6 +614,12 @@ async def index(req: Request):
                 enctype="multipart/form-data",
             ),
 
+            Script(
+                json.dumps(compute_env_errors),
+                id="studio-compute-env-json",
+                type="application/json",
+            ) if compute_env_errors else None,
+
             cls="page page--wizard",
         ),
     )
@@ -630,17 +633,9 @@ if os.environ.get("AUTODOC_MOCK_MODE"):
     from mock_routes import register_mock_routes
     register_mock_routes(rt)
 
+register_font_assets(rt)
 register_api_routes(rt)
-register_spec_routes(rt)
 register_job_routes(rt)
-
-
-@rt("/logs")
-def logs():
-    from starlette.responses import PlainTextResponse
-    lines = log_buffer.snapshot()
-    body = "\n".join(lines) if lines else "(no log records buffered yet)"
-    return PlainTextResponse(body)
 
 
 # ---------------------------------------------------------------------------
@@ -675,7 +670,7 @@ app.add_middleware(
 @app.middleware("http")
 async def capture_auth_context(request, call_next):
     from studio.state import auth_context as _auth_context
-    import threading as _threading
+
     forwarded = request.headers.get("authorization")
     _auth_context.set_request_auth_header(forwarded)
     try:
@@ -702,4 +697,4 @@ async def _on_startup():
 # Serve
 # ---------------------------------------------------------------------------
 
-serve(host=HOST, port=PORT)
+serve(host=HOST, port=PORT, access_log=False)
