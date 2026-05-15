@@ -122,19 +122,6 @@ a:hover { color: var(--primary-container); }
     gap: 0.75rem;
 }
 
-.header-mock-badge {
-    font-family: var(--font-body);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    padding: 2px 8px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
 .domino-header-inner svg {
     height: 32px;
     width: auto;
@@ -2417,6 +2404,23 @@ select.hw-tier-select option {
 .preview-empty-text {
     font-size: 13px;
     color: var(--outline);
+}
+.preview-yaml-pre {
+    align-self: stretch;
+    text-align: left;
+    width: 100%;
+    max-height: 100%;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0.75rem;
+    background: var(--surface-container-low);
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--on-surface);
 }
 .preview-header {
     margin-bottom: 0.875rem;

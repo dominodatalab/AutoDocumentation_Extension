@@ -29,6 +29,8 @@ from studio.state import (
     _STARTUP_WARNINGS,
     _resolve_request_project_id,
     domino_client,
+    domino_datasets,
+    EnvironmentWarning,
 )
 from studio.styles import STUDIO_CSS
 from studio.scripts import MAIN_DOM_JS
@@ -57,7 +59,6 @@ app, rt = fast_app(
     hdrs=(
         Style(STUDIO_CSS),
         Script(MAIN_DOM_JS),
-        Script(src="static/vendor/mammoth.browser.min.js"),
     )
 )
 
@@ -258,9 +259,25 @@ async def index(req: Request):
 
     advanced_opts = _build_advanced_options(tier_options)
 
-    _is_mock = bool(os.environ.get("AUTODOC_MOCK_MODE"))
-
     compute_env_errors = validate_studio_domino_compute_environment(domino_client)
+
+    page_warnings = list(_STARTUP_WARNINGS)
+    if project_id:
+        try:
+            ensured = domino_datasets.ensure_dataset(project_id)
+            ds_id = (ensured.get("id") or "").strip()
+            if ds_id:
+                import spec_template_sync
+
+                spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
+        except Exception as exc:
+            page_warnings.append(
+                EnvironmentWarning(
+                    level="error",
+                    message="Could not create or access the autodoc dataset for this project.",
+                    action=str(exc) or "Check permissions and try again.",
+                )
+            )
 
     return (
         Title("ModelDoc — Domino"),
@@ -269,12 +286,11 @@ async def index(req: Request):
         # Header
         Div(
             Div(NotStr(_LOGO_SVG), cls="domino-header-inner"),
-            Span("local \u00b7 mock data", cls="header-mock-badge") if _is_mock else None,
             cls="domino-header",
         ),
         # Page (full-height column below the Domino header)
         Div(
-            *_render_warnings_banner(_STARTUP_WARNINGS),
+            *_render_warnings_banner(page_warnings),
 
             # Main form (wraps both wizard steps)
             Form(
@@ -414,6 +430,7 @@ async def index(req: Request):
                                         Span("description", cls="material-symbols-outlined preview-empty-icon"),
                                         Span("Select a template to preview its document outline", cls="preview-empty-text"),
                                         cls="preview-empty-state",
+                                        id="template-preview-empty",
                                     ),
                                     id="template-preview-panel",
                                     cls="template-preview-panel",
@@ -509,10 +526,13 @@ async def index(req: Request):
                             ),
                             Div(id="browse-breadcrumb", cls="spec-breadcrumb"),
                             Div(
-                                Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
-                                Span("Select a dataset to browse its files", cls="spec-file-list-empty"),
-                                cls="spec-file-empty",
-                                id="browse-file-list",
+                                Div(
+                                    Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
+                                    Span("Select a dataset to browse its files", cls="spec-file-list-empty"),
+                                    cls="spec-file-empty",
+                                ),
+                                id="spec-file-list",
+                                cls="spec-file-list",
                             ),
                             cls="modal-body browse-modal-body",
                         ),
@@ -628,10 +648,6 @@ async def index(req: Request):
 # ---------------------------------------------------------------------------
 # Register route modules
 # ---------------------------------------------------------------------------
-
-if os.environ.get("AUTODOC_MOCK_MODE"):
-    from mock_routes import register_mock_routes
-    register_mock_routes(rt)
 
 register_font_assets(rt)
 register_api_routes(rt)

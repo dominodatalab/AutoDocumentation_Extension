@@ -170,19 +170,33 @@ def ensure_dataset(
     name: str = AUTODOC_SPECS_DATASET,
     description: str = AUTODOC_SPECS_DESCRIPTION,
 ) -> dict[str, Any]:
-    """Find or create the named dataset.  Create-first pattern."""
+    """Return the named dataset if it exists; otherwise create it."""
+    datasets = list_datasets(project_id)
+    for row in datasets:
+        if row["name"] == name:
+            return row
+
     try:
-        created = _create_dataset(project_id, name, description)
-        return created
+        return _create_dataset(project_id, name, description)
     except Exception:
-        logger.debug("Create failed for '%s', looking up existing", name, exc_info=True)
+        logger.debug("Create failed for '%s', re-listing datasets", name, exc_info=True)
 
     datasets = list_datasets(project_id)
-    for ds in datasets:
-        if ds["name"] == name:
-            return ds
+    for row in datasets:
+        if row["name"] == name:
+            return row
 
     raise RuntimeError(f"Failed to create or find dataset '{name}' in project {project_id}")
+
+
+def get_existing_autodoc_dataset(
+    project_id: str,
+    name: str = AUTODOC_SPECS_DATASET,
+) -> Optional[dict[str, Any]]:
+    for row in list_datasets(project_id):
+        if row.get("name") == name:
+            return row
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +230,7 @@ def resolve_dataset_mount_path(ensured: dict[str, Any]) -> str:
         return path
     ds_id = (ensured.get("id") or "").strip()
     if not ds_id:
-        raise RuntimeError("Cannot resolve dataset mount path: missing dataset id from ensure_dataset")
+        raise RuntimeError("Cannot resolve dataset mount path: missing dataset id")
     detail = get_dataset_detail(ds_id)
     path = _dataset_path_from_detail_payload(detail)
     if not path:

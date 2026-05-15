@@ -513,6 +513,7 @@ MAIN_DOM_JS = r"""
             fetch(url)
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(templates) {
+                    if (!Array.isArray(templates)) throw new Error('bad response');
                     _builtinTemplates = templates;
                     renderTemplateGallery(templates);
                 })
@@ -532,6 +533,39 @@ MAIN_DOM_JS = r"""
                 .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        var _previewEmptyDefaultHtml = null;
+        function _rememberPreviewDefaultHtml() {
+            var el = document.getElementById('template-preview-empty');
+            if (el && _previewEmptyDefaultHtml === null) {
+                _previewEmptyDefaultHtml = el.innerHTML;
+            }
+        }
+        function resetTemplateYamlPreview() {
+            var el = document.getElementById('template-preview-empty');
+            if (el && _previewEmptyDefaultHtml !== null) {
+                el.innerHTML = _previewEmptyDefaultHtml;
+            }
+        }
+        function loadYamlTemplatePreview(tpl) {
+            var el = document.getElementById('template-preview-empty');
+            if (!el) return;
+            el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
+                + '<span class="preview-empty-text">Loading\u2026</span>';
+            var pid = resolvedProjectId();
+            var url = _adUrl('api/built-in-template/' + encodeURIComponent(tpl.template_file || ''));
+            if (pid) url += '?projectId=' + encodeURIComponent(pid);
+            fetch(url)
+                .then(_checkResp)
+                .then(function(r) { return r.text(); })
+                .then(function(text) {
+                    el.innerHTML = '<pre class="preview-yaml-pre">' + _esc(text) + '</pre>';
+                })
+                .catch(function() {
+                    el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">error</span>'
+                        + '<span class="preview-empty-text">Could not load template</span>';
+                });
+        }
+
         function renderTemplateGallery(templates) {
             var gallery = document.getElementById('template-gallery');
             if (!gallery) return;
@@ -542,7 +576,7 @@ MAIN_DOM_JS = r"""
             var html = '';
             for (var i = 0; i < templates.length; i++) {
                 var t = templates[i];
-                var sectionCount = (t.sections || []).length;
+                var fn = t.template_file || '';
                 html += '<div class="template-card" data-slug="' + _esc(t.slug) + '" tabindex="0" role="button" aria-pressed="false">'
                     + '<div class="template-card-header">'
                     + '<span class="template-card-name">' + _esc(t.name) + '</span>'
@@ -550,7 +584,7 @@ MAIN_DOM_JS = r"""
                     + '</div>'
                     + '<p class="template-card-desc">' + _esc(t.description) + '</p>'
                     + '<div class="template-card-meta">'
-                    + '<span class="template-card-badge">' + sectionCount + ' sections</span>'
+                    + '<span class="template-card-badge">' + _esc(fn) + '</span>'
                     + '</div>'
                     + '</div>';
             }
@@ -585,40 +619,13 @@ MAIN_DOM_JS = r"""
                 cards[i].setAttribute('aria-pressed', isSelected ? 'true' : 'false');
             }
 
-            // Render preview
             var tpl = null;
             for (var j = 0; j < _builtinTemplates.length; j++) {
                 if (_builtinTemplates[j].slug === slug) { tpl = _builtinTemplates[j]; break; }
             }
-            if (tpl) renderTemplatePreview(tpl);
+            if (tpl) loadYamlTemplatePreview(tpl);
 
             updateGenerateButton();
-        }
-
-        function renderTemplatePreview(tpl) {
-            var panel = document.getElementById('template-preview-panel');
-            if (!panel) return;
-            var sections = tpl.sections || [];
-            var perModel = tpl.per_model_sections || [];
-            var perModelSet = {};
-            for (var k = 0; k < perModel.length; k++) perModelSet[perModel[k]] = true;
-
-            var sectionsHtml = '';
-            for (var i = 0; i < sections.length; i++) {
-                var badge = perModelSet[sections[i]]
-                    ? '<span class="preview-section-badge">once per model</span>' : '';
-                sectionsHtml += '<div class="preview-section-item">'
-                    + '<span class="preview-section-num">' + (i + 1) + '</span>'
-                    + '<span class="preview-section-name">' + _esc(sections[i]) + '</span>'
-                    + badge
-                    + '</div>';
-            }
-
-            panel.innerHTML = '<div class="preview-header">'
-                + '<div class="preview-title">' + _esc(tpl.name) + '</div>'
-                + '<div class="preview-description">' + _esc(tpl.description) + '</div>'
-                + '</div>'
-                + '<div class="preview-sections">' + sectionsHtml + '</div>';
         }
 
         // ── Dataset auto-resolution ────────────────────────────────────
@@ -783,6 +790,7 @@ MAIN_DOM_JS = r"""
             if (specPathField) specPathField.value = abs;
             _selectedTemplateSlug = null;
             _customSpecSelected = true;
+            resetTemplateYamlPreview();
             // Deselect template cards
             var cards = document.querySelectorAll('.template-card');
             for (var i = 0; i < cards.length; i++) {
@@ -842,6 +850,7 @@ MAIN_DOM_JS = r"""
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; }
                         selectCustomSpecFile(result.path);
                         browseFiles(_specCurrentPath);
+                        loadBuiltinTemplates();
                     })
                     .catch(function(err) {
                         if (specUploadStatus) { specUploadStatus.textContent = 'Upload failed: ' + err.message; }
@@ -955,13 +964,6 @@ MAIN_DOM_JS = r"""
                     + '</div>'
                     + (autodocLink ? autodocLink : '')
                     + '</div>';
-                // Inline preview (always spacious layout)
-                html += '<div class="doc-preview-inline">'
-                    + '<div class="doc-preview-inline-header"><span class="material-symbols-outlined">description</span>Document preview</div>'
-                    + '<div id="doc-preview-content" class="doc-preview-content">'
-                    + '<div class="doc-preview-loading"><span class="material-symbols-outlined rotating-icon">autorenew</span> Loading preview\u2026</div>'
-                    + '</div>'
-                    + '</div>';
                 html += '</div>';
             } else if (status === 'failed') {
                 html += '<div class="results-failed">';
@@ -1021,46 +1023,6 @@ MAIN_DOM_JS = r"""
         }
 
 
-        // ═══════════════════════════════════════════════════════════════
-        // DOC PREVIEW (mammoth.js)
-        // ═══════════════════════════════════════════════════════════════
-
-        function _fetchAndRenderPreview(latestJob, previewContent) {
-            var dsId = latestJob.dataset_id || _specCurrentDatasetId;
-            var snapId = _specCurrentSnapshotId;
-            if (!dsId || !snapId) {
-                previewContent.innerHTML = '<p class="doc-preview-error">Dataset not available for preview.</p>';
-                return;
-            }
-            var pid = resolvedProjectId();
-            var qs = '?datasetId=' + encodeURIComponent(dsId)
-                + '&snapshotId=' + encodeURIComponent(snapId)
-                + (pid ? '&projectId=' + encodeURIComponent(pid) : '');
-            fetch(_adUrl('api/doc-content') + qs)
-                .then(function(r) {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    return r.arrayBuffer();
-                })
-                .then(function(buf) {
-                    if (typeof mammoth === 'undefined') {
-                        previewContent.innerHTML = '<p class="doc-preview-error">Preview library not loaded.</p>';
-                        return;
-                    }
-                    return mammoth.convertToHtml({ arrayBuffer: buf }).then(function(result) {
-                        previewContent.innerHTML = '<div class="doc-preview-body">' + result.value + '</div>';
-                    });
-                })
-                .catch(function(err) {
-                    previewContent.innerHTML = '<p class="doc-preview-error">Could not load preview: ' + _esc(String(err)) + '</p>';
-                });
-        }
-
-        function _attachDocPreview(latestJob) {
-            var previewContent = document.getElementById('doc-preview-content');
-            if (!previewContent) return;
-            _fetchAndRenderPreview(latestJob, previewContent);
-        }
-
         function renderJobHistory(jobs) {
             // Write to the correct container depending on layout mode
             var elA = document.getElementById('job-history-content');        // accordion (Layout A)
@@ -1111,9 +1073,6 @@ MAIN_DOM_JS = r"""
         function onJobsUpdated(jobs) {
             renderResultsPanel(jobs);
             renderJobHistory(jobs);
-            if (jobs && jobs.length && jobs[0].status === 'succeeded') {
-                _attachDocPreview(jobs[0]);
-            }
         }
 
         function fetchJobHistory() {
@@ -1174,15 +1133,26 @@ MAIN_DOM_JS = r"""
                     : ('?datasetId=' + encodeURIComponent(_specCurrentDatasetId)
                     + '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
 
-                var fd = new FormData();
-                fd.append('spec_filename', tpl.slug + '.yaml');
-                fd.append('spec_content', tpl.yaml_content);
-
-                fetch(_adUrl('save-spec') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
+                var tf = tpl.template_file || '';
+                if (!tf) {
+                    reject(new Error('Template file is missing.'));
+                    return;
+                }
+                var yurl = _adUrl('api/built-in-template/' + encodeURIComponent(tf));
+                var yqs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+                fetch(yurl + yqs)
+                    .then(_checkResp)
+                    .then(function(r) { return r.text(); })
+                    .then(function(yamlText) {
+                        var fd = new FormData();
+                        fd.append('spec_filename', tpl.slug + '.yaml');
+                        fd.append('spec_content', yamlText);
+                        return fetch(_adUrl('save-spec') + qs, { method: 'POST', body: fd });
+                    })
+                    .then(_checkResp)
+                    .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.error) { reject(new Error(data.error)); return; }
-                        // data.saved is the absolute path in the dataset
                         resolve(data.saved);
                     })
                     .catch(reject);
@@ -1304,6 +1274,7 @@ MAIN_DOM_JS = r"""
         }
 
         // ── Init ───────────────────────────────────────────────────────
+        _rememberPreviewDefaultHtml();
         loadBuiltinTemplates();
         updateGenerateButton();
 
