@@ -1,0 +1,39 @@
+card_title: "Executive Summary"
+card_description: "High-level model summary written for non-technical stakeholders and leadership."
+
+title: "Model Executive Summary"
+authors: "Data Science Team"
+
+sections:
+  - Business Context & Objectives
+  - Model Overview
+  - Key Results
+  - Risk & Limitations
+  - Deployment Readiness
+
+hints:
+  "Business Context & Objectives": >
+    Describe the business problem the model solves, its intended users, and
+    the expected business impact. Keep technical details minimal. Focus on
+    why this model matters to the organization and what decision it supports.
+
+  "Model Overview": >
+    Provide a high-level description of the modeling approach suitable for
+    non-technical executives. Avoid jargon. Focus on what the model does,
+    what data it was trained on, and how it generates predictions.
+
+  "Key Results": >
+    Present the most important performance metrics in plain business language.
+    Use outcome-oriented framing (e.g., "correctly identifies 87% of at-risk
+    customers") rather than raw metric names. Include a comparison to baseline
+    or prior approach if available.
+
+  "Risk & Limitations": >
+    Clearly state known model limitations, failure modes, and associated
+    business risks in language accessible to non-technical leaders. Include
+    any fairness, compliance, or regulatory considerations.
+
+  "Deployment Readiness": >
+    State whether the model is recommended for production deployment and why.
+    Describe what monitoring is in place, who owns the model in production,
+    and the planned review or refresh cadence.

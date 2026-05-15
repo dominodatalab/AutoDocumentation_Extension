@@ -675,3 +675,14 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
         return None
     seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
     return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
+
+
+def build_dataset_url(dataset_id: str, project_id: str) -> str | None:
+    """Return the Domino UI URL for the dataset docs/ folder."""
+    if not _ui_host or not dataset_id:
+        return None
+
+    _, pname, powner = get_project_context(project_id)
+    if not powner or not pname:
+        return None
+    return f"{_ui_host}/u/{powner}/{pname}/datasets/{dataset_id}/browse?path=docs"

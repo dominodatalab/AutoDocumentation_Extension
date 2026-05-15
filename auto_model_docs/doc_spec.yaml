@@ -1,6 +1,9 @@
 # Document Specification for Auto Model Documentation
 # This YAML file defines the structure and sections of the generated document.
 
+card_title: "Standard ML Model Doc"
+card_description: "Full documentation for production ML models with MLflow experiment tracking."
+
 title: "Machine Learning Model Documentation"
 authors: "Data Science Team"
 

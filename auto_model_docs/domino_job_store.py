@@ -1,226 +1,199 @@
-"""SQLite-backed job history for Studio (WAL, under DOMINO_DATASETS_DIR / DOMINO_PROJECT_NAME)."""
+"""In-process job submission index (per app instance).
+
+Tracks which jobs were submitted by this app, with metadata needed for
+display (user, branch, spec, tier). Actual job status comes live from
+the Domino Jobs API when synced.
+
+Local queue: jobs waiting for a slot are tracked with ``domino_run_id: null``.
+Once submitted, the run id is filled in and status comes from Domino.
+"""
 
 from __future__ import annotations
 
-import logging
-import os
-import sqlite3
+import json
+import threading
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+_MAX_COMPLETED_JOBS = 50
+_COMPLETED_STATUSES = {"succeeded", "failed", "cancelled"}
 
-_ACTIVE_REFRESH_STATUSES = frozenset({"queued", "submitted", "pending", "running"})
-
-
-def _job_db_not_configured_msg() -> str | None:
-    if not (os.environ.get("DOMINO_DATASETS_DIR") or "").strip():
-        return "DOMINO_DATASETS_DIR is not set"
-    if not (os.environ.get("DOMINO_PROJECT_NAME") or "").strip():
-        return "DOMINO_PROJECT_NAME is not set"
-    return None
+_lock = threading.Lock()
+_buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
 
 
-def _db_path() -> Path | None:
-    root = (os.environ.get("DOMINO_DATASETS_DIR") or "").strip()
-    name = (os.environ.get("DOMINO_PROJECT_NAME") or "").strip()
-    if not root or not name:
+def reset_store() -> None:
+    with _lock:
+        _buckets.clear()
+
+
+def _json_safe_optional_str(val: Any) -> Optional[str]:
+    if not isinstance(val, str):
         return None
-    return Path(root) / name / ".data" / "jobs.sqlite"
+    return val
 
 
-def _connect(db_file: Path) -> sqlite3.Connection:
-    db_file.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(
-        str(db_file),
-        timeout=30.0,
-        check_same_thread=False,
-        isolation_level=None,
-    )
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    return conn
+def _json_safe_required_str(val: Any) -> str:
+    if isinstance(val, str):
+        return val
+    return str(val) if val is not None else ""
 
 
-def _ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS studio_jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner_id TEXT NOT NULL,
-            project_id TEXT NOT NULL,
-            domino_run_id TEXT NOT NULL,
-            job_url TEXT,
-            status TEXT NOT NULL,
-            branch TEXT,
-            hardware_tier TEXT,
-            spec_path TEXT,
-            submitted_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_studio_jobs_owner_project
-        ON studio_jobs(owner_id, project_id, submitted_at DESC)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_studio_jobs_run
-        ON studio_jobs(domino_run_id)
-        """
-    )
+def _bucket_key(dataset_id: str, snapshot_id: str) -> tuple[str, str]:
+    return (dataset_id, snapshot_id)
 
 
-def ensure_database() -> None:
-    db_file = _db_path()
-    if db_file is None:
-        msg = _job_db_not_configured_msg()
-        if msg:
-            logger.warning("%s; job database was not created", msg)
-        return
-    try:
-        conn = _connect(db_file)
-        try:
-            _ensure_schema(conn)
-        finally:
-            conn.close()
-        logger.info("Job history database initialized at %s", db_file)
-    except Exception:
-        logger.exception("Failed to initialize job history database at %s", db_file)
+def _prune(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    active = [j for j in jobs if j.get("status") not in _COMPLETED_STATUSES]
+    completed = [j for j in jobs if j.get("status") in _COMPLETED_STATUSES]
+
+    by_owner: dict[str, list[dict[str, Any]]] = {}
+    for j in completed:
+        by_owner.setdefault(j.get("owner_id", ""), []).append(j)
+    pruned_completed: list[dict[str, Any]] = []
+    for owner_jobs in by_owner.values():
+        owner_jobs.sort(key=lambda j: j.get("submitted_at", ""), reverse=True)
+        pruned_completed.extend(owner_jobs[:_MAX_COMPLETED_JOBS])
+
+    return active + pruned_completed
 
 
-def _domino_client():
-    import domino_client
-
-    return domino_client
-
-
-def _refresh_active_rows(conn: sqlite3.Connection, project_id: str, owner_id: str) -> None:
-    client = _domino_client()
-    cur = conn.execute(
-        """
-        SELECT id, domino_run_id, status FROM studio_jobs
-        WHERE owner_id = ? AND project_id = ?
-        """,
-        (owner_id, project_id),
-    )
-    rows = cur.fetchall()
-    for row in rows:
-        st = (row["status"] or "").strip().lower()
-        if st not in _ACTIVE_REFRESH_STATUSES:
-            continue
-        info = client.get_job_status(row["domino_run_id"])
-        local = (info.get("local_status") or "submitted").strip().lower()
-        conn.execute(
-            "UPDATE studio_jobs SET status = ? WHERE id = ?",
-            (local, row["id"]),
-        )
+def _read_index(dataset_id: str, snapshot_id: str) -> list[dict[str, Any]]:
+    with _lock:
+        raw = _buckets.get(_bucket_key(dataset_id, snapshot_id))
+        if not raw:
+            return []
+        return json.loads(json.dumps(raw))
 
 
-def record_job(
+def _write_index(dataset_id: str, snapshot_id: str, jobs: list[dict[str, Any]]) -> None:
+    jobs = _prune(jobs)
+    with _lock:
+        _buckets[_bucket_key(dataset_id, snapshot_id)] = json.loads(json.dumps(jobs))
+
+
+def _now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def create_job(
+    dataset_id: str,
+    snapshot_id: str,
     owner_id: str,
-    project_id: str,
-    *,
-    domino_run_id: str,
-    job_url: str,
-    hardware_tier: str,
-    spec_path: str,
-    status: str = "submitted",
-) -> None:
-    if not owner_id or not project_id or not domino_run_id:
+    branch: Optional[str],
+    tier: Optional[str],
+    spec_path: Optional[str],
+    environment_id: str,
+    environment_revision_id: str,
+    command: Optional[str] = None,
+    job_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    dataset_url: Optional[str] = None,
+) -> str:
+    jid = job_id or str(uuid4())
+    jobs = _read_index(dataset_id, snapshot_id)
+    jobs.append({
+        "id": _json_safe_required_str(jid),
+        "owner_id": _json_safe_required_str(owner_id),
+        "domino_run_id": None,
+        "branch": _json_safe_optional_str(branch),
+        "hardware_tier": _json_safe_optional_str(tier),
+        "status": "queued",
+        "domino_status": None,
+        "job_url": None,
+        "dataset_id": _json_safe_optional_str(dataset_id),
+        "dataset_url": _json_safe_optional_str(dataset_url),
+        "spec_path": _json_safe_optional_str(spec_path),
+        "command": _json_safe_optional_str(command),
+        "submitted_at": _now_iso(),
+        "completed_at": None,
+        "project_id": _json_safe_optional_str(project_id),
+        "environment_id": _json_safe_optional_str(environment_id),
+        "environment_revision_id": _json_safe_optional_str(environment_revision_id),
+    })
+    _write_index(dataset_id, snapshot_id, jobs)
+    return jid
+
+
+def update_job(dataset_id: str, snapshot_id: str, job_id: str, **fields: Any) -> None:
+    if not fields:
         return
-    db_file = _db_path()
-    if db_file is None:
-        msg = _job_db_not_configured_msg()
-        if msg:
-            logger.warning("%s; job history not persisted", msg)
-        return
-    submitted_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    try:
-        conn = _connect(db_file)
-        try:
-            _ensure_schema(conn)
-            conn.execute(
-                """
-                INSERT INTO studio_jobs (
-                    owner_id, project_id, domino_run_id, job_url, status,
-                    branch, hardware_tier, spec_path, submitted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    owner_id,
-                    project_id,
-                    domino_run_id,
-                    job_url or "",
-                    (status or "submitted").strip().lower(),
-                    "",
-                    hardware_tier or "",
-                    spec_path or "",
-                    submitted_at,
-                ),
-            )
-        finally:
-            conn.close()
-    except Exception:
-        logger.exception("record_job failed for project %s", project_id)
+    jobs = _read_index(dataset_id, snapshot_id)
+    for job in jobs:
+        if job["id"] == job_id:
+            job.update(fields)
+            break
+    _write_index(dataset_id, snapshot_id, jobs)
 
 
-def get_user_jobs(project_id: str, owner_id: str, limit: int = 50) -> list[dict[str, Any]]:
-    if not owner_id or not project_id:
-        return []
-    db_file = _db_path()
-    if db_file is None:
-        return []
-    limit = max(1, min(int(limit), 500))
-    try:
-        conn = _connect(db_file)
-        try:
-            _ensure_schema(conn)
-            try:
-                _refresh_active_rows(conn, project_id, owner_id)
-            except Exception:
-                logger.warning(
-                    "Refreshing job status failed for project %s", project_id, exc_info=True
-                )
-
-            cur = conn.execute(
-                """
-                SELECT id, domino_run_id, job_url, status, hardware_tier,
-                       spec_path, submitted_at
-                FROM studio_jobs
-                WHERE owner_id = ? AND project_id = ?
-                ORDER BY submitted_at DESC
-                LIMIT ?
-                """,
-                (owner_id, project_id, limit),
-            )
-            out: list[dict[str, Any]] = []
-            for row in cur.fetchall():
-                rid = row["domino_run_id"] or ""
-                st = (row["status"] or "submitted").strip().lower()
-                out.append(
-                    {
-                        "id": str(row["id"]),
-                        "domino_run_id": rid,
-                        "job_url": row["job_url"] or "",
-                        "status": st,
-                        "hardware_tier": row["hardware_tier"] or "",
-                        "spec_path": row["spec_path"] or "",
-                        "submitted_at": row["submitted_at"] or "",
-                    }
-                )
-            return out
-        finally:
-            conn.close()
-    except Exception:
-        logger.exception("get_user_jobs failed for project %s", project_id)
-        return []
-
-
-def cancel_queued_jobs(project_id: str, owner_id: str) -> None:
+def get_job(dataset_id: str, snapshot_id: str, job_id: str) -> Optional[dict[str, Any]]:
+    jobs = _read_index(dataset_id, snapshot_id)
+    for job in jobs:
+        if job["id"] == job_id:
+            return job
     return None
+
+
+def get_user_jobs(dataset_id: str, snapshot_id: str, owner_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    jobs = _read_index(dataset_id, snapshot_id)
+    owner_jobs = [j for j in jobs if j.get("owner_id") == owner_id]
+    owner_jobs.sort(key=lambda j: j.get("submitted_at", ""), reverse=True)
+    return owner_jobs[:limit]
+
+
+def count_active_jobs(dataset_id: str, snapshot_id: str, owner_id: str) -> int:
+    active_statuses = {"queued", "submitted", "pending", "running"}
+    jobs = _read_index(dataset_id, snapshot_id)
+    return sum(
+        1 for j in jobs
+        if j.get("owner_id") == owner_id and j.get("status") in active_statuses
+    )
+
+
+def get_oldest_queued_job(dataset_id: str, snapshot_id: str, owner_id: str) -> Optional[dict[str, Any]]:
+    jobs = _read_index(dataset_id, snapshot_id)
+    queued = [
+        j for j in jobs
+        if j.get("owner_id") == owner_id and j.get("status") == "queued"
+    ]
+    if not queued:
+        return None
+    queued.sort(key=lambda j: j.get("submitted_at", ""))
+    return queued[0]
+
+
+def get_active_jobs(dataset_id: str, snapshot_id: str) -> list[dict[str, Any]]:
+    active_statuses = {"submitted", "pending", "running"}
+    jobs = _read_index(dataset_id, snapshot_id)
+    return [j for j in jobs if j.get("status") in active_statuses]
+
+
+def reconcile_stale_jobs(dataset_id: str, snapshot_id: str) -> None:
+    jobs = _read_index(dataset_id, snapshot_id)
+    changed = False
+    for job in jobs:
+        if (
+            job.get("status") in ("submitted", "pending", "running")
+            and not job.get("domino_run_id")
+        ):
+            job["status"] = "failed"
+            job["domino_status"] = "App restarted"
+            changed = True
+    if changed:
+        _write_index(dataset_id, snapshot_id, jobs)
+
+
+def cancel_queued_jobs(dataset_id: str, snapshot_id: str, owner_id: str) -> None:
+    jobs = _read_index(dataset_id, snapshot_id)
+    changed = False
+    for job in jobs:
+        if (
+            job.get("owner_id") == owner_id
+            and job.get("status") == "queued"
+            and not job.get("domino_run_id")
+        ):
+            job["status"] = "cancelled"
+            changed = True
+    if changed:
+        _write_index(dataset_id, snapshot_id, jobs)
