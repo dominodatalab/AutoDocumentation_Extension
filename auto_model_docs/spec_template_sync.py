@@ -14,14 +14,14 @@ SPEC_TEMPLATES_PREFIX = "spec-templates"
 
 _REPO_DIR = Path(__file__).resolve().parent / "spec-templates"
 
-_ORDERED_BUILTIN: tuple[tuple[str, str], ...] = (
-    ("standard_ml", "doc_spec.yaml"),
-    ("llm_eval", "doc_spec_llm_eval.yaml"),
-    ("fairness", "doc_spec_fairness.yaml"),
-    ("executive", "doc_spec_executive.yaml"),
+_ORDERED_BUILTIN_FILENAMES: tuple[str, ...] = (
+    "doc_spec.yaml",
+    "doc_spec_llm_eval.yaml",
+    "doc_spec_fairness.yaml",
+    "doc_spec_executive.yaml",
 )
 
-_ALLOWED_FILENAMES = frozenset(fn for _, fn in _ORDERED_BUILTIN)
+_ALLOWED_FILENAMES = frozenset(_ORDERED_BUILTIN_FILENAMES)
 
 
 def allowed_template_filenames() -> frozenset[str]:
@@ -32,15 +32,23 @@ def dataset_rel_path(filename: str) -> str:
     return f"{SPEC_TEMPLATES_PREFIX}/{filename}"
 
 
-def card_meta_from_yaml(content: bytes) -> tuple[str, str]:
+def card_meta_from_yaml(content: bytes, *, default_slug: str = "") -> dict[str, Any]:
     data = yaml.safe_load(content.decode("utf-8")) or {}
+    slug = str(data.get("slug") or data.get("template_slug") or default_slug or "").strip()
     name = str(data.get("card_title") or data.get("title") or "Template").strip()
     desc = str(data.get("card_description") or "").strip()
-    return name, desc
+    sections = data.get("sections")
+    section_count = len(sections) if isinstance(sections, list) else 0
+    return {
+        "slug": slug,
+        "name": name,
+        "description": desc,
+        "section_count": section_count,
+    }
 
 
 def sync_builtins_to_autodoc_dataset(dataset_id: str) -> None:
-    for _slug, filename in _ORDERED_BUILTIN:
+    for filename in _ORDERED_BUILTIN_FILENAMES:
         src = _REPO_DIR / filename
         if not src.is_file():
             logger.warning("Missing repo spec template %s", src)
@@ -67,7 +75,7 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
         names.add(fn)
 
     out: list[dict[str, Any]] = []
-    for slug, filename in _ORDERED_BUILTIN:
+    for filename in _ORDERED_BUILTIN_FILENAMES:
         if filename not in names:
             continue
         try:
@@ -75,17 +83,25 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
         except Exception:
             logger.warning("read_file failed for %s", filename, exc_info=True)
             continue
+        default_slug = Path(filename).stem
         try:
-            title, desc = card_meta_from_yaml(raw)
+            meta = card_meta_from_yaml(raw, default_slug=default_slug)
         except Exception:
             logger.warning("yaml parse failed for %s", filename, exc_info=True)
-            title, desc = filename, ""
+            meta = {
+                "slug": default_slug,
+                "name": filename,
+                "description": "",
+                "section_count": 0,
+            }
+        slug = (meta.get("slug") or default_slug).strip() or default_slug
         out.append(
             {
                 "slug": slug,
-                "name": title,
-                "description": desc,
+                "name": meta.get("name") or filename,
+                "description": meta.get("description") or "",
                 "template_file": filename,
+                "section_count": int(meta.get("section_count") or 0),
             }
         )
     return out

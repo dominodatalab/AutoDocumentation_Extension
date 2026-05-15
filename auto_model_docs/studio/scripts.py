@@ -577,6 +577,9 @@ MAIN_DOM_JS = r"""
             for (var i = 0; i < templates.length; i++) {
                 var t = templates[i];
                 var fn = t.template_file || '';
+                var n = typeof t.section_count === 'number' ? t.section_count : parseInt(t.section_count, 10);
+                if (isNaN(n) || n < 0) n = 0;
+                var badgeText = n ? (String(n) + ' sections') : '';
                 html += '<div class="template-card" data-slug="' + _esc(t.slug) + '" tabindex="0" role="button" aria-pressed="false">'
                     + '<div class="template-card-header">'
                     + '<span class="template-card-name">' + _esc(t.name) + '</span>'
@@ -584,7 +587,7 @@ MAIN_DOM_JS = r"""
                     + '</div>'
                     + '<p class="template-card-desc">' + _esc(t.description) + '</p>'
                     + '<div class="template-card-meta">'
-                    + '<span class="template-card-badge">' + _esc(fn) + '</span>'
+                    + '<span class="template-card-badge">' + _esc(badgeText || fn) + '</span>'
                     + '</div>'
                     + '</div>';
             }
