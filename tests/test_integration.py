@@ -503,7 +503,7 @@ class TestApiRoutesIntegration:
     def test_download_template(self, client):
         resp = client.get("/api/download-template?projectId=proj-integration")
         assert resp.status_code == 200
-        assert b"DownloadFromDataset" in resp.content
+        assert b"slug: standard_ml" in resp.content
 
     def test_hardware_tiers(self, client):
         resp = client.get("/api/hardware-tiers?projectId=proj-integration")

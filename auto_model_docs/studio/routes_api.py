@@ -34,6 +34,23 @@ def _autodoc_dataset_and_snapshot(project_id: str) -> tuple[dict, str]:
     return ensured, str(snap)
 
 
+def _active_autodoc_snapshot_for_spec_templates(project_id: str) -> str:
+    import spec_template_sync
+
+    ensured, _ = _autodoc_dataset_and_snapshot(project_id)
+    ds_id = str(ensured.get("id") or "").strip()
+    if not ds_id:
+        raise RuntimeError("autodoc dataset has no id")
+    spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
+    fresh = domino_datasets.get_rw_snapshot_id(ds_id)
+    if isinstance(fresh, str) and fresh.strip():
+        return fresh.strip()
+    snap = str(ensured.get("rwSnapshotId") or "").strip()
+    if not snap:
+        raise RuntimeError("Could not resolve read-write snapshot for autodoc dataset")
+    return snap
+
+
 def sanitize_dataset_subpath(raw: Optional[str]) -> str:
     if raw is None or not str(raw).strip():
         return ""
@@ -231,7 +248,7 @@ def register_api_routes(rt):
         if not pid:
             return Response("projectId required", status_code=400)
         try:
-            _, snap = _autodoc_dataset_and_snapshot(pid)
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
             raw = DatasetManager.read_file(
                 snap,
                 spec_template_sync.dataset_rel_path("doc_spec.yaml"),
@@ -298,7 +315,7 @@ def register_api_routes(rt):
         if not pid:
             return Response(json.dumps([]), media_type="application/json")
         try:
-            _, snap = _autodoc_dataset_and_snapshot(pid)
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
         except Exception as exc:
             return Response(
                 json.dumps({"error": str(exc)}),
@@ -331,7 +348,7 @@ def register_api_routes(rt):
         if base not in spec_template_sync.allowed_template_filenames():
             return Response("Not found", status_code=404)
         try:
-            _, snap = _autodoc_dataset_and_snapshot(pid)
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
             raw = DatasetManager.read_file(snap, spec_template_sync.dataset_rel_path(base))
         except Exception as exc:
             logger.warning("built-in-template read failed: %s", exc, exc_info=True)

@@ -137,6 +137,14 @@ def _mock_studio_modules(monkeypatch):
         "rwSnapshotId": "snap-test",
     }
 
+    def _noop_sync_builtins(_dataset_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "spec_template_sync.sync_builtins_to_autodoc_dataset",
+        _noop_sync_builtins,
+    )
+
     def _resolve_mount_path(ensured):
         if not isinstance(ensured, dict):
             return "/domino/datasets/local/autodoc"
@@ -534,6 +542,8 @@ class TestApiRoutes:
         def _fake_catalog(_snap):
             return catalog
 
+        mock_sync = MagicMock()
+        monkeypatch.setattr("spec_template_sync.sync_builtins_to_autodoc_dataset", mock_sync)
         monkeypatch.setattr("spec_template_sync.catalog_from_dataset", _fake_catalog)
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
@@ -541,6 +551,7 @@ class TestApiRoutes:
         result = await routes["/api/built-in-templates"](req)
         assert result.status_code == 200
         assert json.loads(result.body) == catalog
+        mock_sync.assert_called_once_with("ds-test")
 
     @pytest.mark.asyncio
     async def test_built_in_template_yaml_rejects_unknown_file(self, _mock_studio_modules):
