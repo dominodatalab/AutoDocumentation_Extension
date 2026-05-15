@@ -699,4 +699,4 @@ async def _on_startup():
 # Serve
 # ---------------------------------------------------------------------------
 
-serve(host=HOST, port=PORT, access_log=False)
+serve(host=HOST, port=PORT, access_log=False, reload=False)
