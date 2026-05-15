@@ -76,55 +76,148 @@ def card_meta_from_yaml(content: bytes) -> dict[str, Any]:
 
 
 def sync_builtins_to_autodoc_dataset(dataset_id: str) -> None:
+    logger.info("sync_builtins_to_autodoc_dataset: start dataset_id=%r", dataset_id)
     for filename in _ORDERED_BUILTIN_FILENAMES:
         src = _REPO_DIR / filename
         if not src.is_file():
-            logger.warning("Missing repo spec template %s", src)
+            logger.warning("sync_builtins_to_autodoc_dataset: missing packaged file %s", src)
             continue
-        DatasetManager.write_file(dataset_id, dataset_rel_path(filename), src.read_bytes())
+        rel = dataset_rel_path(filename)
+        body = src.read_bytes()
+        logger.info(
+            "sync_builtins_to_autodoc_dataset: write_file dataset_id=%r path=%r bytes=%d",
+            dataset_id,
+            rel,
+            len(body),
+        )
+        DatasetManager.write_file(dataset_id, rel, body)
+    logger.info("sync_builtins_to_autodoc_dataset: done")
 
 
 def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
-    from domino_datasets import list_files as ds_list_files
-
+    logger.info(
+        "catalog_from_dataset: listing via DatasetManager.list_files "
+        "GET /v4/datasetrw/files/{snapshot_id} path=%r snapshot_id=%r",
+        SPEC_TEMPLATES_PREFIX,
+        snapshot_id,
+    )
     try:
-        rows = ds_list_files(snapshot_id, SPEC_TEMPLATES_PREFIX)
+        rows = DatasetManager.list_files(snapshot_id, SPEC_TEMPLATES_PREFIX)
     except Exception:
-        logger.exception("list_files for spec-templates failed")
+        logger.exception("catalog_from_dataset: DatasetManager.list_files failed")
         return []
+
+    for i, row in enumerate(rows[:25]):
+        logger.info("catalog_from_dataset: list row[%d]=%r", i, row)
+    if len(rows) > 25:
+        logger.info("catalog_from_dataset: list row ... %d more rows omitted", len(rows) - 25)
 
     names: set[str] = set()
     for row in rows:
         fn_raw = (row.get("fileName") or "").strip().replace("\\", "/")
-        if row.get("isDirectory") or not fn_raw.lower().endswith((".yaml", ".yml")):
+        if row.get("isDirectory"):
+            logger.info(
+                "catalog_from_dataset: list row skip directory fileName=%r",
+                fn_raw,
+            )
+            continue
+        if not fn_raw.lower().endswith((".yaml", ".yml")):
+            logger.info(
+                "catalog_from_dataset: list row skip non-yaml fileName=%r isDirectory=%r",
+                fn_raw,
+                row.get("isDirectory"),
+            )
             continue
         fn = fn_raw.split("/")[-1]
         if not fn:
+            logger.info("catalog_from_dataset: list row skip empty basename fileName=%r", fn_raw)
             continue
         names.add(fn)
+
+    logger.info(
+        "catalog_from_dataset: list returned %d rows, yaml basenames=%r",
+        len(rows),
+        sorted(names),
+    )
 
     out: list[dict[str, Any]] = []
     for filename in _ORDERED_BUILTIN_FILENAMES:
         if filename not in names:
+            logger.info(
+                "catalog_from_dataset: skip %r (not in list result for path=%r)",
+                filename,
+                SPEC_TEMPLATES_PREFIX,
+            )
             continue
+        rel = dataset_rel_path(filename)
+        logger.info(
+            "catalog_from_dataset: read template %r snapshot_id=%r rel=%r",
+            filename,
+            snapshot_id,
+            rel,
+        )
         try:
-            raw = DatasetManager.read_file(snapshot_id, dataset_rel_path(filename))
+            raw = DatasetManager.read_file(snapshot_id, rel)
         except Exception:
-            logger.warning("read_file failed for %s", filename, exc_info=True)
+            logger.warning(
+                "catalog_from_dataset: read_file failed for %r rel=%r snapshot_id=%r",
+                filename,
+                rel,
+                snapshot_id,
+                exc_info=True,
+            )
             continue
+        logger.info(
+            "catalog_from_dataset: read_file ok %r raw_bytes=%d",
+            filename,
+            len(raw or b""),
+        )
         text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
         try:
             parsed = yaml.safe_load(text)
         except yaml.YAMLError:
-            logger.warning("yaml parse failed for %s", filename)
+            head = text[:400].replace("\n", "\\n")
+            logger.warning(
+                "catalog_from_dataset: yaml parse failed for %r rel=%r "
+                "decoded_len=%d head=%r",
+                filename,
+                rel,
+                len(text),
+                head,
+            )
             continue
+        logger.info(
+            "catalog_from_dataset: yaml safe_load ok %r root_type=%s",
+            filename,
+            type(parsed).__name__,
+        )
         if not isinstance(parsed, dict):
+            head = text[:300].replace("\n", "\\n")
+            logger.info(
+                "catalog_from_dataset: skip %r parsed type=%s head=%r",
+                filename,
+                type(parsed).__name__,
+                head,
+            )
             continue
         meta = card_meta_from_spec_dict(parsed)
         slug = meta.get("slug") or ""
         name = meta.get("name") or ""
         if not slug.strip() or not name.strip():
+            logger.info(
+                "catalog_from_dataset: skip %r (missing slug or card_title after parse) slug=%r name=%r",
+                filename,
+                slug,
+                name,
+            )
             continue
+        logger.info(
+            "catalog_from_dataset: add entry %r slug=%r name=%r section_count=%r",
+            filename,
+            slug.strip(),
+            name.strip(),
+            int(meta.get("section_count") or 0),
+        )
         out.append(
             {
                 "slug": slug.strip(),
@@ -134,4 +227,5 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
                 "section_count": int(meta.get("section_count") or 0),
             }
         )
+    logger.info("catalog_from_dataset: built %d catalog entries", len(out))
     return out

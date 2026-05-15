@@ -49,12 +49,11 @@ def test_section_count_from_dict_sections():
 
 
 def test_catalog_from_dataset_uses_section_list_from_dataset_bytes_only(monkeypatch):
-    import domino_datasets as dd
-
     monkeypatch.setattr(
-        dd,
-        "list_files",
-        lambda snap, prefix: [{"fileName": "doc_spec_executive.yaml", "isDirectory": False}],
+        "dataset_manager.DatasetManager.list_files",
+        staticmethod(
+            lambda snap, prefix: [{"fileName": "doc_spec_executive.yaml", "isDirectory": False}],
+        ),
     )
     monkeypatch.setattr(
         "dataset_manager.DatasetManager.read_file",
@@ -72,17 +71,16 @@ def test_catalog_from_dataset_uses_section_list_from_dataset_bytes_only(monkeypa
 
 
 def test_catalog_from_dataset_ignores_packaged_dir_even_if_present(tmp_path, monkeypatch):
-    import domino_datasets as dd
-
     monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
     (tmp_path / "doc_spec.yaml").write_text(
         "slug: packaged-only\ncard_title: Packaged Title\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        dd,
-        "list_files",
-        lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+        "dataset_manager.DatasetManager.list_files",
+        staticmethod(
+            lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+        ),
     )
     monkeypatch.setattr(
         "dataset_manager.DatasetManager.read_file",
@@ -93,12 +91,11 @@ def test_catalog_from_dataset_ignores_packaged_dir_even_if_present(tmp_path, mon
 
 
 def test_catalog_section_count_zero_when_dataset_yaml_has_no_sections(monkeypatch):
-    import domino_datasets as dd
-
     monkeypatch.setattr(
-        dd,
-        "list_files",
-        lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+        "dataset_manager.DatasetManager.list_files",
+        staticmethod(
+            lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+        ),
     )
     monkeypatch.setattr(
         "dataset_manager.DatasetManager.read_file",
@@ -130,12 +127,11 @@ def test_card_meta_scalar_root_yields_empty_identifiers():
 
 
 def test_catalog_from_dataset(monkeypatch):
-    import domino_datasets as dd
-
     monkeypatch.setattr(
-        dd,
-        "list_files",
-        lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+        "dataset_manager.DatasetManager.list_files",
+        staticmethod(
+            lambda snap, prefix: [{"fileName": "doc_spec.yaml", "isDirectory": False}],
+        ),
     )
     monkeypatch.setattr(
         "dataset_manager.DatasetManager.read_file",
@@ -158,14 +154,13 @@ def test_catalog_from_dataset(monkeypatch):
 
 
 def test_catalog_from_dataset_matches_builtin_when_fileName_is_full_path(monkeypatch):
-    import domino_datasets as dd
-
     monkeypatch.setattr(
-        dd,
-        "list_files",
-        lambda snap, prefix: [
-            {"fileName": "spec-templates/doc_spec.yaml", "isDirectory": False},
-        ],
+        "dataset_manager.DatasetManager.list_files",
+        staticmethod(
+            lambda snap, prefix: [
+                {"fileName": "spec-templates/doc_spec.yaml", "isDirectory": False},
+            ],
+        ),
     )
     monkeypatch.setattr(
         "dataset_manager.DatasetManager.read_file",

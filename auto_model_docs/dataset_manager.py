@@ -131,26 +131,71 @@ def _preview_payload_to_file_text(obj: Any) -> str | None:
 def _bytes_from_snapshot_preview_response(resp: httpx.Response) -> bytes:
     content = resp.content or b""
     ctype = (resp.headers.get("content-type") or "").lower()
+    logger.info(
+        "_bytes_from_snapshot_preview_response: raw_len=%d content_type=%r starts_with_curly=%s",
+        len(content),
+        ctype[:120] if ctype else ctype,
+        (content[:1] == b"{") if content else False,
+    )
     if "json" not in ctype and content[:1] != b"{":
+        logger.info("_bytes_from_snapshot_preview_response: not treating as json, return raw bytes")
         return content
     try:
         text = content.decode("utf-8")
         payload = json.loads(text)
-    except Exception:
+    except Exception as exc:
+        logger.info(
+            "_bytes_from_snapshot_preview_response: json parse failed %s return raw",
+            exc,
+        )
         return content
+    ptype = type(payload).__name__
+    if isinstance(payload, dict):
+        pkeys = list(payload.keys())[:40]
+        logger.info("_bytes_from_snapshot_preview_response: payload dict keys=%r", pkeys)
+    elif isinstance(payload, list):
+        logger.info(
+            "_bytes_from_snapshot_preview_response: payload list len=%d",
+            len(payload),
+        )
+    else:
+        logger.info("_bytes_from_snapshot_preview_response: payload type=%s", ptype)
     if isinstance(payload, str) and payload.strip():
         hit = _decode_preview_json_string(payload)
         if hit:
+            logger.info(
+                "_bytes_from_snapshot_preview_response: str payload unwrapped len=%d",
+                len(hit),
+            )
             return hit.encode("utf-8")
-        return payload.lstrip("\ufeff").encode("utf-8")
+        out = payload.lstrip("\ufeff").encode("utf-8")
+        logger.info(
+            "_bytes_from_snapshot_preview_response: str payload passthrough len=%d",
+            len(out),
+        )
+        return out
     if isinstance(payload, dict):
         hit = _preview_payload_to_file_text(payload)
         if hit:
+            logger.info(
+                "_bytes_from_snapshot_preview_response: dict unwrapped text len=%d",
+                len(hit),
+            )
             return hit.encode("utf-8")
+        logger.info("_bytes_from_snapshot_preview_response: dict unwrap found no text")
     if isinstance(payload, list):
         hit = _preview_payload_to_file_text(payload)
         if hit:
+            logger.info(
+                "_bytes_from_snapshot_preview_response: list unwrapped text len=%d",
+                len(hit),
+            )
             return hit.encode("utf-8")
+        logger.info("_bytes_from_snapshot_preview_response: list unwrap found no text")
+    logger.info(
+        "_bytes_from_snapshot_preview_response: returning original content len=%d",
+        len(content),
+    )
     return content
 
 
@@ -243,22 +288,46 @@ class DatasetManager:
         Endpoint: GET /v4/datasetrw/snapshot/{snapshotId}/file/preview?path=
         """
         base_url = _resolve_api_host().rstrip("/")
+        url = f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/preview"
+        logger.info(
+            "DatasetManager.read_file: GET %s params=%r snapshot_id=%r",
+            url,
+            {"path": path},
+            snapshot_id,
+        )
         with httpx.Client(timeout=60.0) as client:
             resp = client.get(
-                f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/preview",
+                url,
                 params={"path": path},
                 headers=_get_auth_headers(),
             )
             resp.raise_for_status()
+        hdrs = getattr(resp, "headers", {}) or {}
+        logger.info(
+            "DatasetManager.read_file: response status=%s content-type=%r len=%d",
+            getattr(resp, "status_code", 200),
+            (hdrs.get("content-type") or "")[:120],
+            len(resp.content or b""),
+        )
         data = resp.content or b""
         ctype = (resp.headers.get("content-type") or "").lower()
         for _ in range(8):
             fake = httpx.Response(200, headers={"content-type": ctype or "application/json"}, content=data)
             nxt = _bytes_from_snapshot_preview_response(fake)
             if nxt == data:
+                logger.info(
+                    "DatasetManager.read_file: unwrap finished after pass bytes_len=%d",
+                    len(data),
+                )
                 return data
+            logger.info(
+                "DatasetManager.read_file: unwrap pass reduced/transformed len %d -> %d",
+                len(data),
+                len(nxt),
+            )
             data = nxt
             ctype = ""
+        logger.info("DatasetManager.read_file: unwrap max passes, final len=%d", len(data))
         return data
 
     @staticmethod
@@ -284,9 +353,16 @@ class DatasetManager:
         Endpoint: GET /v4/datasetrw/files/{snapshotId}?path=
         """
         base_url = _resolve_api_host().rstrip("/")
+        url = f"{base_url}/v4/datasetrw/files/{snapshot_id}"
+        logger.info(
+            "DatasetManager.list_files: GET %s params=%r snapshot_id=%r",
+            url,
+            {"path": path},
+            snapshot_id,
+        )
         with httpx.Client(timeout=30.0) as client:
             resp = client.get(
-                f"{base_url}/v4/datasetrw/files/{snapshot_id}",
+                url,
                 params={"path": path},
                 headers=_get_auth_headers(),
             )
@@ -294,6 +370,12 @@ class DatasetManager:
 
         data = resp.json()
         rows = data.get("rows", [])
+        logger.info(
+            "DatasetManager.list_files: rows=%d snapshot_id=%r path=%r",
+            len(rows),
+            snapshot_id,
+            path,
+        )
 
         path_prefix = (path.rstrip("/") + "/") if path else ""
         files: list[dict[str, Any]] = []
@@ -312,6 +394,12 @@ class DatasetManager:
                 "sizeInBytes": size_info.get("sizeInBytes") or name_info.get("sizeInBytes", 0),
                 "lastModified": row.get("lastModified"),
             })
+        names_out = [f["fileName"] for f in files]
+        logger.info(
+            "DatasetManager.list_files: normalized %d file entries fileNames=%r",
+            len(files),
+            names_out[:50],
+        )
         return files
 
     @staticmethod
