@@ -395,12 +395,27 @@ class TestApiRoutes:
         result = await routes["/api/dataset-files"](req)
         ds.list_files.assert_called_once()
 
-    def test_download_template(self, _mock_studio_modules):
+    @pytest.mark.asyncio
+    async def test_download_template(self, _mock_studio_modules, monkeypatch):
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.read_file",
+            staticmethod(lambda snap, path: b"title: FromDataset\n"),
+        )
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
-        result = routes["/api/download-template"]()
-        # Either FileResponse (exists) or Response(404)
-        assert result is not None
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/download-template"](req)
+        assert result.status_code == 200
+        assert b"FromDataset" in result.body
+
+    @pytest.mark.asyncio
+    async def test_download_template_requires_project_id(self, _mock_studio_modules):
+        _mock_studio_modules["state"]._resolve_request_project_id.return_value = None
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={})
+        result = await routes["/api/download-template"](req)
+        assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_upload_spec_rejects_invalid_yaml(self, _mock_studio_modules, monkeypatch):

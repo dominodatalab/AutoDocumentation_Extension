@@ -60,22 +60,6 @@ def card_meta_from_yaml(content: bytes, *, default_slug: str = "") -> dict[str, 
     }
 
 
-def _catalog_meta_is_placeholder(meta: dict[str, Any], filename: str) -> bool:
-    name = str(meta.get("name") or "").strip()
-    desc = str(meta.get("description") or "").strip()
-    return name == filename or (name in ("Template", "") and not desc)
-
-
-def _repo_card_meta(filename: str, default_slug: str) -> dict[str, Any] | None:
-    src = _REPO_DIR / filename
-    if not src.is_file():
-        return None
-    try:
-        return card_meta_from_yaml(src.read_bytes(), default_slug=default_slug)
-    except Exception:
-        return None
-
-
 def sync_builtins_to_autodoc_dataset(dataset_id: str) -> None:
     for filename in _ORDERED_BUILTIN_FILENAMES:
         src = _REPO_DIR / filename
@@ -123,14 +107,6 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
                 "description": "",
                 "section_count": 0,
             }
-        if _catalog_meta_is_placeholder(meta, filename):
-            fb = _repo_card_meta(filename, default_slug)
-            if fb:
-                meta = fb
-        elif (meta.get("section_count") or 0) == 0:
-            fb_sec = _repo_card_meta(filename, default_slug)
-            if fb_sec and (fb_sec.get("section_count") or 0) > 0:
-                meta = {**meta, "section_count": fb_sec["section_count"]}
         slug = (meta.get("slug") or default_slug).strip() or default_slug
         out.append(
             {

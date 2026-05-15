@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Optional
 
 from starlette.requests import Request
-from starlette.responses import FileResponse, Response
+from starlette.responses import Response
 
 from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
@@ -225,14 +224,27 @@ def register_api_routes(rt):
 
     rt("/api/upload-spec-to-dataset")(api_upload_spec_to_dataset)
 
-    def api_download_template():
-        template_path = Path(__file__).resolve().parent.parent / "spec-templates" / "doc_spec.yaml"
-        if not template_path.exists():
+    async def api_download_template(req: Request):
+        import spec_template_sync
+
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response("projectId required", status_code=400)
+        try:
+            _, snap = _autodoc_dataset_and_snapshot(pid)
+            raw = DatasetManager.read_file(
+                snap,
+                spec_template_sync.dataset_rel_path("doc_spec.yaml"),
+            )
+        except FileNotFoundError:
             return Response("Template not found", status_code=404)
-        return FileResponse(
-            str(template_path),
+        except Exception as exc:
+            logger.warning("download-template read failed: %s", exc, exc_info=True)
+            return Response(str(exc), status_code=500)
+        return Response(
+            content=raw,
             media_type="application/x-yaml",
-            filename="doc_spec_template.yaml",
+            headers={"Content-Disposition": 'attachment; filename="doc_spec_template.yaml"'},
         )
 
     rt("/api/download-template")(api_download_template)

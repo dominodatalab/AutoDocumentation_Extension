@@ -68,6 +68,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     _mem_files: dict[str, bytes] = {}
     _mem_files["spec.yaml"] = b"title: Test\n"
+    _mem_files["spec-templates/doc_spec.yaml"] = b"title: DownloadFromDataset\n"
 
     def _mem_write(dataset_id, path, content):
         _mem_files[path] = content
@@ -500,8 +501,9 @@ class TestApiRoutesIntegration:
         assert data[0]["fileName"] == "spec.yaml"
 
     def test_download_template(self, client):
-        resp = client.get("/api/download-template")
+        resp = client.get("/api/download-template?projectId=proj-integration")
         assert resp.status_code == 200
+        assert b"DownloadFromDataset" in resp.content
 
     def test_hardware_tiers(self, client):
         resp = client.get("/api/hardware-tiers?projectId=proj-integration")
