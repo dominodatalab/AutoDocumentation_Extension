@@ -268,14 +268,17 @@ async def index(req: Request):
         Title("ModelDoc — Domino"),
         Style(fontawesome_faces_css()),
         Script(STUDIO_FONT_BASE_PATCH_JS),
+        # Header
         Div(
             Div(NotStr(_LOGO_SVG), cls="domino-header-inner"),
             Span("local \u00b7 mock data", cls="header-mock-badge") if _is_mock else None,
             cls="domino-header",
         ),
+        # Page (full-height column below the Domino header)
         Div(
             *_render_warnings_banner(_STARTUP_WARNINGS),
 
+            # Main form (wraps both wizard steps)
             Form(
                 Input(type="hidden", name="detected_language", id="field-detected-language", value="python"),
                 Input(name="spec_path", id="field-spec_path", type="hidden", value=""),
@@ -450,90 +453,91 @@ async def index(req: Request):
                     id="wizard-step1",
                 ),
 
+                # Advanced options modal
                 Div(
-                    Div(
-                        Span(
-                            "Advanced options",
-                            cls="modal-title",
-                        ),
-                        Button(
-                            Span("close", cls="material-symbols-outlined"),
-                            type="button",
-                            id="adv-opts-close-btn",
-                            cls="modal-close-btn",
-                            aria_label="Close",
-                        ),
-                        cls="modal-header",
-                    ),
-                    Div(
-                        advanced_opts,
-                        cls="modal-body",
-                    ),
-                    Div(
-                        Button(
-                            "Done",
-                            type="button",
-                            id="adv-opts-done-btn",
-                            cls="primary",
-                        ),
-                        cls="modal-footer",
-                    ),
-                    cls="adv-opts-modal",
-                ),
-                id="adv-opts-overlay",
-                cls="modal-overlay",
-            ),
-
-            Div(
-                Div(
-                    Div(
-                        Span("Browse spec files", cls="modal-title"),
-                        Button(
-                            Span("close", cls="material-symbols-outlined"),
-                            type="button",
-                            cls="modal-close-btn",
-                            aria_label="Close",
-                            onclick="closeBrowseModal()",
-                        ),
-                        cls="modal-header",
-                    ),
                     Div(
                         Div(
-                            Label("Dataset", Span(" *", cls="required-star")),
-                            Select(
-                                Option("Loading datasets...", value="", disabled=True, selected=True),
-                                id="browse-dataset-select",
+                            Span("Advanced options", cls="modal-title"),
+                            Button(
+                                Span("close", cls="material-symbols-outlined"),
+                                type="button",
+                                id="adv-opts-close-btn",
+                                cls="modal-close-btn",
+                                aria_label="Close",
                             ),
-                            cls="field",
+                            cls="modal-header",
                         ),
-                        Div(id="browse-breadcrumb", cls="spec-breadcrumb"),
                         Div(
-                            Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
-                            Span("Select a dataset to browse its files", cls="spec-file-list-empty"),
-                            cls="spec-file-empty",
-                            id="browse-file-list",
+                            advanced_opts,
+                            cls="modal-body",
                         ),
-                        cls="modal-body browse-modal-body",
-                    ),
-                    Div(
-                        Span("", id="browse-selected-label", cls="browse-selected-label"),
-                        Button(
-                            "Select",
-                            type="button",
-                            id="browse-confirm-btn",
-                            cls="primary",
-                            onclick="confirmBrowseSelection()",
-                            disabled=True,
+                        Div(
+                            Button(
+                                "Done",
+                                type="button",
+                                id="adv-opts-done-btn",
+                                cls="primary",
+                            ),
+                            cls="modal-footer",
                         ),
-                        cls="browse-footer",
+                        cls="adv-opts-modal",
                     ),
-                    cls="adv-opts-modal browse-modal",
+                    id="adv-opts-overlay",
+                    cls="modal-overlay",
                 ),
-                id="browse-modal-overlay",
-                cls="modal-overlay",
-                onclick="if(event.target===this)closeBrowseModal()",
-            ),
 
+                # Browse-spec modal
+                Div(
+                    Div(
+                        Div(
+                            Span("Browse spec files", cls="modal-title"),
+                            Button(
+                                Span("close", cls="material-symbols-outlined"),
+                                type="button",
+                                cls="modal-close-btn",
+                                aria_label="Close",
+                                onclick="closeBrowseModal()",
+                            ),
+                            cls="modal-header",
+                        ),
+                        Div(
+                            Div(
+                                Label("Dataset", Span(" *", cls="required-star")),
+                                Select(
+                                    Option("Loading datasets...", value="", disabled=True, selected=True),
+                                    id="browse-dataset-select",
+                                ),
+                                cls="field",
+                            ),
+                            Div(id="browse-breadcrumb", cls="spec-breadcrumb"),
+                            Div(
+                                Span("folder_open", cls="material-symbols-outlined spec-file-empty-icon"),
+                                Span("Select a dataset to browse its files", cls="spec-file-list-empty"),
+                                cls="spec-file-empty",
+                                id="browse-file-list",
+                            ),
+                            cls="modal-body browse-modal-body",
+                        ),
+                        Div(
+                            Span("", id="browse-selected-label", cls="browse-selected-label"),
+                            Button(
+                                "Select",
+                                type="button",
+                                id="browse-confirm-btn",
+                                cls="primary",
+                                onclick="confirmBrowseSelection()",
+                                disabled=True,
+                            ),
+                            cls="browse-footer",
+                        ),
+                        cls="adv-opts-modal browse-modal",
+                    ),
+                    id="browse-modal-overlay",
+                    cls="modal-overlay",
+                    onclick="if(event.target===this)closeBrowseModal()",
+                ),
+
+                # Step 2: Results
                 Div(
                     Div(
                         Button(
@@ -551,7 +555,6 @@ async def index(req: Request):
                         Div(id="history-btn-slot", cls="history-btn-slot"),
                         cls="results-nav-row",
                     ),
-
                     Div(
                         Div(
                             Span("rocket_launch", cls="material-symbols-outlined results-submitting-icon"),
@@ -561,7 +564,6 @@ async def index(req: Request):
                         id="results-panel",
                         cls="results-panel",
                     ),
-
                     Details(
                         Summary("History", cls="advanced-section-summary"),
                         Div(
@@ -576,12 +578,12 @@ async def index(req: Request):
                         id="history-details",
                         open=False,
                     ),
-
                     id="wizard-step2",
                     cls="wizard-step",
                     style="display:none",
                 ),
 
+                # History drawer
                 Div(id="history-drawer-overlay", cls="history-drawer-overlay"),
                 Div(
                     Div(
