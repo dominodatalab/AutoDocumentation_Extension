@@ -552,8 +552,9 @@ MAIN_DOM_JS = r"""
             el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
                 + '<span class="preview-empty-text">Loading\u2026</span>';
             var pid = resolvedProjectId();
-            var url = _adUrl('api/built-in-template/' + encodeURIComponent(tpl.template_file || ''));
-            if (pid) url += '?projectId=' + encodeURIComponent(pid);
+            var url = _adUrl('api/built-in-template')
+                + '?template_file=' + encodeURIComponent(tpl.template_file || '');
+            if (pid) url += '&projectId=' + encodeURIComponent(pid);
             fetch(url)
                 .then(_checkResp)
                 .then(function(r) { return r.text(); })
@@ -1141,8 +1142,9 @@ MAIN_DOM_JS = r"""
                     reject(new Error('Template file is missing.'));
                     return;
                 }
-                var yurl = _adUrl('api/built-in-template/' + encodeURIComponent(tf));
-                var yqs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+                var yurl = _adUrl('api/built-in-template')
+                    + '?template_file=' + encodeURIComponent(tf);
+                var yqs = pid ? ('&projectId=' + encodeURIComponent(pid)) : '';
                 fetch(yurl + yqs)
                     .then(_checkResp)
                     .then(function(r) { return r.text(); })

@@ -531,9 +531,17 @@ class TestApiRoutes:
     async def test_built_in_template_yaml_rejects_unknown_file(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/api/built-in-template/{filename}"](req, filename="../../../etc/passwd")
+        req = _make_request(query_params={"projectId": "proj-123", "template_file": "../../../etc/passwd"})
+        result = await routes["/api/built-in-template"](req)
         assert result.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_built_in_template_yaml_requires_template_file(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/built-in-template"](req)
+        assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_built_in_template_yaml_returns_body(self, _mock_studio_modules, monkeypatch):
@@ -541,8 +549,8 @@ class TestApiRoutes:
         monkeypatch.setattr("dataset_manager.DatasetManager.read_file", staticmethod(mock_read))
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/api/built-in-template/{filename}"](req, filename="doc_spec.yaml")
+        req = _make_request(query_params={"projectId": "proj-123", "template_file": "doc_spec.yaml"})
+        result = await routes["/api/built-in-template"](req)
         assert result.status_code == 200
         assert b"title: X" in result.body
         mock_read.assert_called_once()

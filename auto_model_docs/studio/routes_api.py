@@ -306,13 +306,18 @@ def register_api_routes(rt):
 
     rt("/api/built-in-templates")(api_built_in_templates)
 
-    async def api_built_in_template_yaml(req: Request, filename: str):
+    async def api_built_in_template_yaml(req: Request):
         import spec_template_sync
 
         pid = (_resolve_request_project_id(req) or "").strip()
         if not pid:
             return Response("projectId required", status_code=400)
-        base = (filename or "").strip().replace("\\", "/").split("/")[-1]
+        raw_param = (
+            (req.query_params.get("template_file") or req.query_params.get("filename") or "").strip()
+        )
+        base = raw_param.replace("\\", "/").split("/")[-1]
+        if not base:
+            return Response("template_file required", status_code=400)
         if base not in spec_template_sync.allowed_template_filenames():
             return Response("Not found", status_code=404)
         try:
@@ -323,7 +328,7 @@ def register_api_routes(rt):
             return Response(str(exc), status_code=500)
         return Response(content=raw, media_type="text/yaml; charset=utf-8")
 
-    rt("/api/built-in-template/{filename}")(api_built_in_template_yaml)
+    rt("/api/built-in-template")(api_built_in_template_yaml)
 
     async def api_sync_spec_templates(req: Request):
         import spec_template_sync
