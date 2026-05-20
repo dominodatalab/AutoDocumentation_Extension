@@ -431,16 +431,13 @@ MAIN_DOM_JS = r"""
 
         function confirmBrowseSelection() {
             if (!_browseSelectedFile) return;
-            if (typeof _browseSelectedFile !== 'string') {
-                _browseSelectedFile = String(_browseSelectedFile);
-            }
             var browseMsg = document.getElementById('browse-selected-label');
             if (browseMsg) {
                 browseMsg.textContent = 'Validating...';
             }
 
             var srcPath = _browseSelectedFile;
-            var filename = (srcPath || '').rsplit('/', 1).slice(-1)[0];
+            var filename = String(srcPath || '').split('/').pop();
             var pid = resolvedProjectId();
 
             // SnapshotId is optional: the backend can resolve it from datasetId.
