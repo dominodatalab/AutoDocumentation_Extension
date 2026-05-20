@@ -431,6 +431,9 @@ MAIN_DOM_JS = r"""
 
         function confirmBrowseSelection() {
             if (!_browseSelectedFile) return;
+            if (typeof _browseSelectedFile !== 'string') {
+                _browseSelectedFile = String(_browseSelectedFile);
+            }
             var browseMsg = document.getElementById('browse-selected-label');
             if (browseMsg) {
                 browseMsg.textContent = 'Validating...';
@@ -888,6 +891,11 @@ MAIN_DOM_JS = r"""
             var isDir = el.getAttribute('data-dir') === 'true';
             var path = el.getAttribute('data-path');
             if (isDir) {
+                _browseSelectedFile = null;
+                var browseLabel = document.getElementById('browse-selected-label');
+                if (browseLabel) browseLabel.textContent = '';
+                var btn = document.getElementById('browse-confirm-btn');
+                if (btn) btn.disabled = true;
                 browseFiles(path);
             } else {
                 var items = specFileList ? specFileList.querySelectorAll('.spec-file-item') : [];
