@@ -389,47 +389,6 @@ def register_api_routes(rt):
 
     rt("/api/download-template")(api_download_template)
 
-    async def api_code_root_options(req: Request):
-        pid = (_resolve_request_project_id(req) or "").strip()
-
-        def _error_payload(reason: str) -> dict:
-            return {
-                "isGitBasedProject": None,
-                "defaultRoot": "",
-                "options": [],
-                "error": reason,
-            }
-
-        if not pid:
-            return Response(
-                json.dumps(_error_payload("missing_project_id")),
-                media_type="application/json",
-            )
-        info = domino_client.resolve_project(pid)
-        if not info:
-            return Response(
-                json.dumps(_error_payload("project_resolve_failed")),
-                media_type="application/json",
-            )
-        try:
-            raw = domino_client.browse_code(info.owner_username, info.name, path_string="")
-            payload = domino_client.code_root_options_from_browse_response(raw)
-            payload["error"] = None
-            return Response(json.dumps(payload), media_type="application/json")
-        except Exception as exc:
-            detail = str(exc)
-            if hasattr(exc, "response") and exc.response is not None:
-                try:
-                    detail = f"{exc} body={exc.response.text[:1500]!r}"
-                except Exception:
-                    pass
-            logger.warning("browseCode for code-root-options failed: %s", detail)
-            return Response(
-                json.dumps(_error_payload("browse_code_failed")),
-                media_type="application/json",
-            )
-
-    rt("/api/code-root-options")(api_code_root_options)
 
     async def api_built_in_templates(req: Request):
         import spec_template_sync

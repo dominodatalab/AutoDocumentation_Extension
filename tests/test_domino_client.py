@@ -32,7 +32,7 @@ from domino_client import (
     get_project_context,
     submit_job,
     browse_code,
-    code_root_options_from_browse_response,
+    get_project_code_root,
 )
 
 # No skip markers needed — all functions now exist in domino_client
@@ -235,39 +235,23 @@ class TestBrowseCodeAndCodeRootOptions:
             browse_code("alice", "myproj", path_string="src/")
         assert mock_req.call_args.kwargs["params"]["pathString"] == "src/"
 
-    def test_code_root_gbp_and_dynamic(self):
-        raw = {
-            "projectSettings": {
-                "isGitBasedProject": True,
-                "repositories": [
-                    {"location": "/mnt/imported/code/lib", "repoName": "lib"},
-                ],
-            },
-        }
-        out = code_root_options_from_browse_response(raw)
-        assert out["isGitBasedProject"] is True
-        assert out["defaultRoot"] == "/mnt/code"
-        vals = [o["value"] for o in out["options"]]
-        assert vals[0] == "/mnt/code"
-        assert "/mnt/imported/code/lib" in vals
-        labels = [o["label"] for o in out["options"]]
-        assert any("lib" in lab for lab in labels)
+    def test_code_root_git_based_project(self):
+        with patch.object(dc, "browse_code") as mock_browse:
+            mock_browse.return_value = {"projectSettings": {"isGitBasedProject": True}}
+            result = get_project_code_root("alice", "myproj")
+        assert result == "/mnt/code"
 
-    def test_code_root_dfs_only_default_when_no_repos(self):
-        raw = {"projectSettings": {"isGitBasedProject": False, "repositories": []}}
-        out = code_root_options_from_browse_response(raw)
-        assert out["defaultRoot"] == "/mnt"
-        assert [o["value"] for o in out["options"]] == ["/mnt"]
+    def test_code_root_dfs_project(self):
+        with patch.object(dc, "browse_code") as mock_browse:
+            mock_browse.return_value = {"projectSettings": {"isGitBasedProject": False}}
+            result = get_project_code_root("alice", "myproj")
+        assert result == "/mnt"
 
-    def test_code_root_skips_duplicate_of_default(self):
-        raw = {
-            "projectSettings": {
-                "isGitBasedProject": False,
-                "repositories": [{"location": "/mnt", "repoName": "x"}],
-            },
-        }
-        out = code_root_options_from_browse_response(raw)
-        assert [o["value"] for o in out["options"]] == ["/mnt"]
+    def test_code_root_calls_browse_with_empty_path(self):
+        with patch.object(dc, "browse_code") as mock_browse:
+            mock_browse.return_value = {"projectSettings": {}}
+            get_project_code_root("alice", "myproj")
+        mock_browse.assert_called_once_with("alice", "myproj", path_string="")
 
 
 # ===================================================================

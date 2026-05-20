@@ -137,6 +137,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_info.owner_username = "test-owner"
     mock_info.main_repo_id = "repo-123"
     mock_client.resolve_project.return_value = mock_info
+    mock_client.get_project_code_root.return_value = "/mnt/code"
     mock_client.set_ui_host = MagicMock()
     import domino_client as real_dc
 

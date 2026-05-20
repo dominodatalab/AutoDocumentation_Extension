@@ -297,7 +297,6 @@ async def index(req: Request):
 
             # Main form (wraps both wizard steps)
             Form(
-                Input(type="hidden", name="detected_language", id="field-detected-language", value="python"),
                 Input(name="spec_path", id="field-spec_path", type="hidden", value=""),
 
                 Div(

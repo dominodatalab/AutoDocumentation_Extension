@@ -117,8 +117,8 @@ def _mock_studio_modules(monkeypatch):
     mock_state.DominoJobRecord = _MockDominoJobRecord
     mock_state.domino_client = MagicMock()
     import domino_client as _dc
-    mock_state.domino_client.code_root_options_from_browse_response = (
-        _dc.code_root_options_from_browse_response
+    mock_state.domino_client.get_project_code_root = (
+        _dc.get_project_code_root
     )
     mock_state.domino_job_store = MagicMock()
     mock_state.spec_store = MagicMock()
@@ -453,77 +453,6 @@ class TestApiRoutes:
         assert "missing title" in body["errors"]
         mock_write.assert_not_called()
 
-    @pytest.mark.asyncio
-    async def test_code_root_options_no_project_id(self, _mock_studio_modules):
-        _mock_studio_modules["state"]._resolve_request_project_id.return_value = None
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        req = _make_request(query_params={})
-        result = await routes["/api/code-root-options"](req)
-        assert result.status_code == 200
-        body = json.loads(result.body.decode())
-        assert body["defaultRoot"] == ""
-        assert body["isGitBasedProject"] is None
-        assert body["error"] == "missing_project_id"
-        assert body["options"] == []
-
-    @pytest.mark.asyncio
-    async def test_code_root_options_resolve_failed_error(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        client = _mock_studio_modules["state"].domino_client
-        client.resolve_project.return_value = None
-        req = _make_request(query_params={"projectId": "proj-1"})
-        result = await routes["/api/code-root-options"](req)
-        body = json.loads(result.body.decode())
-        assert body["error"] == "project_resolve_failed"
-
-    @pytest.mark.asyncio
-    async def test_code_root_options_browse_error_sets_error_flag(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        client = _mock_studio_modules["state"].domino_client
-        mock_info = MagicMock()
-        mock_info.name = "p"
-        mock_info.owner_username = "u"
-        client.resolve_project.return_value = mock_info
-        client.browse_code.side_effect = RuntimeError("browse failed")
-        req = _make_request(query_params={"projectId": "proj-1"})
-        result = await routes["/api/code-root-options"](req)
-        assert result.status_code == 200
-        body = json.loads(result.body.decode())
-        assert body["error"] == "browse_code_failed"
-        assert body["isGitBasedProject"] is None
-        assert body["options"] == []
-
-    @pytest.mark.asyncio
-    async def test_code_root_options_from_browse(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        client = _mock_studio_modules["state"].domino_client
-        mock_info = MagicMock()
-        mock_info.name = "doc-target1"
-        mock_info.owner_username = "integration-test"
-        client.resolve_project.return_value = mock_info
-        client.browse_code.return_value = {
-            "projectSettings": {
-                "isGitBasedProject": False,
-                "repositories": [
-                    {"location": "/repos/simple-demo", "repoName": "simple-demo"},
-                ],
-            },
-        }
-        req = _make_request(query_params={"projectId": "proj-xyz"})
-        result = await routes["/api/code-root-options"](req)
-        assert result.status_code == 200
-        body = json.loads(result.body.decode())
-        assert body["isGitBasedProject"] is False
-        assert body["defaultRoot"] == "/mnt"
-        assert body.get("error") is None
-        vals = [o["value"] for o in body["options"]]
-        assert vals[0] == "/mnt"
-        assert "/mnt" in vals
-        assert "/repos/simple-demo" in vals
 
     @pytest.mark.asyncio
     async def test_built_in_templates_empty_when_no_project(self, _mock_studio_modules):

@@ -65,8 +65,6 @@ def _domino_id_str(raw: Any) -> str:
 def _validate_job_inputs(req: JobRequest, spec_path: str) -> None:
     if not spec_path or not str(spec_path).strip():
         raise ValueError("A spec file is required. Please select or upload a spec before generating documentation.")
-    if not (req.code_root or "").strip():
-        raise ValueError("Code root is required. Choose a source code root path before generating documentation.")
     if not _domino_id_str(req.project_id):
         raise ValueError("Project ID is required.")
     prov = (req.provider or "").strip().lower()
@@ -141,11 +139,19 @@ async def _parse_request(req: Request) -> JobRequest:
     notebook_path = _form_str(body, "notebook_path")
     notebook_from_cache = _checkbox_truthy(body.get("notebook_from_cache"))
 
+    info = domino_client.resolve_project(project_id)
+    if not info:
+        raise RuntimeError("Could not resolve project info to determine code root.")
+    try:
+        _code_root = domino_client.get_project_code_root(info.owner_username, info.name)
+    except Exception as exc:
+        raise RuntimeError(f"Could not determine code root for project: {exc}") from exc
+
     return JobRequest(
         spec_path=_form_str(body, "spec_path"),
         provider=_prov,
         model=_model,
-        code_root=_form_str(body, "code_root"),
+        code_root=_code_root,
         max_files=_form_int(body, "max_files", DEFAULT_MAX_FILES),
         workers=_form_int(body, "workers", DEFAULT_GENERATION_WORKERS),
         planning_workers=_form_int(body, "planning_workers", DEFAULT_PLANNING_WORKERS),

@@ -131,65 +131,6 @@ MAIN_DOM_JS = r"""
             return params.get('projectId') || params.get('project_id') || '';
         }
 
-        // ── Language detection ─────────────────────────────────────────
-        var langRow = document.getElementById('lang-detection-row');
-        var langName = document.getElementById('lang-detected-name');
-        var langCount = document.getElementById('lang-detected-count');
-        var langInput = document.getElementById('field-detected-language');
-        var langSelect = document.getElementById('lang-override-select');
-        var langFieldMain = document.getElementById('field-language');
-
-        function detectLanguage(codeRoot) {
-            var url = _adUrl('api/detect-language');
-            if (codeRoot) url += '?code_root=' + encodeURIComponent(codeRoot);
-            fetch(url)
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (langRow) langRow.style.display = '';
-                    if (data.language) {
-                        if (langName) langName.textContent = data.display_name;
-                        if (langCount) langCount.textContent = '(' + data.file_count + ' files)';
-                        if (langInput) langInput.value = data.language;
-                        if (langSelect) langSelect.value = data.language;
-                    } else {
-                        if (langName) langName.textContent = '';
-                        if (langCount) langCount.textContent = '';
-                        if (langRow) {
-                            langRow.innerHTML = '<span class="lang-empty-state">No supported source files found. Supports Python, R, SAS, MATLAB.</span>';
-                            langRow.style.display = '';
-                        }
-                    }
-                })
-                .catch(function() {});
-        }
-
-        window.handleLanguageOverride = function(lang) {
-            if (langInput) langInput.value = lang === 'auto' ? 'python' : lang;
-            if (langFieldMain) langFieldMain.value = lang;
-            var cr = document.getElementById('field-code_root');
-            detectLanguage(cr ? cr.value : undefined);
-        };
-
-        if (langFieldMain) {
-            langFieldMain.addEventListener('change', function() {
-                var v = this.value || 'auto';
-                if (langInput) langInput.value = v === 'auto' ? 'python' : v;
-                if (langSelect) langSelect.value = v;
-            });
-        }
-
-        function detectLanguageFromCodeRoot() {
-            var cr = document.getElementById('field-code_root');
-            var val = cr ? (cr.value || '').trim() : '';
-            if (!val) {
-                if (langRow) langRow.style.display = 'none';
-                if (langName) langName.textContent = '';
-                if (langCount) langCount.textContent = '';
-                return;
-            }
-            detectLanguage(val);
-        }
-        detectLanguageFromCodeRoot();
 
         // ── Provider / model toggles ───────────────────────────────────
         var providerSelect = document.getElementById('field-provider');
@@ -227,77 +168,6 @@ MAIN_DOM_JS = r"""
             syncNotebookPathEnabled();
         })();
 
-        // ── Code root options ──────────────────────────────────────────
-        (function() {
-            var prefix = document.getElementById('code-root-prefix');
-            var suffix = document.getElementById('code-root-suffix');
-            var hidden = document.getElementById('field-code_root');
-            function basePath() {
-                if (!prefix) return '';
-                if (prefix.tagName === 'SELECT') return (prefix.value || '').trim();
-                return (prefix.textContent || '').trim();
-            }
-            function sync() {
-                if (!hidden) return;
-                var base = basePath();
-                var sub = suffix ? suffix.value.replace(/^\/+/, '') : '';
-                hidden.value = sub ? base + '/' + sub : base;
-            }
-            function showCodeRootError() {
-                if (!prefix || prefix.tagName !== 'SELECT') return;
-                prefix.innerHTML = '';
-                var opt = document.createElement('option');
-                opt.value = ''; opt.textContent = 'Could not retrieve source code';
-                opt.disabled = true; opt.selected = true;
-                prefix.appendChild(opt);
-                prefix.classList.remove('code-root-loading');
-                prefix.classList.add('code-root-error');
-                if (hidden) hidden.value = '';
-                sync(); detectLanguageFromCodeRoot();
-            }
-            function loadCodeRootOptions() {
-                if (!prefix || prefix.tagName !== 'SELECT') return;
-                var pid = resolvedProjectId();
-                if (!pid) { showCodeRootError(); return; }
-                var url = _adUrl('api/code-root-options') + '?projectId=' + encodeURIComponent(pid);
-                fetch(url)
-                    .then(_checkResp).then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data && data.error) { showCodeRootError(); return; }
-                        var opts = (data && data.options) || [];
-                        var defRoot = (data && data.defaultRoot) || (opts[0] && opts[0].value) || '';
-                        if (!opts.length) { showCodeRootError(); return; }
-                        prefix.classList.remove('code-root-error', 'code-root-loading');
-                        prefix.innerHTML = '';
-                        for (var i = 0; i < opts.length; i++) {
-                            var o = opts[i];
-                            var opt = document.createElement('option');
-                            opt.value = o.value || ''; opt.textContent = o.label || o.value || '';
-                            prefix.appendChild(opt);
-                        }
-                        var found = false;
-                        for (var j = 0; j < prefix.options.length; j++) {
-                            if (prefix.options[j].value === defRoot) { prefix.selectedIndex = j; found = true; break; }
-                        }
-                        if (!found) prefix.selectedIndex = 0;
-                        sync(); detectLanguageFromCodeRoot();
-                    })
-                    .catch(function() { showCodeRootError(); });
-            }
-            if (suffix) {
-                suffix.addEventListener('input', sync);
-                var langTimer = null;
-                suffix.addEventListener('input', function() {
-                    clearTimeout(langTimer);
-                    langTimer = setTimeout(function() { detectLanguageFromCodeRoot(); }, 400);
-                });
-            }
-            if (prefix && prefix.tagName === 'SELECT') {
-                prefix.addEventListener('change', function() { sync(); detectLanguageFromCodeRoot(); });
-            }
-            sync();
-            loadCodeRootOptions();
-        })();
 
         // ── Environment revision reload ────────────────────────────────
         window.reloadEnvironmentRevisions = function(sel) {
@@ -1324,7 +1194,6 @@ MAIN_DOM_JS = r"""
                         spec_path: specPath,
                         provider: val('field-provider'),
                         model: val('field-model'),
-                        code_root: val('field-code_root'),
                         notebook: true,
                         notebook_path: '',
                         notebook_from_cache: false,
