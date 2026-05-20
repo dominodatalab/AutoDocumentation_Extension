@@ -136,8 +136,11 @@ MAIN_DOM_JS = r"""
         var providerSelect = document.getElementById('field-provider');
         var OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
         var ANTHROPIC_DEFAULT_MODEL = 'claude-haiku-4-5';
-        function toggleOpenAIFields() {
-            var isOpenAI = providerSelect && providerSelect.value === 'openai';
+        window.toggleOpenAIFields = function(providerValue) {
+            var prov = (providerValue !== undefined && providerValue !== null && providerValue !== '')
+                ? String(providerValue)
+                : (providerSelect ? providerSelect.value : '');
+            var isOpenAI = prov === 'openai';
             var pbuInput = document.getElementById('field-provider_base_url');
             if (pbuInput) {
                 var dkey = isOpenAI ? 'data-default-openai' : 'data-default-anthropic';
@@ -146,12 +149,14 @@ MAIN_DOM_JS = r"""
             }
             var modelInput = document.getElementById('field-model');
             if (modelInput) {
-                modelInput.placeholder = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                var defaultModel = isOpenAI ? OPENAI_DEFAULT_MODEL : ANTHROPIC_DEFAULT_MODEL;
+                modelInput.value = defaultModel;
+                modelInput.placeholder = defaultModel;
             }
-        }
+        };
         if (providerSelect) {
-            providerSelect.addEventListener('change', toggleOpenAIFields);
-            toggleOpenAIFields();
+            providerSelect.addEventListener('change', function() { window.toggleOpenAIFields(); });
+            window.toggleOpenAIFields();
         }
 
         // ── Notebook path enable/disable ───────────────────────────────
