@@ -107,9 +107,7 @@ def test_catalog_section_count_zero_when_dataset_yaml_has_no_sections(monkeypatc
         ),
     )
     got = st.catalog_from_dataset("snap-1")
-    assert len(got) == 1
-    assert got[0]["name"] == "Titled"
-    assert got[0]["section_count"] == 0
+    assert got == []
 
 
 def test_card_meta_ignores_doc_title_for_card_name():
@@ -182,7 +180,27 @@ def test_catalog_from_dataset_matches_builtin_when_fileName_is_full_path(monkeyp
 @patch.object(st, "DatasetManager")
 def test_sync_builtins_writes_each_template(mock_dm, tmp_path, monkeypatch):
     monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
-    for fn in st._ORDERED_BUILTIN_FILENAMES:
-        (tmp_path / fn).write_bytes(b"card_title: t\ncard_description: d\n")
+    # Destination snapshot id resolution is required for the no-overwrite logic.
+    monkeypatch.setattr(st.domino_datasets, "get_rw_snapshot_id", lambda _ds: "snap-dst")
+
+    (tmp_path / "a.yaml").write_bytes(
+        b"slug: a-slug\ncard_title: A\ncard_description: AD\nsections:\n  - s1\n"
+    )
+    (tmp_path / "b.yml").write_bytes(
+        b"slug: b-slug\ncard_title: B\ncard_description: BD\nsections: [x]\n"
+    )
+    (tmp_path / "not-yaml.txt").write_text("ignore", encoding="utf-8")
+
+    mock_dm.file_exists.return_value = False
     st.sync_builtins_to_autodoc_dataset("ds-1")
-    assert mock_dm.write_file.call_count == len(st._ORDERED_BUILTIN_FILENAMES)
+
+    assert mock_dm.write_file.call_count == 2
+    write_paths = [c.args[1] for c in mock_dm.write_file.call_args_list]
+    assert st.dataset_rel_path("a.yaml") in write_paths
+    assert st.dataset_rel_path("b.yml") in write_paths
+
+
+def test_all_packaged_yaml_are_gallery_valid():
+    for fn in st.packaged_template_filenames():
+        raw = (st._REPO_DIR / fn).read_bytes()
+        st.validate_gallery_template_yaml(raw)

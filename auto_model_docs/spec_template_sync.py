@@ -4,9 +4,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore
 
 from dataset_manager import DatasetManager
+import domino_datasets
 
 logger = logging.getLogger(__name__)
 
@@ -14,18 +15,57 @@ SPEC_TEMPLATES_PREFIX = "spec-templates"
 
 _REPO_DIR = Path(__file__).resolve().parent / "spec-templates"
 
-_ORDERED_BUILTIN_FILENAMES: tuple[str, ...] = (
-    "doc_spec.yaml",
-    "doc_spec_llm_eval.yaml",
-    "doc_spec_fairness.yaml",
-    "doc_spec_executive.yaml",
-)
+_YAML_EXTS = (".yaml", ".yml")
 
-_ALLOWED_FILENAMES = frozenset(_ORDERED_BUILTIN_FILENAMES)
+
+def packaged_template_filenames() -> list[str]:
+    """Return basenames of packaged spec-template YAMLs.
+
+    This must be dynamic so new built-ins can be added by dropping YAML
+    files into `_REPO_DIR`.
+    """
+    if not _REPO_DIR.exists():
+        return []
+    names: list[str] = []
+    for p in _REPO_DIR.iterdir():
+        if not p.is_file():
+            continue
+        if p.suffix.lower() not in _YAML_EXTS:
+            continue
+        names.append(p.name)
+    return sorted(names)
 
 
 def allowed_template_filenames() -> frozenset[str]:
-    return _ALLOWED_FILENAMES
+    """Compatibility shim for older endpoints/tests.
+
+    Returns packaged template basenames available under `_REPO_DIR`.
+    """
+    return frozenset(packaged_template_filenames())
+
+
+def validate_gallery_template_yaml(content: bytes) -> dict[str, Any]:
+    """Validate a gallery template YAML.
+
+    Required fields:
+    - slug
+    - title (card_title)
+    - description (card_description)
+    - sections: non-empty list or non-empty mapping
+    """
+    meta = card_meta_from_yaml(content)
+    errors: list[str] = []
+    if not str(meta.get("slug") or "").strip():
+        errors.append("Missing required field: slug")
+    if not str(meta.get("name") or "").strip():
+        errors.append("Missing required field: card_title")
+    if not str(meta.get("description") or "").strip():
+        errors.append("Missing required field: card_description")
+    if int(meta.get("section_count") or 0) <= 0:
+        errors.append("Missing required field: sections (must be non-empty)")
+    if errors:
+        raise ValueError("; ".join(errors))
+    return meta
 
 
 def dataset_rel_path(filename: str) -> str:
@@ -75,14 +115,31 @@ def card_meta_from_yaml(content: bytes) -> dict[str, Any]:
     return card_meta_from_spec_dict(parsed)
 
 
-def sync_builtins_to_autodoc_dataset(dataset_id: str) -> None:
+def sync_builtins_to_autodoc_dataset(dataset_id: str, dest_snapshot_id: str | None = None) -> None:
     logger.info("sync_builtins_to_autodoc_dataset: start dataset_id=%r", dataset_id)
-    for filename in _ORDERED_BUILTIN_FILENAMES:
+    if dest_snapshot_id is None:
+        dest_snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id)
+    if not dest_snapshot_id:
+        raise RuntimeError("Could not resolve destination snapshot for autodoc dataset")
+
+    filenames = packaged_template_filenames()
+    logger.info(
+        "sync_builtins_to_autodoc_dataset: discovered %d packaged templates under %r",
+        len(filenames),
+        _REPO_DIR,
+    )
+    for filename in filenames:
         src = _REPO_DIR / filename
         if not src.is_file():
-            logger.warning("sync_builtins_to_autodoc_dataset: missing packaged file %s", src)
             continue
         rel = dataset_rel_path(filename)
+        if DatasetManager.file_exists(dest_snapshot_id, rel):
+            logger.info(
+                "sync_builtins_to_autodoc_dataset: skip existing template filename=%r rel=%r",
+                filename,
+                rel,
+            )
+            continue
         body = src.read_bytes()
         logger.info(
             "sync_builtins_to_autodoc_dataset: write_file dataset_id=%r path=%r bytes=%d",
@@ -141,14 +198,7 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
     )
 
     out: list[dict[str, Any]] = []
-    for filename in _ORDERED_BUILTIN_FILENAMES:
-        if filename not in names:
-            logger.info(
-                "catalog_from_dataset: skip %r (not in list result for path=%r)",
-                filename,
-                SPEC_TEMPLATES_PREFIX,
-            )
-            continue
+    for filename in sorted(names):
         rel = dataset_rel_path(filename)
         logger.info(
             "catalog_from_dataset: read template %r snapshot_id=%r rel=%r",
@@ -172,56 +222,18 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
             filename,
             len(raw or b""),
         )
-        text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
         try:
-            parsed = yaml.safe_load(text)
-        except yaml.YAMLError:
-            head = text[:400].replace("\n", "\\n")
-            logger.warning(
-                "catalog_from_dataset: yaml parse failed for %r rel=%r "
-                "decoded_len=%d head=%r",
-                filename,
-                rel,
-                len(text),
-                head,
-            )
-            continue
-        logger.info(
-            "catalog_from_dataset: yaml safe_load ok %r root_type=%s",
-            filename,
-            type(parsed).__name__,
-        )
-        if not isinstance(parsed, dict):
-            head = text[:300].replace("\n", "\\n")
+            meta = validate_gallery_template_yaml(raw)
+        except Exception:
             logger.info(
-                "catalog_from_dataset: skip %r parsed type=%s head=%r",
+                "catalog_from_dataset: skip invalid gallery template filename=%r",
                 filename,
-                type(parsed).__name__,
-                head,
             )
             continue
-        meta = card_meta_from_spec_dict(parsed)
-        slug = meta.get("slug") or ""
-        name = meta.get("name") or ""
-        if not slug.strip() or not name.strip():
-            logger.info(
-                "catalog_from_dataset: skip %r (missing slug or card_title after parse) slug=%r name=%r",
-                filename,
-                slug,
-                name,
-            )
-            continue
-        logger.info(
-            "catalog_from_dataset: add entry %r slug=%r name=%r section_count=%r",
-            filename,
-            slug.strip(),
-            name.strip(),
-            int(meta.get("section_count") or 0),
-        )
         out.append(
             {
-                "slug": slug.strip(),
-                "name": name.strip(),
+                "slug": str(meta.get("slug") or "").strip(),
+                "name": str(meta.get("name") or "").strip(),
                 "description": str(meta.get("description") or "").strip(),
                 "template_file": filename,
                 "section_count": int(meta.get("section_count") or 0),

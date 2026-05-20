@@ -268,8 +268,11 @@ async def index(req: Request):
             ds_id = (ensured.get("id") or "").strip()
             if ds_id:
                 import spec_template_sync
-
-                spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
+                snap_id = (ensured.get("rwSnapshotId") or ensured.get("readWriteSnapshotId") or "").strip() or None
+                if snap_id:
+                    spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=snap_id)
+                else:
+                    spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
         except Exception as exc:
             page_warnings.append(
                 EnvironmentWarning(

@@ -12,7 +12,6 @@ from starlette.responses import Response
 from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
 from dataset_manager import DatasetManager
-import yaml
 import spec_template_sync
 
 from .state import (
@@ -60,7 +59,7 @@ def _active_autodoc_snapshot_for_spec_templates(project_id: str) -> str:
     )
     if not ds_id:
         raise RuntimeError("autodoc dataset has no id")
-    spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
+    spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=initial_snap)
     logger.info("_active_autodoc_snapshot_for_spec_templates: sync_builtins finished")
     fresh = domino_datasets.get_rw_snapshot_id(ds_id)
     logger.info(
@@ -255,7 +254,11 @@ def register_api_routes(rt):
             DatasetManager.write_file(dataset_id, upload_path, content)
             if fn_low.endswith((".yaml", ".yml")):
                 try:
-                    spec_template_sync.sync_builtins_to_autodoc_dataset(dataset_id)
+                    dest_snap = domino_datasets.get_rw_snapshot_id(dataset_id)
+                    spec_template_sync.sync_builtins_to_autodoc_dataset(
+                        dataset_id,
+                        dest_snapshot_id=dest_snap,
+                    )
                 except Exception:
                     logger.warning("sync built-ins after spec upload failed", exc_info=True)
             return Response(
@@ -323,21 +326,11 @@ def register_api_routes(rt):
         except Exception as exc:
             return Response(json.dumps({"error": f"Could not read source template: {exc}"}), status_code=500, media_type="application/json")
 
-        # Basic validation for gallery fields.
-        text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
         try:
-            parsed = yaml.safe_load(text)
-        except Exception as exc:
-            return Response(json.dumps({"error": f"Invalid YAML: {exc}"}), status_code=400, media_type="application/json")
-
-        if not isinstance(parsed, dict):
-            return Response(json.dumps({"error": "Spec YAML must be a mapping/object"}), status_code=400, media_type="application/json")
-
-        slug = str(parsed.get("slug") or "").strip()
-        card_title = str(parsed.get("card_title") or "").strip()
-        if not slug or not card_title:
+            spec_template_sync.validate_gallery_template_yaml(raw)
+        except ValueError as exc:
             return Response(
-                json.dumps({"error": "Missing required gallery fields: slug and card_title"}),
+                json.dumps({"error": str(exc)}),
                 status_code=400,
                 media_type="application/json",
             )
@@ -473,7 +466,7 @@ def register_api_routes(rt):
         base = raw_param.replace("\\", "/").split("/")[-1]
         if not base:
             return Response("template_file required", status_code=400)
-        if base not in spec_template_sync.allowed_template_filenames():
+        if not base.lower().endswith((".yaml", ".yml")):
             return Response("Not found", status_code=404)
         try:
             logger.info(
@@ -511,7 +504,7 @@ def register_api_routes(rt):
         try:
             ensured, _snap = _autodoc_dataset_and_snapshot(pid)
             ds_id = str(ensured.get("id") or "").strip()
-            spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
+            spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=_snap)
             return Response(json.dumps({"ok": True}), media_type="application/json")
         except Exception as exc:
             logger.exception("sync-spec-templates failed")

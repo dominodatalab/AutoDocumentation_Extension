@@ -137,7 +137,7 @@ def _mock_studio_modules(monkeypatch):
         "rwSnapshotId": "snap-test",
     }
 
-    def _noop_sync_builtins(_dataset_id: str) -> None:
+    def _noop_sync_builtins(_dataset_id: str, *args, **kwargs) -> None:
         return None
 
     monkeypatch.setattr(
@@ -551,7 +551,7 @@ class TestApiRoutes:
         result = await routes["/api/built-in-templates"](req)
         assert result.status_code == 200
         assert json.loads(result.body) == catalog
-        mock_sync.assert_called_once_with("ds-test")
+        mock_sync.assert_called_once_with("ds-test", dest_snapshot_id="snap-test")
 
     @pytest.mark.asyncio
     async def test_built_in_template_yaml_rejects_unknown_file(self, _mock_studio_modules):
@@ -601,7 +601,7 @@ class TestApiRoutes:
         result = await routes["/api/sync-spec-templates"](req)
         assert result.status_code == 200
         assert json.loads(result.body).get("ok") is True
-        mock_sync.assert_called_once_with("ds-test")
+        mock_sync.assert_called_once_with("ds-test", dest_snapshot_id="snap-test")
 
     @pytest.mark.asyncio
     async def test_add_spec_template_copies_and_validates(self, _mock_studio_modules, monkeypatch):
@@ -678,7 +678,7 @@ class TestApiRoutes:
         result = await routes["/api/add-spec-template"](req)
         assert result.status_code == 400
         body = json.loads(result.body)
-        assert "Missing required gallery fields" in body.get("error", "")
+        assert "Missing required field" in body.get("error", "")
         write_mock.assert_not_called()
 
 

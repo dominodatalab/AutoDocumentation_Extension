@@ -68,7 +68,13 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     _mem_files: dict[str, bytes] = {}
     _mem_files["spec.yaml"] = b"title: Test\n"
-    _mem_files["spec-templates/doc_spec.yaml"] = b"title: DownloadFromDataset\n"
+    _mem_files["spec-templates/doc_spec.yaml"] = (
+        b"slug: standard_ml\n"
+        b"card_title: Standard ML Model Doc\n"
+        b"card_description: DownloadFromDataset\n"
+        b"sections:\n"
+        b"  - Executive Summary\n"
+    )
 
     def _mem_write(dataset_id, path, content):
         _mem_files[path] = content
