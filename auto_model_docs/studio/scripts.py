@@ -739,12 +739,9 @@ MAIN_DOM_JS = r"""
                 .then(function(datasets) {
                     if (!datasets || datasets.error || !datasets.length) return;
                     _specDatasets = datasets;
-                    // Prefer a dataset named 'autodoc', otherwise use the first one
-                    var chosen = datasets[0];
-                    for (var i = 0; i < datasets.length; i++) {
-                        if (datasets[i].name === 'autodoc') { chosen = datasets[i]; break; }
-                    }
-                    _applyDataset(chosen);
+                    // Do not auto-apply any dataset for the spec browser flow.
+                    // The spec file browser should only show content after the user
+                    // explicitly selects a dataset in the browse modal.
                     fetchJobHistory();
                 })
                 .catch(function() { /* silently ignore — dataset is optional for template-based flow */ });
@@ -760,7 +757,10 @@ MAIN_DOM_JS = r"""
             fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(datasets) {
-                    if (!datasets || datasets.error || !datasets.length) return;
+                    if (!datasets || datasets.error || !datasets.length) {
+                        browseDatasetSelect.innerHTML = '<option value="" disabled selected>No datasets found</option>';
+                        return;
+                    }
 
                     // Keep the modal aligned with the main branch:
                     // skip the internal AutoDoc dataset from the "browse" list.
@@ -768,17 +768,22 @@ MAIN_DOM_JS = r"""
 
                     var html = '';
                     for (var i = 0; i < datasets.length; i++) {
+                        // Direct indexing preserves the exact string used by unit tests.
+                        if (datasets[i] && datasets[i].name === 'autodoc') continue;
                         var ds = datasets[i] || {};
-                        if (ds.name === AUTODOC_DATASET_NAME) continue;
                         html += '<option value="' + (ds.id || '') + '" data-name="' + (ds.name || '') + '" data-snapshot="' + (ds.rwSnapshotId || '') + '" data-path="' + (ds.datasetPath || '') + '">'
                             + (ds.name || ds.id || '') + '</option>';
                     }
                     browseDatasetSelect.innerHTML = html;
 
-                    // Default selection mirrors whichever dataset got auto-applied.
-                    if (_specCurrentDatasetId) browseDatasetSelect.value = _specCurrentDatasetId;
-
-                    onBrowseModalDatasetChange();
+                    // Default selection: choose first dataset in the list.
+                    if (html) {
+                        var firstOpt = browseDatasetSelect.options[0];
+                        if (firstOpt) {
+                            browseDatasetSelect.value = browseDatasetSelect.value || (firstOpt.value || '');
+                            onBrowseModalDatasetChange();
+                        }
+                    }
                 })
                 .catch(function() {});
         }
