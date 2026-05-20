@@ -431,8 +431,43 @@ MAIN_DOM_JS = r"""
 
         function confirmBrowseSelection() {
             if (!_browseSelectedFile) return;
-            _showSpecConfirm(_browseSelectedFile, 'browse');
-            closeBrowseModal();
+            var browseMsg = document.getElementById('browse-selected-label');
+            if (browseMsg) {
+                browseMsg.textContent = 'Validating...';
+            }
+
+            var srcPath = _browseSelectedFile;
+            var filename = (srcPath || '').rsplit('/', 1).slice(-1)[0];
+            var pid = resolvedProjectId();
+
+            // SnapshotId is optional: the backend can resolve it from datasetId.
+            var payload = {
+                sourceDatasetId: _specCurrentDatasetId,
+                sourceSnapshotId: _specCurrentSnapshotId,
+                sourcePath: srcPath,
+                filename: filename,
+            };
+
+            fetch(_adUrl('api/add-spec-template') + (pid ? '?projectId=' + encodeURIComponent(pid) : ''), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+                .then(_checkResp)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data || data.error) throw new Error((data && data.error) || 'Copy failed');
+                    _showSpecConfirm(srcPath, 'browse');
+                    return loadBuiltinTemplates();
+                })
+                .then(function() {
+                    closeBrowseModal();
+                })
+                .catch(function(err) {
+                    if (browseMsg) {
+                        browseMsg.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+                    }
+                });
         }
         window.confirmBrowseSelection = confirmBrowseSelection;
 
@@ -649,6 +684,21 @@ MAIN_DOM_JS = r"""
         var specUploadStatus = document.getElementById('spec-upload-status');
         var specPathField = document.getElementById('field-spec_path');
 
+        // Browse modal dataset selection (separate UI from the auto-resolved dataset)
+        var browseDatasetSelect = document.getElementById('browse-dataset-select');
+
+        function browseModalApplyDataset(d) {
+            if (!d) return;
+            _specCurrentDatasetId = d.id || '';
+            _specCurrentDatasetName = d.name || '';
+            _specCurrentSnapshotId = d.rwSnapshotId || '';
+            _specCurrentDatasetPath = d.datasetPath || '';
+            _specCurrentPath = '';
+            if (specPathField && !_selectedTemplateSlug) specPathField.value = '';
+            if (_specCurrentDatasetId) browseFiles('');
+            updateGenerateButton();
+        }
+
         function queryApiDatasetFiles(relPath) {
             var parts = [];
             var pid = resolvedProjectId();
@@ -701,6 +751,59 @@ MAIN_DOM_JS = r"""
         }
 
         loadDatasets();
+
+        function loadBrowseModalDatasets() {
+            if (!browseDatasetSelect) return;
+            var pid = resolvedProjectId();
+            if (!pid) return;
+
+            fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(datasets) {
+                    if (!datasets || datasets.error || !datasets.length) return;
+
+                    // Keep the modal aligned with the main branch:
+                    // skip the internal AutoDoc dataset from the "browse" list.
+                    var AUTODOC_DATASET_NAME = 'autodoc';
+
+                    var html = '';
+                    for (var i = 0; i < datasets.length; i++) {
+                        var ds = datasets[i] || {};
+                        if (ds.name === AUTODOC_DATASET_NAME) continue;
+                        html += '<option value="' + (ds.id || '') + '" data-name="' + (ds.name || '') + '" data-snapshot="' + (ds.rwSnapshotId || '') + '" data-path="' + (ds.datasetPath || '') + '">'
+                            + (ds.name || ds.id || '') + '</option>';
+                    }
+                    browseDatasetSelect.innerHTML = html;
+
+                    // Default selection mirrors whichever dataset got auto-applied.
+                    if (_specCurrentDatasetId) browseDatasetSelect.value = _specCurrentDatasetId;
+
+                    onBrowseModalDatasetChange();
+                })
+                .catch(function() {});
+        }
+
+        function onBrowseModalDatasetChange() {
+            if (!browseDatasetSelect) return;
+            var opt = browseDatasetSelect.options[browseDatasetSelect.selectedIndex];
+            if (!opt) return;
+            var dsId = browseDatasetSelect.value || '';
+            if (!dsId) return;
+
+            // Reconstruct a dataset object from option data attributes
+            var ds = {
+                id: dsId,
+                name: opt.getAttribute('data-name') || '',
+                rwSnapshotId: opt.getAttribute('data-snapshot') || '',
+                datasetPath: opt.getAttribute('data-path') || '',
+            };
+            browseModalApplyDataset(ds);
+        }
+
+        if (browseDatasetSelect) {
+            browseDatasetSelect.addEventListener('change', onBrowseModalDatasetChange);
+            loadBrowseModalDatasets();
+        }
 
         // ── Spec file browser ──────────────────────────────────────────
         function specParentPath(p) {

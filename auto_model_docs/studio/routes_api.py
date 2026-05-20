@@ -12,6 +12,8 @@ from starlette.responses import Response
 from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
 from dataset_manager import DatasetManager
+import yaml
+import spec_template_sync
 
 from .state import (
     _resolve_request_project_id,
@@ -272,6 +274,84 @@ def register_api_routes(rt):
             )
 
     rt("/api/upload-spec-to-dataset")(api_upload_spec_to_dataset)
+
+    async def api_add_spec_template(req: Request):
+        """
+        JSON-only: copy a YAML spec template from a source dataset into the
+        destination "spec-templates" directory of the autodoc dataset.
+        """
+        pid = (_resolve_request_project_id(req) or "").strip()
+        require_project_write(pid)
+
+        try:
+            payload = await req.json()
+        except Exception:
+            return Response(json.dumps({"error": "Invalid JSON"}), status_code=400, media_type="application/json")
+
+        if not isinstance(payload, dict):
+            return Response(json.dumps({"error": "Invalid JSON payload"}), status_code=400, media_type="application/json")
+
+        source_dataset_id = str(payload.get("sourceDatasetId") or "").strip()
+        source_snapshot_id = str(payload.get("sourceSnapshotId") or "").strip()
+        source_path = str(payload.get("sourcePath") or "").strip()
+        filename = str(payload.get("filename") or "").strip() or source_path.rsplit("/", 1)[-1]
+
+        if not source_dataset_id:
+            return Response(json.dumps({"error": "sourceDatasetId is required"}), status_code=400, media_type="application/json")
+        if not source_path:
+            return Response(json.dumps({"error": "sourcePath is required"}), status_code=400, media_type="application/json")
+        if not filename:
+            return Response(json.dumps({"error": "filename is required"}), status_code=400, media_type="application/json")
+
+        # Destination: autodoc dataset for this project.
+        ensured = domino_datasets.ensure_dataset(pid)
+        dest_dataset_id = str(ensured.get("id") or "").strip()
+        if not dest_dataset_id:
+            return Response(json.dumps({"error": "Destination autodoc dataset has no id"}), status_code=500, media_type="application/json")
+
+        if not source_snapshot_id:
+            source_snapshot_id = domino_datasets.get_rw_snapshot_id(source_dataset_id)
+        if not source_snapshot_id:
+            return Response(
+                json.dumps({"error": "Could not resolve source snapshot for dataset"}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        try:
+            raw = DatasetManager.read_file(source_snapshot_id, source_path)
+        except Exception as exc:
+            return Response(json.dumps({"error": f"Could not read source template: {exc}"}), status_code=500, media_type="application/json")
+
+        # Basic validation for gallery fields.
+        text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
+        try:
+            parsed = yaml.safe_load(text)
+        except Exception as exc:
+            return Response(json.dumps({"error": f"Invalid YAML: {exc}"}), status_code=400, media_type="application/json")
+
+        if not isinstance(parsed, dict):
+            return Response(json.dumps({"error": "Spec YAML must be a mapping/object"}), status_code=400, media_type="application/json")
+
+        slug = str(parsed.get("slug") or "").strip()
+        card_title = str(parsed.get("card_title") or "").strip()
+        if not slug or not card_title:
+            return Response(
+                json.dumps({"error": "Missing required gallery fields: slug and card_title"}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        # Write into spec-templates/<filename> inside the autodoc dataset.
+        dest_rel = spec_template_sync.dataset_rel_path(filename)
+        try:
+            DatasetManager.write_file(dest_dataset_id, dest_rel, raw)
+        except Exception as exc:
+            return Response(json.dumps({"error": f"Could not write template: {exc}"}), status_code=500, media_type="application/json")
+
+        return Response(json.dumps({"ok": True}), media_type="application/json")
+
+    rt("/api/add-spec-template")(api_add_spec_template)
 
     async def api_download_template(req: Request):
         import spec_template_sync

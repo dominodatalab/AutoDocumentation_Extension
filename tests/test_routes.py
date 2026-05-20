@@ -603,6 +603,84 @@ class TestApiRoutes:
         assert json.loads(result.body).get("ok") is True
         mock_sync.assert_called_once_with("ds-test")
 
+    @pytest.mark.asyncio
+    async def test_add_spec_template_copies_and_validates(self, _mock_studio_modules, monkeypatch):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+
+        # source snapshot id
+        _mock_studio_modules["state"].domino_datasets.get_rw_snapshot_id.return_value = "snap-src"
+        # destination autodoc dataset id
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-dest"}
+
+        src_yaml = b"slug: standard_ml\ncard_title: My Card\ncard_description: D\nsections: [a]\n"
+
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.read_file",
+            staticmethod(lambda snap, path: src_yaml),
+        )
+        write_mock = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(write_mock),
+        )
+
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            json_body={
+                "sourceDatasetId": "ds-src",
+                "sourceSnapshotId": "snap-src",
+                "sourcePath": "some/doc.yaml",
+                "filename": "doc.yaml",
+            },
+        )
+
+        result = await routes["/api/add-spec-template"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body.get("ok") is True
+
+        # Writes to spec-templates/<filename>
+        assert write_mock.call_count == 1
+        args = write_mock.call_args[0]
+        assert args[0] == "ds-dest"
+        assert args[1].endswith("/doc.yaml")
+
+    @pytest.mark.asyncio
+    async def test_add_spec_template_rejects_missing_fields(self, _mock_studio_modules, monkeypatch):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+
+        _mock_studio_modules["state"].domino_datasets.get_rw_snapshot_id.return_value = "snap-src"
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-dest"}
+
+        bad_yaml = b"card_title: Missing slug\nsections: []\n"
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.read_file",
+            staticmethod(lambda snap, path: bad_yaml),
+        )
+        write_mock = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(write_mock),
+        )
+
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            json_body={
+                "sourceDatasetId": "ds-src",
+                "sourceSnapshotId": "snap-src",
+                "sourcePath": "some/doc.yaml",
+                "filename": "doc.yaml",
+            },
+        )
+
+        result = await routes["/api/add-spec-template"](req)
+        assert result.status_code == 400
+        body = json.loads(result.body)
+        assert "Missing required gallery fields" in body.get("error", "")
+        write_mock.assert_not_called()
+
 
 # ===========================================================================
 # routes_job.py
