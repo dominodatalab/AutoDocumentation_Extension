@@ -6,8 +6,14 @@ from __future__ import annotations
 MAIN_DOM_JS = r"""
     // ── Shared fetch helper ──────────────────────────────────────────
     function _checkResp(r) {
-        if (!r.ok) throw new Error('Server error (' + r.status + ')');
-        return r;
+        if (r.ok) return r;
+        return r.text().then(function(txt) {
+            try {
+                var data = JSON.parse(txt);
+                if (data && data.error) throw new Error(data.error);
+            } catch (e) {}
+            throw new Error(txt || ('Server error (' + r.status + ')'));
+        });
     }
 
     // ── URL prefixing for Domino app proxy ──────────────────────────
@@ -440,6 +446,32 @@ MAIN_DOM_JS = r"""
             var filename = String(srcPath || '').split('/').pop();
             var pid = resolvedProjectId();
 
+            function _showGalleryOverlaySpinner() {
+                var gallery = document.getElementById('template-gallery');
+                if (!gallery) return;
+                var overlay = document.getElementById('gallery-overlay-spinner');
+                if (overlay) overlay.remove();
+                overlay = document.createElement('div');
+                overlay.id = 'gallery-overlay-spinner';
+                overlay.style.position = 'absolute';
+                overlay.style.inset = '0';
+                overlay.style.display = 'flex';
+                overlay.style.alignItems = 'center';
+                overlay.style.justifyContent = 'center';
+                overlay.style.background = 'rgba(255,255,255,0.65)';
+                overlay.style.zIndex = '50';
+                overlay.innerHTML =
+                    '<span class="material-symbols-outlined" style="font-size:26px;margin-right:8px">hourglass_empty</span>'
+                    + '<span style="font-weight:600">Refreshing templates...</span>';
+                gallery.style.position = 'relative';
+                gallery.appendChild(overlay);
+            }
+
+            function _hideGalleryOverlaySpinner() {
+                var overlay = document.getElementById('gallery-overlay-spinner');
+                if (overlay) overlay.remove();
+            }
+
             // SnapshotId is optional: the backend can resolve it from datasetId.
             var payload = {
                 sourceDatasetId: _specCurrentDatasetId,
@@ -458,12 +490,15 @@ MAIN_DOM_JS = r"""
                 .then(function(data) {
                     if (!data || data.error) throw new Error((data && data.error) || 'Copy failed');
                     _showSpecConfirm(srcPath, 'browse');
+                    closeBrowseModal();
+                    _showGalleryOverlaySpinner();
                     return loadBuiltinTemplates();
                 })
                 .then(function() {
-                    closeBrowseModal();
+                    _hideGalleryOverlaySpinner();
                 })
                 .catch(function(err) {
+                    _hideGalleryOverlaySpinner();
                     if (browseMsg) {
                         browseMsg.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
                     }
