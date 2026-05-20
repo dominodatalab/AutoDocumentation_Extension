@@ -429,6 +429,15 @@ async def index(req: Request):
                                     cls="preview-panel-header",
                                 ),
                                 Div(
+                                    Span("path", cls="preview-panel-label"),
+                                    Span(
+                                        "",
+                                        cls="preview-panel-path-text",
+                                        id="template-selected-path",
+                                    ),
+                                    style="margin-top:10px;font-size:12px;color:var(--on-surface-variant);",
+                                ),
+                                Div(
                                     Div(
                                         Span("description", cls="material-symbols-outlined preview-empty-icon"),
                                         Span("Select a template to preview its document outline", cls="preview-empty-text"),

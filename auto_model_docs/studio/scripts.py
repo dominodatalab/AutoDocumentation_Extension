@@ -714,6 +714,15 @@ MAIN_DOM_JS = r"""
             }
             if (tpl) loadYamlTemplatePreview(tpl);
 
+            var pathEl = document.getElementById('template-selected-path');
+            if (pathEl) {
+                var p = (tpl && (tpl.template_path || tpl.uid)) ? (tpl.template_path || tpl.uid) : '';
+                if (!p && tpl && tpl.template_file) {
+                    p = tpl.template_file;
+                }
+                pathEl.textContent = p || '';
+            }
+
             updateGenerateButton();
         }
 
@@ -965,6 +974,8 @@ MAIN_DOM_JS = r"""
             _selectedTemplateUid = null;
             _customSpecSelected = true;
             resetTemplateYamlPreview();
+            var pathEl = document.getElementById('template-selected-path');
+            if (pathEl) pathEl.textContent = '';
             // Deselect template cards
             var cards = document.querySelectorAll('.template-card');
             for (var i = 0; i < cards.length; i++) {
