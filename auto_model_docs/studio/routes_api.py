@@ -329,6 +329,21 @@ def register_api_routes(rt):
         try:
             spec_template_sync.validate_gallery_template_yaml(raw)
         except ValueError as exc:
+            msg = str(exc)
+            missing_prefix = "Missing required field:"
+            if missing_prefix in msg:
+                fields = []
+                for part in msg.split(";"):
+                    part = part.strip()
+                    if part.startswith(missing_prefix):
+                        fields.append(part[len(missing_prefix):].strip())
+                if fields:
+                    friendly = "Missing required field: " + ", ".join(fields)
+                    return Response(
+                        json.dumps({"error": friendly, "kind": "missing_fields"}),
+                        status_code=400,
+                        media_type="application/json",
+                    )
             return Response(
                 json.dumps({"error": str(exc)}),
                 status_code=400,

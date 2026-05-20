@@ -500,7 +500,12 @@ MAIN_DOM_JS = r"""
                 .catch(function(err) {
                     _hideGalleryOverlaySpinner();
                     if (browseMsg) {
-                        browseMsg.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+                        var msg = (err && err.message ? err.message : String(err));
+                        if (typeof msg === 'string' && msg.toLowerCase().indexOf('missing required field:') === 0) {
+                            browseMsg.textContent = msg;
+                        } else {
+                            browseMsg.textContent = 'Error: ' + msg;
+                        }
                     }
                 });
         }

@@ -2152,8 +2152,10 @@ select.hw-tier-select option {
     color: var(--on-surface-variant);
     flex: 1;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
     font-style: italic;
 }
 
