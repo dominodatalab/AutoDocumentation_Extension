@@ -8,7 +8,6 @@ shared state across requests.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 import json
@@ -30,173 +29,6 @@ AUTODOC_DATASET_DESCRIPTION = (
 
 def _get_auth_headers() -> dict[str, str]:
     return _current_auth().to_headers()
-
-
-def _try_base64_decode_utf8(s: str) -> str | None:
-    raw = s.replace("\n", "").replace("\r", "").strip()
-    if not raw:
-        return None
-    try:
-        decoded = base64.b64decode(raw, validate=False)
-    except Exception:
-        return None
-    try:
-        return decoded.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-
-
-_PREVIEW_BODY_KEYS = (
-    "content",
-    "fileContent",
-    "body",
-    "text",
-    "data",
-    "yaml",
-    "spec",
-    "blob",
-    "raw",
-    "value",
-)
-
-
-def _decode_preview_json_string(s: str) -> str | None:
-    u = s.lstrip("\ufeff")
-    if not u.strip():
-        return None
-    lead = u.lstrip()
-    if not lead or lead[0] not in "{[":
-        return u
-    try:
-        inner = json.loads(u)
-    except Exception:
-        return u
-    if isinstance(inner, (dict, list)):
-        hit = _preview_payload_to_file_text(inner)
-        return hit or u
-    if isinstance(inner, str):
-        nested = _decode_preview_json_string(inner)
-        return nested or u
-    return u
-
-
-def _preview_payload_to_file_text(obj: Any) -> str | None:
-    if isinstance(obj, dict):
-        for nk in ("file", "result", "payload", "preview"):
-            inner = obj.get(nk)
-            if isinstance(inner, (dict, list)):
-                hit = _preview_payload_to_file_text(inner)
-                if hit:
-                    return hit
-        for key in _PREVIEW_BODY_KEYS:
-            val = obj.get(key)
-            if isinstance(val, str) and val.strip():
-                hit = _decode_preview_json_string(val)
-                if hit:
-                    return hit
-            if isinstance(val, (dict, list)):
-                hit = _preview_payload_to_file_text(val)
-                if hit:
-                    return hit
-        for key in ("contentBase64", "base64Content", "fileContentBase64", "encodedContent"):
-            val = obj.get(key)
-            if isinstance(val, str) and val.strip():
-                dec = _try_base64_decode_utf8(val)
-                if dec is not None:
-                    return dec
-        data_val = obj.get("data")
-        if isinstance(data_val, str) and data_val.strip():
-            hit = _decode_preview_json_string(data_val)
-            if hit:
-                return hit
-        for _k, v in obj.items():
-            if isinstance(v, (dict, list)):
-                hit = _preview_payload_to_file_text(v)
-                if hit:
-                    return hit
-            if isinstance(v, str) and v.strip():
-                lead = v.lstrip("\ufeff").lstrip()
-                if lead and lead[0] in "{[":
-                    hit = _decode_preview_json_string(v)
-                    if hit:
-                        return hit
-    if isinstance(obj, list):
-        for item in obj:
-            hit = _preview_payload_to_file_text(item)
-            if hit:
-                return hit
-    return None
-
-
-def _bytes_from_snapshot_preview_response(resp: httpx.Response) -> bytes:
-    content = resp.content or b""
-    ctype = (resp.headers.get("content-type") or "").lower()
-    logger.info(
-        "_bytes_from_snapshot_preview_response: raw_len=%d content_type=%r starts_with_curly=%s",
-        len(content),
-        ctype[:120] if ctype else ctype,
-        (content[:1] == b"{") if content else False,
-    )
-    if "json" not in ctype and content[:1] != b"{":
-        logger.info("_bytes_from_snapshot_preview_response: not treating as json, return raw bytes")
-        return content
-    try:
-        text = content.decode("utf-8")
-        payload = json.loads(text)
-    except Exception as exc:
-        logger.info(
-            "_bytes_from_snapshot_preview_response: json parse failed %s return raw",
-            exc,
-        )
-        return content
-    ptype = type(payload).__name__
-    if isinstance(payload, dict):
-        pkeys = list(payload.keys())[:40]
-        logger.info("_bytes_from_snapshot_preview_response: payload dict keys=%r", pkeys)
-    elif isinstance(payload, list):
-        logger.info(
-            "_bytes_from_snapshot_preview_response: payload list len=%d",
-            len(payload),
-        )
-    else:
-        logger.info("_bytes_from_snapshot_preview_response: payload type=%s", ptype)
-    if isinstance(payload, str) and payload.strip():
-        hit = _decode_preview_json_string(payload)
-        if hit:
-            logger.info(
-                "_bytes_from_snapshot_preview_response: str payload unwrapped len=%d",
-                len(hit),
-            )
-            return hit.encode("utf-8")
-        out = payload.lstrip("\ufeff").encode("utf-8")
-        logger.info(
-            "_bytes_from_snapshot_preview_response: str payload passthrough len=%d",
-            len(out),
-        )
-        return out
-    if isinstance(payload, dict):
-        hit = _preview_payload_to_file_text(payload)
-        if hit:
-            logger.info(
-                "_bytes_from_snapshot_preview_response: dict unwrapped text len=%d",
-                len(hit),
-            )
-            return hit.encode("utf-8")
-        logger.info("_bytes_from_snapshot_preview_response: dict unwrap found no text")
-    if isinstance(payload, list):
-        hit = _preview_payload_to_file_text(payload)
-        if hit:
-            logger.info(
-                "_bytes_from_snapshot_preview_response: list unwrapped text len=%d",
-                len(hit),
-            )
-            return hit.encode("utf-8")
-        logger.info("_bytes_from_snapshot_preview_response: list unwrap found no text")
-    logger.info(
-        "_bytes_from_snapshot_preview_response: returning original content len=%d",
-        len(content),
-    )
-    return content
 
 
 class DatasetManager:
@@ -285,10 +117,10 @@ class DatasetManager:
     def read_file(snapshot_id: str, path: str) -> bytes:
         """Download file content from a snapshot.
 
-        Endpoint: GET /v4/datasetrw/snapshot/{snapshotId}/file/preview?path=
+        Endpoint: GET /v4/datasetrw/snapshot/{snapshotId}/file/raw?path=
         """
         base_url = _resolve_api_host().rstrip("/")
-        url = f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/preview"
+        url = f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/raw"
         logger.info(
             "DatasetManager.read_file: GET %s params=%r snapshot_id=%r",
             url,
@@ -303,31 +135,13 @@ class DatasetManager:
             )
             resp.raise_for_status()
         hdrs = getattr(resp, "headers", {}) or {}
+        data = resp.content or b""
         logger.info(
             "DatasetManager.read_file: response status=%s content-type=%r len=%d",
             getattr(resp, "status_code", 200),
             (hdrs.get("content-type") or "")[:120],
-            len(resp.content or b""),
+            len(data),
         )
-        data = resp.content or b""
-        ctype = (resp.headers.get("content-type") or "").lower()
-        for _ in range(8):
-            fake = httpx.Response(200, headers={"content-type": ctype or "application/json"}, content=data)
-            nxt = _bytes_from_snapshot_preview_response(fake)
-            if nxt == data:
-                logger.info(
-                    "DatasetManager.read_file: unwrap finished after pass bytes_len=%d",
-                    len(data),
-                )
-                return data
-            logger.info(
-                "DatasetManager.read_file: unwrap pass reduced/transformed len %d -> %d",
-                len(data),
-                len(nxt),
-            )
-            data = nxt
-            ctype = ""
-        logger.info("DatasetManager.read_file: unwrap max passes, final len=%d", len(data))
         return data
 
     @staticmethod

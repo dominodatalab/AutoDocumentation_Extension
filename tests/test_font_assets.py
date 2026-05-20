@@ -95,9 +95,13 @@ def test_studio_css_typography_matches_domino_web_ui():
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    css = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
-    assert "fonts.googleapis.com/css2?family=Inter" in css
-    assert "Roboto+Mono" in css
-    assert "--font-body:" in css and "Inter" in css
-    assert "Font Awesome 6 Pro" in css
-    assert ".fa-icon" in css
+    studio = root / "auto_model_docs" / "studio"
+    styles = (studio / "styles.py").read_text()
+    assert "fonts.googleapis.com/css2?family=Inter" in styles
+    assert "Material+Symbols+Outlined" in styles
+    assert "--font-body:" in styles and "Inter" in styles
+    assert "ui-monospace" in styles
+    assert ".material-symbols-outlined" in styles
+
+    font_assets = (studio / "font_assets.py").read_text()
+    assert "Font Awesome 6 Pro" in font_assets
