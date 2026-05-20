@@ -459,3 +459,9 @@ class TestSpecFileBrowserUi:
 
         assert AUTODOC_DATASET_NAME == "autodoc"
         assert "datasets[i].name === 'autodoc'" in scripts_src
+
+    def test_template_gallery_uses_template_uid(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "data-uid" in scripts_src
+        assert "_selectedTemplateUid" in scripts_src

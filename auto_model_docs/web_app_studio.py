@@ -458,7 +458,7 @@ async def index(req: Request):
                             Div(id="wizard-error", cls="wizard-error", style="display:none"),
                             Button(
                                 "Generate Documentation",
-                                type="submit",
+                                type="button",
                                 id="generate-btn",
                                 cls="primary wizard-generate-btn",
                                 disabled=True,

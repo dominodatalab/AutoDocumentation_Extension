@@ -444,8 +444,21 @@ def register_api_routes(rt):
             logger.info("api_built_in_templates: no project id, returning empty catalog")
             return Response(json.dumps([]), media_type="application/json")
         try:
-            snap = _active_autodoc_snapshot_for_spec_templates(pid)
-            logger.info("api_built_in_templates: catalog_from_dataset snapshot_id=%r", snap)
+            ensured, snap = _autodoc_dataset_and_snapshot(pid)
+            ds_id = str(ensured.get("id") or "").strip()
+            if ds_id:
+                spec_template_sync.sync_builtins_to_autodoc_dataset(
+                    ds_id, dest_snapshot_id=snap
+                )
+                fresh = domino_datasets.get_rw_snapshot_id(ds_id)
+                if isinstance(fresh, str) and fresh.strip():
+                    snap = fresh.strip()
+            mount_path = domino_datasets.resolve_dataset_mount_path(ensured)
+            logger.info(
+                "api_built_in_templates: catalog_from_dataset snapshot_id=%r mount_path=%r",
+                snap,
+                mount_path,
+            )
         except Exception as exc:
             logger.exception("api_built_in_templates: failed before catalog project_id=%r", pid)
             return Response(
@@ -455,12 +468,19 @@ def register_api_routes(rt):
             )
         try:
             catalog = spec_template_sync.catalog_from_dataset(snap)
+            out: list[dict] = []
+            for c in catalog or []:
+                tpl_file = str(c.get("template_file") or "").strip()
+                rel = spec_template_sync.dataset_rel_path(tpl_file) if tpl_file else ""
+                template_path = mount_path.rstrip("/") + ("/" + rel if rel else "")
+                uid = template_path
+                out.append({**c, "template_path": template_path, "uid": uid})
             logger.info(
-                "api_built_in_templates: success entries=%d slugs=%r",
-                len(catalog),
-                [c.get("slug") for c in catalog] if catalog else [],
+                "api_built_in_templates: success entries=%d uids=%r",
+                len(out),
+                [c.get("uid") for c in out] if out else [],
             )
-            return Response(json.dumps(catalog), media_type="application/json")
+            return Response(json.dumps(out), media_type="application/json")
         except Exception:
             logger.exception("api_built_in_templates: catalog_from_dataset raised project_id=%r snap=%r", pid, snap)
             return Response(

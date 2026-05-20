@@ -335,7 +335,7 @@ MAIN_DOM_JS = r"""
         // ═══════════════════════════════════════════════════════════════
 
         var _builtinTemplates = [];      // loaded from API
-        var _selectedTemplateSlug = null;  // currently selected template slug
+        var _selectedTemplateUid = null;  // currently selected template unique id (full dataset file path)
         var _customSpecSelected = false;  // user selected a file from dataset browser
 
         // Dataset state (shared between spec browser and form submission)
@@ -573,7 +573,7 @@ MAIN_DOM_JS = r"""
         function updateGenerateButton() {
             var btn = document.getElementById('generate-btn');
             if (!btn) return;
-            var hasTemplate = !!_selectedTemplateSlug;
+            var hasTemplate = !!_selectedTemplateUid;
             var hasCustomSpec = _customSpecSelected;
             var canGenerate = hasTemplate || hasCustomSpec;
             btn.disabled = !canGenerate;
@@ -591,11 +591,11 @@ MAIN_DOM_JS = r"""
                     if (!Array.isArray(templates)) throw new Error('bad response');
                     _builtinTemplates = templates;
                     renderTemplateGallery(templates);
-                    var sel = _selectedTemplateSlug;
+                    var sel = _selectedTemplateUid;
                     if (sel) {
                         var still = false;
                         for (var k = 0; k < templates.length; k++) {
-                            if (templates[k].slug === sel) { still = true; break; }
+                            if (templates[k].uid === sel || templates[k].template_file === sel) { still = true; break; }
                         }
                         if (still) selectTemplate(sel);
                     }
@@ -664,7 +664,9 @@ MAIN_DOM_JS = r"""
                 var n = typeof t.section_count === 'number' ? t.section_count : parseInt(t.section_count, 10);
                 if (isNaN(n) || n < 0) n = 0;
                 var badgeText = n ? (String(n) + ' sections') : '';
-                html += '<div class="template-card" data-slug="' + _esc(t.slug) + '" tabindex="0" role="button" aria-pressed="false">'
+                var uid = t.uid || '';
+                if (!uid) uid = fn || t.slug || '';
+                html += '<div class="template-card" data-uid="' + _esc(uid) + '" tabindex="0" role="button" aria-pressed="false">'
                     + '<div class="template-card-header">'
                     + '<span class="template-card-name">' + _esc(t.name) + '</span>'
                     + '<span class="material-symbols-outlined template-card-check">check_circle</span>'
@@ -682,33 +684,33 @@ MAIN_DOM_JS = r"""
             for (var j = 0; j < cards.length; j++) {
                 (function(card) {
                     card.addEventListener('click', function() {
-                        selectTemplate(card.getAttribute('data-slug'));
+                        selectTemplate(card.getAttribute('data-uid'));
                     });
                     card.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            selectTemplate(card.getAttribute('data-slug'));
+                            selectTemplate(card.getAttribute('data-uid'));
                         }
                     });
                 })(cards[j]);
             }
         }
 
-        function selectTemplate(slug) {
-            _selectedTemplateSlug = slug;
+        function selectTemplate(uid) {
+            _selectedTemplateUid = uid;
             _customSpecSelected = false;
 
             // Update card UI
             var cards = document.querySelectorAll('.template-card');
             for (var i = 0; i < cards.length; i++) {
-                var isSelected = cards[i].getAttribute('data-slug') === slug;
+                var isSelected = cards[i].getAttribute('data-uid') === uid;
                 cards[i].classList.toggle('selected', isSelected);
                 cards[i].setAttribute('aria-pressed', isSelected ? 'true' : 'false');
             }
 
             var tpl = null;
             for (var j = 0; j < _builtinTemplates.length; j++) {
-                if (_builtinTemplates[j].slug === slug) { tpl = _builtinTemplates[j]; break; }
+                if (_builtinTemplates[j].uid === uid || _builtinTemplates[j].template_file === uid) { tpl = _builtinTemplates[j]; break; }
             }
             if (tpl) loadYamlTemplatePreview(tpl);
 
@@ -734,7 +736,7 @@ MAIN_DOM_JS = r"""
             _specCurrentSnapshotId = d.rwSnapshotId || '';
             _specCurrentDatasetPath = d.datasetPath || '';
             _specCurrentPath = '';
-            if (specPathField && !_selectedTemplateSlug) specPathField.value = '';
+            if (specPathField && !_selectedTemplateUid) specPathField.value = '';
             if (_specCurrentDatasetId) browseFiles('');
             updateGenerateButton();
         }
@@ -764,7 +766,7 @@ MAIN_DOM_JS = r"""
             _specCurrentSnapshotId  = ds.rwSnapshotId  || '';
             _specCurrentDatasetPath = ds.datasetPath   || '';
             _specCurrentPath = '';
-            if (specPathField && !_selectedTemplateSlug) specPathField.value = '';
+            if (specPathField && !_selectedTemplateUid) specPathField.value = '';
             if (_specCurrentDatasetId) {
                 browseFiles('');
             }
@@ -960,7 +962,7 @@ MAIN_DOM_JS = r"""
         function selectCustomSpecFile(relFilePath) {
             var abs = absoluteSpecFromRelative(relFilePath);
             if (specPathField) specPathField.value = abs;
-            _selectedTemplateSlug = null;
+            _selectedTemplateUid = null;
             _customSpecSelected = true;
             resetTemplateYamlPreview();
             // Deselect template cards
@@ -1106,10 +1108,10 @@ MAIN_DOM_JS = r"""
             // Header row
             html += '<div class="results-job-header">';
             html += '<div class="results-job-info">';
-            if (_selectedTemplateSlug) {
+            if (_selectedTemplateUid) {
                 var tplName = '';
                 for (var i = 0; i < _builtinTemplates.length; i++) {
-                    if (_builtinTemplates[i].slug === _selectedTemplateSlug) { tplName = _builtinTemplates[i].name; break; }
+                    if (_builtinTemplates[i].uid === _selectedTemplateUid || _builtinTemplates[i].template_file === _selectedTemplateUid) { tplName = _builtinTemplates[i].name; break; }
                 }
                 if (tplName) html += '<div class="results-job-template">Template</div><div class="results-job-title">' + _esc(tplName) + '</div>';
             } else {
@@ -1290,67 +1292,23 @@ MAIN_DOM_JS = r"""
             if (errEl) errEl.style.display = 'none';
         }
 
-        // Save a built-in template YAML to the dataset before submitting
-        function saveBuiltinSpec(tpl) {
-            return new Promise(function(resolve, reject) {
-                if (!_specCurrentDatasetId) {
-                    reject(new Error('No dataset selected. Please expand Advanced options and select a dataset.'));
-                    return;
-                }
-                var pid = resolvedProjectId();
-                var qs = pid ? ('?projectId=' + encodeURIComponent(pid)
-                    + '&datasetId=' + encodeURIComponent(_specCurrentDatasetId)
-                    + '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId))
-                    : ('?datasetId=' + encodeURIComponent(_specCurrentDatasetId)
-                    + '&snapshotId=' + encodeURIComponent(_specCurrentSnapshotId));
-
-                var tf = tpl.template_file || '';
-                if (!tf) {
-                    reject(new Error('Template file is missing.'));
-                    return;
-                }
-                var yurl = _adUrl('api/built-in-template')
-                    + '?template_file=' + encodeURIComponent(tf);
-                var yqs = pid ? ('&projectId=' + encodeURIComponent(pid)) : '';
-                fetch(yurl + yqs)
-                    .then(_checkResp)
-                    .then(function(r) { return r.text(); })
-                    .then(function(yamlText) {
-                        var fd = new FormData();
-                        fd.append('spec_filename', tpl.slug + '.yaml');
-                        fd.append('spec_content', yamlText);
-                        return fetch(_adUrl('save-spec') + qs, { method: 'POST', body: fd });
-                    })
-                    .then(_checkResp)
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data.error) { reject(new Error(data.error)); return; }
-                        resolve(data.saved);
-                    })
-                    .catch(reject);
-            });
-        }
-
-        var mainForm = document.getElementById('main-form');
-        if (mainForm) {
-            mainForm.addEventListener('submit', function(e) {
-                e.preventDefault();
+        var generateBtn = document.getElementById('generate-btn');
+        if (generateBtn) {
+            generateBtn.addEventListener('click', function() {
                 hideWizardError();
+                if (generateBtn) generateBtn.disabled = true;
 
-                var btn = document.getElementById('generate-btn');
-                if (btn) btn.disabled = true;
-
-                function doSubmit(specPath) {
+                function val(id) {
+                    var el = document.getElementById(id);
+                    return el ? String(el.value || '').trim() : '';
+                }
+                function chk(id) {
+                    var el = document.getElementById(id);
+                    return !!(el && el.checked);
+                }
+                function submitJob(specPath) {
                     if (specPathField) specPathField.value = specPath;
 
-                    function val(id) {
-                        var el = document.getElementById(id);
-                        return el ? String(el.value || '').trim() : '';
-                    }
-                    function chk(id) {
-                        var el = document.getElementById(id);
-                        return !!(el && el.checked);
-                    }
                     var jsonPayload = {
                         spec_path: specPath,
                         provider: val('field-provider'),
@@ -1367,8 +1325,6 @@ MAIN_DOM_JS = r"""
                     };
 
                     var pid = resolvedProjectId();
-
-                    // Transition to step 2 immediately
                     showStep2();
                     var panel = document.getElementById('results-panel');
                     if (panel) {
@@ -1411,38 +1367,35 @@ MAIN_DOM_JS = r"""
                             }
                         })
                         .finally(function() {
-                            if (btn) btn.disabled = false;
+                            if (generateBtn) generateBtn.disabled = false;
                             updateGenerateButton();
                         });
                 }
 
-                if (_selectedTemplateSlug) {
-                    // Find the template and save it to the dataset first
+                if (_selectedTemplateUid) {
                     var tpl = null;
                     for (var i = 0; i < _builtinTemplates.length; i++) {
-                        if (_builtinTemplates[i].slug === _selectedTemplateSlug) { tpl = _builtinTemplates[i]; break; }
+                        if (_builtinTemplates[i].uid === _selectedTemplateUid || _builtinTemplates[i].template_file === _selectedTemplateUid) { tpl = _builtinTemplates[i]; break; }
                     }
                     if (!tpl) {
                         showWizardError('Selected template not found. Please refresh the page.');
-                        if (btn) btn.disabled = false;
+                        if (generateBtn) generateBtn.disabled = false;
                         updateGenerateButton();
                         return;
                     }
-                    saveBuiltinSpec(tpl)
-                        .then(function(savedPath) {
-                            return loadBuiltinTemplates().then(function() { return savedPath; });
-                        })
-                        .then(function(savedPath) { doSubmit(savedPath); })
-                        .catch(function(err) {
-                            showWizardError('Could not save template: ' + err.message);
-                            if (btn) btn.disabled = false;
-                            updateGenerateButton();
-                        });
+                    var specPath = tpl.template_path || tpl.uid || '';
+                    if (!specPath) {
+                        showWizardError('Selected template has no template path.');
+                        if (generateBtn) generateBtn.disabled = false;
+                        updateGenerateButton();
+                        return;
+                    }
+                    submitJob(specPath);
                 } else if (_customSpecSelected && specPathField && specPathField.value.trim()) {
-                    doSubmit(specPathField.value.trim());
+                    submitJob(specPathField.value.trim());
                 } else {
                     showWizardError('Please select a template or a custom spec file.');
-                    if (btn) btn.disabled = false;
+                    if (generateBtn) generateBtn.disabled = false;
                     updateGenerateButton();
                 }
             });

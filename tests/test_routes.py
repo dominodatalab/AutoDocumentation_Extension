@@ -537,10 +537,20 @@ class TestApiRoutes:
 
     @pytest.mark.asyncio
     async def test_built_in_templates_returns_json(self, _mock_studio_modules, monkeypatch):
-        catalog = [{"slug": "standard_ml", "name": "N", "description": "D", "template_file": "doc_spec.yaml"}]
+        catalog_in = [{"slug": "standard_ml", "name": "N", "description": "D", "template_file": "doc_spec.yaml"}]
+        expected_out = [
+            {
+                "slug": "standard_ml",
+                "name": "N",
+                "description": "D",
+                "template_file": "doc_spec.yaml",
+                "template_path": "/domino/datasets/local/autodoc/spec-templates/doc_spec.yaml",
+                "uid": "/domino/datasets/local/autodoc/spec-templates/doc_spec.yaml",
+            }
+        ]
 
         def _fake_catalog(_snap):
-            return catalog
+            return catalog_in
 
         mock_sync = MagicMock()
         monkeypatch.setattr("spec_template_sync.sync_builtins_to_autodoc_dataset", mock_sync)
@@ -550,7 +560,7 @@ class TestApiRoutes:
         req = _make_request(query_params={"projectId": "proj-123"})
         result = await routes["/api/built-in-templates"](req)
         assert result.status_code == 200
-        assert json.loads(result.body) == catalog
+        assert json.loads(result.body) == expected_out
         mock_sync.assert_called_once_with("ds-test", dest_snapshot_id="snap-test")
 
     @pytest.mark.asyncio
