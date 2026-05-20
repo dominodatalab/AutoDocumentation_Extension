@@ -14,5 +14,5 @@ test-all:
 		exit 1; \
 	fi; \
 	source "$(ACTIVATE)"; \
-	python -m pytest ./tests
+	python -m pytest ./tests && \
 	python -m pytest auto_model_docs/tests

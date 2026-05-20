@@ -893,6 +893,13 @@ MAIN_DOM_JS = r"""
                 var items = specFileList ? specFileList.querySelectorAll('.spec-file-item') : [];
                 for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
                 el.classList.add('selected');
+                // Reuse the modal selection variable so the "Select" button enables.
+                _browseSelectedFile = path;
+                var browseLabel = document.getElementById('browse-selected-label');
+                if (browseLabel) browseLabel.textContent = path;
+                var btn = document.getElementById('browse-confirm-btn');
+                if (btn) btn.disabled = false;
+
                 selectCustomSpecFile(path);
             }
         }
