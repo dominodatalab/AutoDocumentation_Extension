@@ -202,26 +202,12 @@ def browse_code(
     return _domino_request("GET", "/v4/code/browseCode", params=params)
 
 
-def code_root_options_from_browse_response(browse: dict[str, Any]) -> dict[str, Any]:
-    """Build combobox payload from browseCode JSON (projectSettings)."""
+def get_project_code_root(owner_username: str, project_name: str) -> str:
+    """Return the code root path for a project (/mnt/code for git-based, /mnt otherwise)."""
+    browse = browse_code(owner_username, project_name, path_string="")
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
-    manual = "/mnt/code" if is_git else "/mnt"
-    options: list[dict[str, str]] = [{"value": manual, "label": manual}]
-    seen: set[str] = {manual}
-    for repo in ps.get("repositories") or []:
-        if not isinstance(repo, dict):
-            continue
-        loc = str(repo.get("location") or "").strip()
-        if not loc or loc in seen:
-            continue
-        seen.add(loc)
-        options.append({"value": loc, "label": loc})
-    return {
-        "isGitBasedProject": is_git,
-        "defaultRoot": manual,
-        "options": options,
-    }
+    return "/mnt/code" if is_git else "/mnt"
 
 
 # ---------------------------------------------------------------------------

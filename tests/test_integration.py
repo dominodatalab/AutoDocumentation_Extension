@@ -68,6 +68,13 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 
     _mem_files: dict[str, bytes] = {}
     _mem_files["spec.yaml"] = b"title: Test\n"
+    _mem_files["spec-templates/doc_spec.yaml"] = (
+        b"slug: standard_ml\n"
+        b"card_title: Standard ML Model Doc\n"
+        b"card_description: DownloadFromDataset\n"
+        b"sections:\n"
+        b"  - Executive Summary\n"
+    )
 
     def _mem_write(dataset_id, path, content):
         _mem_files[path] = content
@@ -130,6 +137,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_info.owner_username = "test-owner"
     mock_info.main_repo_id = "repo-123"
     mock_client.resolve_project.return_value = mock_info
+    mock_client.get_project_code_root.return_value = "/mnt/code"
     mock_client.set_ui_host = MagicMock()
     import domino_client as real_dc
 
@@ -144,10 +152,23 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_datasets = MagicMock()
     mock_datasets.list_datasets.return_value = [
         {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
-        {"id": "ds-autodoc-uuid", "name": "autodoc", "rwSnapshotId": "snap-ad", "datasetPath": "/mnt/data/autodoc"},
+        {
+            "id": "ds-autodoc-uuid",
+            "name": "autodoc",
+            "rwSnapshotId": "snap-autodoc",
+            "datasetPath": "/domino/datasets/local/autodoc",
+        },
     ]
     mock_datasets.ensure_dataset = MagicMock(
         return_value={"id": "ds-1", "name": "autodoc-specs", "datasetPath": "/domino/datasets/local/autodoc"},
+    )
+    mock_datasets.get_existing_autodoc_dataset = MagicMock(
+        return_value={
+            "id": "ds-autodoc-uuid",
+            "name": "autodoc",
+            "rwSnapshotId": "snap-autodoc",
+            "datasetPath": "/domino/datasets/local/autodoc",
+        },
     )
     mock_datasets.resolve_dataset_mount_path = MagicMock(
         side_effect=lambda e: (e.get("datasetPath") or "").strip() or "/domino/datasets/local/autodoc",
@@ -218,6 +239,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         status: str = "queued"
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
+        dataset_id: Optional[str] = None
+        dataset_url: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -324,22 +347,33 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         """Wrap a route handler into a proper Starlette endpoint."""
         sig = inspect.signature(handler)
         params = list(sig.parameters.keys())
+
+        def _call_sync(handler_fn, request):
+            if not params:
+                return handler_fn()
+            try:
+                bound = sig.bind(request)
+            except TypeError:
+                bound = sig.bind(request, **getattr(request, "path_params", {}))
+            return handler_fn(*bound.args, **bound.kwargs)
+
         if inspect.iscoroutinefunction(handler):
             async def endpoint(request):
-                if params:
-                    result = await handler(request)
-                else:
+                if not params:
                     result = await handler()
+                else:
+                    try:
+                        bound = sig.bind(request)
+                    except TypeError:
+                        bound = sig.bind(request, **getattr(request, "path_params", {}))
+                    result = await handler(*bound.args, **bound.kwargs)
                 if isinstance(result, Response):
                     return result
                 return Response(str(result), media_type="text/html")
             return endpoint
         else:
             async def endpoint(request):
-                if params:
-                    result = handler(request)
-                else:
-                    result = handler()
+                result = _call_sync(handler, request)
                 if isinstance(result, Response):
                     return result
                 return Response(str(result), media_type="text/html")
@@ -438,8 +472,10 @@ class TestApiRoutesIntegration:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) == 1
-        assert data[0]["name"] == "autodoc-specs"
+        assert len(data) == 2
+        names = {d["name"] for d in data}
+        assert "autodoc-specs" in names
+        assert "autodoc" in names
 
     def test_datasets_error_returns_500(self, client, integration_env):
         integration_env["domino_datasets"].list_datasets.side_effect = RuntimeError("API down")
@@ -449,6 +485,12 @@ class TestApiRoutesIntegration:
         integration_env["domino_datasets"].list_datasets.side_effect = None
         integration_env["domino_datasets"].list_datasets.return_value = [
             {"id": "ds-1", "name": "autodoc-specs", "rwSnapshotId": "snap-1", "datasetPath": "/domino/datasets/local/autodoc"},
+            {
+                "id": "ds-autodoc-uuid",
+                "name": "autodoc",
+                "rwSnapshotId": "snap-autodoc",
+                "datasetPath": "/domino/datasets/local/autodoc",
+            },
         ]
 
     def test_dataset_files_requires_dataset_id(self, client):
@@ -466,8 +508,9 @@ class TestApiRoutesIntegration:
         assert data[0]["fileName"] == "spec.yaml"
 
     def test_download_template(self, client):
-        resp = client.get("/api/download-template")
+        resp = client.get("/api/download-template?projectId=proj-integration")
         assert resp.status_code == 200
+        assert b"slug: standard_ml" in resp.content
 
     def test_hardware_tiers(self, client):
         resp = client.get("/api/hardware-tiers?projectId=proj-integration")
@@ -532,7 +575,7 @@ class TestJobRoutesIntegration:
         )
         assert resp.status_code == 200
         assert resp.json().get("ok") is True
-        integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
+        integration_env["domino_datasets"].get_existing_autodoc_dataset.assert_called_with("proj-integration")
         integration_env["domino_datasets"].resolve_dataset_mount_path.assert_called_once()
         mock_client.submit_job.assert_called()
         jobs = store.get_user_jobs("proj-integration", "integration_user", limit=50)
@@ -578,7 +621,7 @@ class TestAuthorizationIntegration:
         )
         assert resp.status_code == 403
         assert resp.json().get("error")
-        integration_env["domino_datasets"].ensure_dataset.assert_called_with("proj-integration")
+        integration_env["domino_datasets"].get_existing_autodoc_dataset.assert_called_with("proj-integration")
 
     def test_job_history_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_list")

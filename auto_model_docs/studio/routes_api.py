@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Optional
 
 from starlette.requests import Request
-from starlette.responses import FileResponse, Response
+from starlette.responses import Response
 
 from autodoc.core.models import DocumentSpec
 from authorization import require_project_write
+from dataset_manager import DatasetManager
+import spec_template_sync
 
 from .state import (
     _resolve_request_project_id,
@@ -20,6 +21,67 @@ from .state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _autodoc_dataset_and_snapshot(project_id: str) -> tuple[dict, str]:
+    logger.info("_autodoc_dataset_and_snapshot: start project_id=%r", project_id)
+    require_project_write(project_id)
+    ensured = domino_datasets.ensure_dataset(project_id)
+    ds_id = str(ensured.get("id") or "").strip()
+    logger.info(
+        "_autodoc_dataset_and_snapshot: ensure_dataset returned id=%r name=%r rwSnapshotId=%r keys=%r",
+        ds_id,
+        (ensured.get("name") or "")[:80],
+        ensured.get("rwSnapshotId"),
+        sorted(ensured.keys()) if isinstance(ensured, dict) else type(ensured),
+    )
+    if not ds_id:
+        raise RuntimeError("autodoc dataset has no id")
+    snap = ensured.get("rwSnapshotId") or domino_datasets.get_rw_snapshot_id(ds_id)
+    logger.info(
+        "_autodoc_dataset_and_snapshot: resolved snapshot_id=%r (from ensured or get_rw_snapshot_id)",
+        snap,
+    )
+    if not snap:
+        raise RuntimeError("Could not resolve read-write snapshot for autodoc dataset")
+    return ensured, str(snap)
+
+
+def _active_autodoc_snapshot_for_spec_templates(project_id: str) -> str:
+    import spec_template_sync
+
+    logger.info("_active_autodoc_snapshot_for_spec_templates: start project_id=%r", project_id)
+    ensured, initial_snap = _autodoc_dataset_and_snapshot(project_id)
+    ds_id = str(ensured.get("id") or "").strip()
+    logger.info(
+        "_active_autodoc_snapshot_for_spec_templates: sync_builtins_to_autodoc_dataset dataset_id=%r",
+        ds_id,
+    )
+    if not ds_id:
+        raise RuntimeError("autodoc dataset has no id")
+    spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=initial_snap)
+    logger.info("_active_autodoc_snapshot_for_spec_templates: sync_builtins finished")
+    fresh = domino_datasets.get_rw_snapshot_id(ds_id)
+    logger.info(
+        "_active_autodoc_snapshot_for_spec_templates: get_rw_snapshot_id returned %r (type=%s)",
+        fresh,
+        type(fresh).__name__,
+    )
+    if isinstance(fresh, str) and fresh.strip():
+        logger.info(
+            "_active_autodoc_snapshot_for_spec_templates: using fresh snapshot_id=%r",
+            fresh.strip(),
+        )
+        return fresh.strip()
+    snap = str(ensured.get("rwSnapshotId") or "").strip()
+    logger.info(
+        "_active_autodoc_snapshot_for_spec_templates: fallback ensured.rwSnapshotId=%r initial_snap=%r",
+        snap,
+        initial_snap,
+    )
+    if not snap:
+        raise RuntimeError("Could not resolve read-write snapshot for autodoc dataset")
+    return snap
 
 
 def sanitize_dataset_subpath(raw: Optional[str]) -> str:
@@ -186,9 +248,19 @@ def register_api_routes(rt):
                 )
 
         try:
-            from dataset_manager import DatasetManager
+            import spec_template_sync
+
             upload_path = f"{rel_dir}/{filename}" if rel_dir else filename
             DatasetManager.write_file(dataset_id, upload_path, content)
+            if fn_low.endswith((".yaml", ".yml")):
+                try:
+                    dest_snap = domino_datasets.get_rw_snapshot_id(dataset_id)
+                    spec_template_sync.sync_builtins_to_autodoc_dataset(
+                        dataset_id,
+                        dest_snapshot_id=dest_snap,
+                    )
+                except Exception:
+                    logger.warning("sync built-ins after spec upload failed", exc_info=True)
             return Response(
                 json.dumps({
                     "path": upload_path,
@@ -206,56 +278,234 @@ def register_api_routes(rt):
 
     rt("/api/upload-spec-to-dataset")(api_upload_spec_to_dataset)
 
-    def api_download_template():
-        template_path = Path(__file__).resolve().parent.parent / "doc_spec.yaml"
-        if not template_path.exists():
+    async def api_add_spec_template(req: Request):
+        """
+        JSON-only: copy a YAML spec template from a source dataset into the
+        destination "spec-templates" directory of the autodoc dataset.
+        """
+        pid = (_resolve_request_project_id(req) or "").strip()
+        require_project_write(pid)
+
+        try:
+            payload = await req.json()
+        except Exception:
+            return Response(json.dumps({"error": "Invalid JSON"}), status_code=400, media_type="application/json")
+
+        if not isinstance(payload, dict):
+            return Response(json.dumps({"error": "Invalid JSON payload"}), status_code=400, media_type="application/json")
+
+        source_dataset_id = str(payload.get("sourceDatasetId") or "").strip()
+        source_snapshot_id = str(payload.get("sourceSnapshotId") or "").strip()
+        source_path = str(payload.get("sourcePath") or "").strip()
+        filename = str(payload.get("filename") or "").strip() or source_path.rsplit("/", 1)[-1]
+
+        if not source_dataset_id:
+            return Response(json.dumps({"error": "sourceDatasetId is required"}), status_code=400, media_type="application/json")
+        if not source_path:
+            return Response(json.dumps({"error": "sourcePath is required"}), status_code=400, media_type="application/json")
+        if not filename:
+            return Response(json.dumps({"error": "filename is required"}), status_code=400, media_type="application/json")
+
+        # Destination: autodoc dataset for this project.
+        ensured = domino_datasets.ensure_dataset(pid)
+        dest_dataset_id = str(ensured.get("id") or "").strip()
+        if not dest_dataset_id:
+            return Response(json.dumps({"error": "Destination autodoc dataset has no id"}), status_code=500, media_type="application/json")
+
+        if not source_snapshot_id:
+            source_snapshot_id = domino_datasets.get_rw_snapshot_id(source_dataset_id)
+        if not source_snapshot_id:
+            return Response(
+                json.dumps({"error": "Could not resolve source snapshot for dataset"}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        try:
+            raw = DatasetManager.read_file(source_snapshot_id, source_path)
+        except Exception as exc:
+            return Response(json.dumps({"error": f"Could not read source template: {exc}"}), status_code=500, media_type="application/json")
+
+        try:
+            spec_template_sync.validate_gallery_template_yaml(raw)
+        except ValueError as exc:
+            msg = str(exc)
+            missing_prefix = "Missing required field:"
+            if missing_prefix in msg:
+                fields = []
+                for part in msg.split(";"):
+                    part = part.strip()
+                    if part.startswith(missing_prefix):
+                        fields.append(part[len(missing_prefix):].strip())
+                if fields:
+                    friendly = "Missing required field: " + ", ".join(fields)
+                    return Response(
+                        json.dumps({"error": friendly, "kind": "missing_fields"}),
+                        status_code=400,
+                        media_type="application/json",
+                    )
+            return Response(
+                json.dumps({"error": str(exc)}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        # Write into spec-templates/<filename> inside the autodoc dataset.
+        dest_rel = spec_template_sync.dataset_rel_path(filename)
+        try:
+            DatasetManager.write_file(dest_dataset_id, dest_rel, raw)
+        except Exception as exc:
+            return Response(json.dumps({"error": f"Could not write template: {exc}"}), status_code=500, media_type="application/json")
+
+        return Response(json.dumps({"ok": True}), media_type="application/json")
+
+    rt("/api/add-spec-template")(api_add_spec_template)
+
+    async def api_download_template(req: Request):
+        import spec_template_sync
+
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response("projectId required", status_code=400)
+        try:
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
+            rel = spec_template_sync.dataset_rel_path("doc_spec.yaml")
+            logger.info("api_download_template: snapshot_id=%r path=%r", snap, rel)
+            raw = DatasetManager.read_file(
+                snap,
+                rel,
+            )
+            logger.info("api_download_template: read %d bytes", len(raw or b""))
+        except FileNotFoundError:
             return Response("Template not found", status_code=404)
-        return FileResponse(
-            str(template_path),
+        except Exception as exc:
+            logger.warning("download-template read failed: %s", exc, exc_info=True)
+            return Response(str(exc), status_code=500)
+        return Response(
+            content=raw,
             media_type="application/x-yaml",
-            filename="doc_spec_template.yaml",
+            headers={"Content-Disposition": 'attachment; filename="doc_spec_template.yaml"'},
         )
 
     rt("/api/download-template")(api_download_template)
 
-    async def api_code_root_options(req: Request):
+
+    async def api_built_in_templates(req: Request):
+        import spec_template_sync
+
         pid = (_resolve_request_project_id(req) or "").strip()
-
-        def _error_payload(reason: str) -> dict:
-            return {
-                "isGitBasedProject": None,
-                "defaultRoot": "",
-                "options": [],
-                "error": reason,
-            }
-
+        logger.info(
+            "api_built_in_templates: request query_params=%r resolved_project_id=%r",
+            dict(req.query_params),
+            pid or None,
+        )
         if not pid:
-            return Response(
-                json.dumps(_error_payload("missing_project_id")),
-                media_type="application/json",
+            logger.info("api_built_in_templates: no project id, returning empty catalog")
+            return Response(json.dumps([]), media_type="application/json")
+        try:
+            ensured, snap = _autodoc_dataset_and_snapshot(pid)
+            ds_id = str(ensured.get("id") or "").strip()
+            if ds_id:
+                spec_template_sync.sync_builtins_to_autodoc_dataset(
+                    ds_id, dest_snapshot_id=snap
+                )
+                fresh = domino_datasets.get_rw_snapshot_id(ds_id)
+                if isinstance(fresh, str) and fresh.strip():
+                    snap = fresh.strip()
+            mount_path = domino_datasets.resolve_dataset_mount_path(ensured)
+            logger.info(
+                "api_built_in_templates: catalog_from_dataset snapshot_id=%r mount_path=%r",
+                snap,
+                mount_path,
             )
-        info = domino_client.resolve_project(pid)
-        if not info:
+        except Exception as exc:
+            logger.exception("api_built_in_templates: failed before catalog project_id=%r", pid)
             return Response(
-                json.dumps(_error_payload("project_resolve_failed")),
+                json.dumps({"error": str(exc)}),
+                status_code=500,
                 media_type="application/json",
             )
         try:
-            raw = domino_client.browse_code(info.owner_username, info.name, path_string="")
-            payload = domino_client.code_root_options_from_browse_response(raw)
-            payload["error"] = None
-            return Response(json.dumps(payload), media_type="application/json")
-        except Exception as exc:
-            detail = str(exc)
-            if hasattr(exc, "response") and exc.response is not None:
-                try:
-                    detail = f"{exc} body={exc.response.text[:1500]!r}"
-                except Exception:
-                    pass
-            logger.warning("browseCode for code-root-options failed: %s", detail)
+            catalog = spec_template_sync.catalog_from_dataset(snap)
+            out: list[dict] = []
+            for c in catalog or []:
+                tpl_file = str(c.get("template_file") or "").strip()
+                rel = spec_template_sync.dataset_rel_path(tpl_file) if tpl_file else ""
+                template_path = mount_path.rstrip("/") + ("/" + rel if rel else "")
+                uid = template_path
+                out.append({**c, "template_path": template_path, "uid": uid})
+            logger.info(
+                "api_built_in_templates: success entries=%d uids=%r",
+                len(out),
+                [c.get("uid") for c in out] if out else [],
+            )
+            return Response(json.dumps(out), media_type="application/json")
+        except Exception:
+            logger.exception("api_built_in_templates: catalog_from_dataset raised project_id=%r snap=%r", pid, snap)
             return Response(
-                json.dumps(_error_payload("browse_code_failed")),
+                json.dumps({"error": "catalog failed"}),
+                status_code=500,
                 media_type="application/json",
             )
 
-    rt("/api/code-root-options")(api_code_root_options)
+    rt("/api/built-in-templates")(api_built_in_templates)
+
+    async def api_built_in_template_yaml(req: Request):
+        import spec_template_sync
+
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response("projectId required", status_code=400)
+        raw_param = (req.query_params.get("template_file") or "").strip()
+        base = raw_param.replace("\\", "/").split("/")[-1]
+        if not base:
+            return Response("template_file required", status_code=400)
+        if not base.lower().endswith((".yaml", ".yml")):
+            return Response("Not found", status_code=404)
+        try:
+            logger.info(
+                "api_built_in_template_yaml: project_id=%r template_file=%r base=%r",
+                pid,
+                raw_param,
+                base,
+            )
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
+            rel = spec_template_sync.dataset_rel_path(base)
+            logger.info(
+                "api_built_in_template_yaml: read_file snapshot_id=%r path=%r",
+                snap,
+                rel,
+            )
+            raw = DatasetManager.read_file(snap, rel)
+            logger.info("api_built_in_template_yaml: read %d bytes", len(raw or b""))
+        except Exception as exc:
+            logger.warning("built-in-template read failed: %s", exc, exc_info=True)
+            return Response(str(exc), status_code=500)
+        return Response(content=raw, media_type="text/yaml; charset=utf-8")
+
+    rt("/api/built-in-template")(api_built_in_template_yaml)
+
+    async def api_sync_spec_templates(req: Request):
+        import spec_template_sync
+
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response(
+                json.dumps({"error": "projectId required"}),
+                status_code=400,
+                media_type="application/json",
+            )
+        try:
+            ensured, _snap = _autodoc_dataset_and_snapshot(pid)
+            ds_id = str(ensured.get("id") or "").strip()
+            spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=_snap)
+            return Response(json.dumps({"ok": True}), media_type="application/json")
+        except Exception as exc:
+            logger.exception("sync-spec-templates failed")
+            return Response(
+                json.dumps({"error": str(exc)}),
+                status_code=500,
+                media_type="application/json",
+            )
+
+    rt("/api/sync-spec-templates")(api_sync_spec_templates)

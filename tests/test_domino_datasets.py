@@ -101,35 +101,81 @@ class TestListDatasets:
 
 class TestEnsureDataset:
     @patch.object(ds, "_create_dataset")
-    def test_create_succeeds(self, mock_create):
-        mock_create.return_value = {"id": "ds-new", "name": "autodoc-specs", "rwSnapshotId": "snap"}
+    @patch.object(ds, "list_datasets")
+    def test_returns_existing_without_create(self, mock_list, mock_create):
+        mock_list.return_value = [
+            {"id": "ds-existing", "name": "autodoc", "rwSnapshotId": "snap"},
+        ]
+        result = ds.ensure_dataset("proj-123")
+        assert result["id"] == "ds-existing"
+        mock_create.assert_not_called()
+
+    @patch.object(ds, "_create_dataset")
+    @patch.object(ds, "list_datasets")
+    def test_create_succeeds_after_empty_list(self, mock_list, mock_create):
+        mock_list.return_value = []
+        mock_create.return_value = {"id": "ds-new", "name": "autodoc", "rwSnapshotId": "snap"}
         result = ds.ensure_dataset("proj-123")
         assert result["id"] == "ds-new"
         mock_create.assert_called_once()
 
     @patch.object(ds, "list_datasets")
     @patch.object(ds, "_create_dataset")
-    def test_create_fails_finds_existing(self, mock_create, mock_list):
+    def test_create_fails_finds_on_relist(self, mock_create, mock_list):
         mock_create.side_effect = RuntimeError("already exists")
-        mock_list.return_value = [
-            {"id": "ds-existing", "name": "autodoc", "rwSnapshotId": "snap"},
+        mock_list.side_effect = [
+            [],
+            [{"id": "ds-existing", "name": "autodoc", "rwSnapshotId": "snap"}],
         ]
         result = ds.ensure_dataset("proj-123")
         assert result["id"] == "ds-existing"
+        assert mock_list.call_count == 2
 
     @patch.object(ds, "list_datasets")
     @patch.object(ds, "_create_dataset")
     def test_create_fails_not_found_raises(self, mock_create, mock_list):
         mock_create.side_effect = RuntimeError("permission denied")
-        mock_list.return_value = [{"id": "ds-other", "name": "other-dataset"}]
+        mock_list.side_effect = [
+            [{"id": "ds-other", "name": "other-dataset"}],
+            [{"id": "ds-other", "name": "other-dataset"}],
+        ]
         with pytest.raises(RuntimeError, match="Failed to create or find"):
             ds.ensure_dataset("proj-123")
 
     @patch.object(ds, "_create_dataset")
-    def test_custom_name(self, mock_create):
+    @patch.object(ds, "list_datasets")
+    def test_custom_name(self, mock_list, mock_create):
+        mock_list.return_value = []
         mock_create.return_value = {"id": "ds-custom", "name": "my-specs"}
         ds.ensure_dataset("proj-123", name="my-specs", description="Custom")
         mock_create.assert_called_once_with("proj-123", "my-specs", "Custom")
+
+
+# ---------------------------------------------------------------------------
+# get_existing_autodoc_dataset
+# ---------------------------------------------------------------------------
+
+
+class TestGetExistingAutodocDataset:
+    @patch.object(ds, "list_datasets")
+    def test_returns_matching_row(self, mock_list):
+        mock_list.return_value = [
+            {"id": "other", "name": "other-ds"},
+            {"id": "ds-a", "name": "autodoc"},
+        ]
+        out = ds.get_existing_autodoc_dataset("proj-1")
+        assert out == {"id": "ds-a", "name": "autodoc"}
+        mock_list.assert_called_once_with("proj-1")
+
+    @patch.object(ds, "list_datasets")
+    def test_returns_none_when_missing(self, mock_list):
+        mock_list.return_value = [{"id": "x", "name": "other"}]
+        assert ds.get_existing_autodoc_dataset("proj-1") is None
+
+    @patch.object(ds, "list_datasets")
+    def test_custom_name(self, mock_list):
+        mock_list.return_value = [{"id": "s", "name": "my-specs"}]
+        assert ds.get_existing_autodoc_dataset("proj-1", name="my-specs")["id"] == "s"
 
 
 # ---------------------------------------------------------------------------

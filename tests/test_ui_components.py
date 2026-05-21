@@ -58,6 +58,8 @@ def _mock_dependencies(monkeypatch):
         status: str = "queued"
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
+        dataset_id: Optional[str] = None
+        dataset_url: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -187,6 +189,8 @@ class TestDbRecordToDataclass:
             "status": "running",
             "domino_status": "Executing",
             "job_url": "https://domino/jobs/1",
+            "dataset_id": "ds-9",
+            "dataset_url": "https://domino/ds",
             "spec_path": "/spec.yaml",
             "submitted_at": "2026-01-01T00:00:00",
             "completed_at": None,
@@ -197,6 +201,8 @@ class TestDbRecordToDataclass:
         assert record.owner_id == "alice"
         assert record.status == "running"
         assert record.domino_run_id == "run-1"
+        assert record.dataset_id == "ds-9"
+        assert record.dataset_url == "https://domino/ds"
 
     def test_handles_missing_optional_fields(self):
         ui = _import_ui()
@@ -205,6 +211,8 @@ class TestDbRecordToDataclass:
         assert record.id == "job-2"
         assert record.status == "queued"  # default
         assert record.domino_run_id is None
+        assert record.dataset_id is None
+        assert record.dataset_url is None
 
 
 # ---------------------------------------------------------------------------
@@ -375,33 +383,14 @@ class TestStudioPageInsightBanner:
         src = (root / "auto_model_docs" / "web_app_studio.py").read_text()
         scripts = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
         styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
-        assert src.count('cls="insight-card"') == 1
-        assert "studio-page-insight" in src
-        assert src.index("studio-page-insight") < src.index('cls="studio-grid"')
-        assert 'id="studio-errors-panel"' in src
+        assert 'id="wizard-step1"' in src
+        assert 'id="template-preview-empty"' in src
         assert "access_log=False" in src
-        assert src.index('cls="insight-card"') < src.index('cls="studio-page-insight"')
-        assert "spec-validation-result" not in src
-        assert "function setStudioErrorSlot" in scripts
-        assert "_studioErrorSlotOrder" in scripts
-        assert "['computeEnv', 'generate']" in scripts
-        assert "studio-errors-panel--visible" in scripts
-        assert ".studio-errors-panel" in styles
-        assert 'field-environment_id' not in src
         assert "validate_studio_domino_compute_environment" in src
         assert "studio-compute-env-json" in src
-        assert "reloadEnvironmentRevisions" not in scripts
-        assert "computeEnv" in scripts
-        assert "studio-error-dismiss" in scripts
-        assert "studio-error-dismiss-row" in scripts
-        assert "studio-error-toast-title" in scripts
-        assert "function setStudioUploadBanner" in scripts
-        assert "studio-success-toast" in scripts
-        assert "12000" in scripts
-        assert "60000" in scripts
-        assert "label.primary" in styles and "a.primary" in styles
-        assert "studio-error-dismiss-row" in styles
-        assert "studio-success-toast" in styles
+        assert "loadBuiltinTemplates" in scripts
+        assert "loadYamlTemplatePreview" in scripts
+        assert ".preview-yaml-pre" in styles
 
 
 class TestInfoTooltipLayer:
@@ -421,25 +410,12 @@ class TestStudioTwoStepLayout:
         root = Path(__file__).resolve().parent.parent
         web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
         styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
-        assert "step-badge" not in web
-        assert "Step 3" not in web
-        assert 'H2("Documentation specification")' not in web
-        assert web.count('cls="bp-card"') == 1
-        assert "configure_card_children.extend(run_card_children)" in web
-        assert ".studio-col-main > .bp-card:first-of-type" not in styles
-        assert 'cls="studio-col-main"' in web
-        assert "studio-col-left" not in web
-        assert "studio-col-mid" not in web
-        assert web.index('cls="target-project-row"') < web.index("Spec file selection")
-        assert 'H4("Spec file selection"' in web
-        assert "studio-spec-block" in web
-        assert "spec-hint-download-row" in web
-        assert "Hr(cls=" not in web
-        assert ".studio-spec-block" in styles
-        assert ".spec-section-heading" in styles
-        assert ".spec-hint-download-row" in styles
-        assert ".studio-col-left" not in styles
-        assert ".studio-col-mid" not in styles
+        assert 'id="wizard-step1"' in web
+        assert 'id="wizard-step2"' in web
+        assert "Choose a template" in web
+        assert 'id="generate-btn"' in web
+        assert "adv-opts-overlay" in web
+        assert "wizard-layout" in web or ".wizard-layout" in styles
 
 
 class TestSpecFileBrowserUi:
@@ -451,8 +427,8 @@ class TestSpecFileBrowserUi:
         assert "calc(5 * var(--spec-file-row))" in styles
         assert "specParentPath" in scripts
         assert "spec-file-parent" in scripts
-        assert "fa-folder-open spec-file-icon" in scripts
-        assert "fa-file-lines spec-file-icon" in scripts
+        assert "spec-file-icon" in scripts
+        assert "udcc1" in scripts
         assert "data-parent" in scripts
         assert ".spec-file-list > .spec-file-item:last-of-type" in styles
         assert "spec-file-list-pending" in scripts
@@ -460,36 +436,32 @@ class TestSpecFileBrowserUi:
         assert 'id="spec-file-list"' in web
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
-        assert "runJobJsonPayloadFromMainForm" in scripts
-        assert "<th>Document</th>" in scripts
-        assert "renderJobHistory(data.jobs || [], data.document_url" in scripts
-        assert "(documentUrl && statusKey === 'succeeded')" in scripts
-        assert "api/detect-language" not in scripts
-        assert "field-language" not in scripts
+        assert "<th>AutoDoc file</th>" in scripts
+        assert "renderJobHistory" in scripts
         assert "field-environment_id" not in web
         assert "environment-revision-slot" not in web
-        assert 'id="studio-advanced-modal"' in web
-        assert "studio-modal-overlay" in web
-        assert "openAdvancedModal" in scripts
+        assert "adv-opts-overlay" in web
+        assert "adv-opts-open-btn" in scripts
         assert "gear-settings-btn" not in web
         assert "gear-popover" not in web
         assert 'id="field-model"' in web
         assert "DEFAULT_OPENAI_MODEL" in web
-        assert 'id="spec-upload-trigger"' in web
-        assert 'id="spec-machine-upload"' in web
-        assert "generate-actions" in web
-        assert web.index('id="spec-file-list"') < web.index("spec-upload-trigger")
-        assert web.index("spec-upload-trigger") < web.index('id="field-spec_path"')
-        assert "#generate-btn" in styles
+        assert 'id="spec-yaml-upload"' in web
+        assert web.index('id="field-spec_path"') < web.index('id="spec-yaml-upload"')
+        assert web.index('id="spec-yaml-upload"') < web.index('id="spec-file-list"')
+        assert 'id="generate-btn"' in web
+        assert ".wizard-generate-btn" in styles
 
     def test_spec_dataset_select_excludes_autodoc_name(self):
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
-        assert "__AUTODOC_DATASET_NAME__" in scripts_src
-        assert "_SPEC_BROWSER_EXCLUDE_DATASET_NAME" in scripts_src
-        assert "if (datasets[di].name !== ex) specUi.push(datasets[di]);" in scripts_src
         from dataset_manager import AUTODOC_DATASET_NAME
-        from studio.scripts import MAIN_DOM_JS
 
-        assert "__AUTODOC_DATASET_NAME__" not in MAIN_DOM_JS
-        assert f'_SPEC_BROWSER_EXCLUDE_DATASET_NAME = "{AUTODOC_DATASET_NAME}"' in MAIN_DOM_JS
+        assert AUTODOC_DATASET_NAME == "autodoc"
+        assert "datasets[i].name === 'autodoc'" in scripts_src
+
+    def test_template_gallery_uses_template_uid(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "data-uid" in scripts_src
+        assert "_selectedTemplateUid" in scripts_src

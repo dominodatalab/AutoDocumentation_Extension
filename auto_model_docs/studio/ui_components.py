@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from fasthtml.common import *
 
@@ -47,6 +47,8 @@ def _db_record_to_dataclass(row: dict) -> DominoJobRecord:
         status=row.get("status", "queued"),
         domino_status=row.get("domino_status"),
         job_url=row.get("job_url"),
+        dataset_id=row.get("dataset_id"),
+        dataset_url=row.get("dataset_url"),
         spec_path=row.get("spec_path"),
         submitted_at=row.get("submitted_at"),
         completed_at=row.get("completed_at"),
@@ -174,8 +176,10 @@ def _render_warnings_banner(warnings: list) -> list:
             Div(
                 Span(f"{w.message} {w.action}", cls="warning-banner-message"),
                 Button(
-                    "\u00d7", type="button",
-                    cls="warning-banner-close primary",
+                    Span("close", cls="material-symbols-outlined"),
+                    type="button",
+                    cls="warning-banner-close",
+                    aria_label="Dismiss",
                     onclick="this.parentElement.remove();",
                 ),
                 cls=style,
