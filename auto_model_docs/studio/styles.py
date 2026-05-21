@@ -1859,7 +1859,7 @@ select.hw-tier-select option {
     flex-direction: column;
     overflow: hidden;
     border-left: 1px solid var(--outline-variant);
-    background: var(--surface); /* same as body — card provides the visual boundary */
+    background: var(--surface);
     border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     padding: 1rem;
 }
@@ -1873,6 +1873,115 @@ select.hw-tier-select option {
     border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow: var(--shadow-sm);
+}
+
+/* ── Edit template section ────────────────────────────────────── */
+.edit-tpl-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--outline-variant);
+}
+.edit-tpl-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.edit-tpl-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--on-surface-variant);
+}
+.edit-tpl-textarea {
+    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--on-surface);
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    resize: vertical;
+    min-height: 180px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+    outline: none;
+}
+.edit-tpl-textarea:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.12);
+}
+.edit-tpl-textarea::placeholder {
+    color: var(--muted);
+    font-style: italic;
+}
+
+/* ── Output format section ────────────────────────────────────── */
+.output-fmt-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--outline-variant);
+}
+.output-fmt-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--on-surface-variant);
+}
+.output-fmt-group {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.output-fmt-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border: 1.5px solid var(--outline-variant);
+    border-radius: 999px;
+    background: var(--surface-container-lowest);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+    white-space: nowrap;
+}
+.output-fmt-option:has(.output-fmt-radio:checked) {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+}
+.output-fmt-option:hover {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+}
+.output-fmt-radio {
+    accent-color: var(--primary);
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.output-fmt-icon {
+    font-size: 13px;
+    color: var(--on-surface-variant);
+}
+.output-fmt-option:has(.output-fmt-radio:checked) .output-fmt-icon {
+    color: var(--primary);
+}
+.output-fmt-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--on-surface);
 }
 .wizard-col-title {
     font-size: 20px;
@@ -1895,6 +2004,98 @@ select.hw-tier-select option {
         border-radius: 0 0 var(--radius-lg) var(--radius-lg);
         padding: 0.75rem;
     }
+}
+
+/* ── Context Sources accordion body ──────────────────────────── */
+.ctx-sources-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.ctx-sources-subheading {
+    font-size: 12px;
+    color: var(--on-surface-variant);
+    margin: 0;
+    line-height: 1.4;
+}
+.ctx-sources-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+@media (max-width: 640px) {
+    .ctx-sources-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Context source card (mirrors .template-card) ────────────── */
+.ctx-source-card {
+    background: var(--surface-container-lowest);
+    border: 1.5px solid var(--outline-variant);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    box-shadow: var(--shadow-sm);
+    user-select: none;
+}
+.ctx-source-card:hover {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+    box-shadow: var(--shadow-md);
+}
+.ctx-source-card.selected {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+    box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.18);
+}
+.ctx-source-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.ctx-source-name {
+    font-family: var(--font-headline);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--on-surface);
+    line-height: 1.3;
+}
+.ctx-source-check {
+    margin-left: auto;
+    color: var(--primary);
+    font-size: 1rem;
+    display: none;
+}
+.ctx-source-card.selected .ctx-source-check {
+    display: block;
+}
+.ctx-source-desc {
+    font-size: 11px;
+    color: var(--on-surface-variant);
+    line-height: 1.5;
+    margin: 0;
+}
+.ctx-source-required-tag {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--primary);
+    background: rgba(84, 63, 222, 0.1);
+    border-radius: 3px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+.ctx-source-required {
+    cursor: default;
+}
+.ctx-source-required:hover {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+    box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.18);
 }
 
 /* ── Gallery header row (title + Browse/Upload buttons) ────────── */
@@ -2392,8 +2593,8 @@ select.hw-tier-select option {
 
 /* ── Template preview panel ──────────────────────────────────────── */
 .template-preview-panel {
-    flex: 1;
-    min-height: 0;
+    flex: 1 1 0;
+    min-height: 200px;
     overflow-y: auto;
     padding: 1.25rem;
     display: flex;

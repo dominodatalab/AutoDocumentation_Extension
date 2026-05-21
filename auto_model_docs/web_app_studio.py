@@ -329,7 +329,61 @@ async def index(req: Request):
                                 cls="template-gallery",
                             ),
 
-                            # Filters accordion (below template cards)
+                            # Context Sources accordion
+                            Details(
+                                Summary(
+                                    Span("database", cls="material-symbols-outlined", style="font-size:16px"),
+                                    "Context sources",
+                                    cls="adv-opts-accordion-summary",
+                                ),
+                                Div(
+                                    P("Select which data sources the report generator will use.", cls="ctx-sources-subheading"),
+                                    Div(
+                                        # Code — always selected, required
+                                        Div(
+                                            Div(
+                                                Span("Code", cls="ctx-source-name"),
+                                                Span("Required", cls="ctx-source-required-tag"),
+                                                Span("check_circle", cls="material-symbols-outlined ctx-source-check"),
+                                                cls="ctx-source-header",
+                                            ),
+                                            P("Repository files and ML pipeline logic", cls="ctx-source-desc"),
+                                            data_value="code",
+                                            tabindex="0",
+                                            role="button",
+                                            aria_pressed="true",
+                                            cls="ctx-source-card selected ctx-source-required",
+                                        ),
+                                        *[
+                                            Div(
+                                                Div(
+                                                    Span(title, cls="ctx-source-name"),
+                                                    Span("check_circle", cls="material-symbols-outlined ctx-source-check"),
+                                                    cls="ctx-source-header",
+                                                ),
+                                                P(desc, cls="ctx-source-desc"),
+                                                data_value=val,
+                                                tabindex="0",
+                                                role="button",
+                                                aria_pressed="false",
+                                                cls="ctx-source-card",
+                                            )
+                                            for val, title, desc in [
+                                                ("experiments",   "Experiments",        "Domino experiment runs and logged metrics"),
+                                                ("data",          "Data",               "Data sources and feature definitions"),
+                                                ("model_metrics", "Model metrics",       "Performance and evaluation results"),
+                                                ("governance",    "Governance evidence", "Artifacts, approvals, and audit trail"),
+                                            ]
+                                        ],
+                                        id="ctx-sources-grid",
+                                        cls="ctx-sources-grid",
+                                    ),
+                                    cls="adv-opts-accordion-body ctx-sources-body",
+                                ),
+                                cls="adv-opts-accordion",
+                            ),
+
+                            # Filters accordion (below context sources)
                             Details(
                                 Summary(
                                     Span("filter_list", cls="material-symbols-outlined", style="font-size:16px"),
@@ -391,10 +445,10 @@ async def index(req: Request):
                             cls="wizard-col-gallery",
                         ),
 
-                        # RIGHT: preview panel (full height, sticky)
+                        # RIGHT: single card column
                         Div(
                             Div(
-                                # Preview panel header
+                                # ── Header ───────────────────────────────────
                                 Div(
                                     Span(
                                         Span("Document outline", cls="preview-panel-label"),
@@ -403,7 +457,7 @@ async def index(req: Request):
                                     ),
                                     cls="preview-panel-header",
                                 ),
-                                # Template preview content
+                                # ── Sections list ────────────────────────────
                                 Div(
                                     Div(
                                         Span("description", cls="material-symbols-outlined preview-empty-icon"),
@@ -412,6 +466,43 @@ async def index(req: Request):
                                     ),
                                     id="template-preview-panel",
                                     cls="template-preview-panel",
+                                ),
+                                # ── Edit template ────────────────────────────
+                                Div(
+                                    Div(
+                                        Span("Edit template", cls="edit-tpl-label"),
+                                        cls="edit-tpl-header",
+                                    ),
+                                    Textarea(
+                                        id="edit-template-yaml",
+                                        name="spec_yaml_content",
+                                        cls="edit-tpl-textarea",
+                                        placeholder="Select a template to edit its YAML…",
+                                        spellcheck="false",
+                                    ),
+                                    cls="edit-tpl-section",
+                                ),
+                                # ── Output format ────────────────────────────
+                                Div(
+                                    Span("Output format", cls="output-fmt-label"),
+                                    Div(
+                                        *[
+                                            Label(
+                                                Input(type="radio", name="output_format", value=val,
+                                                      checked=default, cls="output-fmt-radio"),
+                                                Span(icon, cls="material-symbols-outlined output-fmt-icon"),
+                                                Span(label, cls="output-fmt-text"),
+                                                cls="output-fmt-option",
+                                            )
+                                            for val, label, icon, default in [
+                                                ("docx", "Word (.docx)",     "description",     True),
+                                                ("md",   "Markdown (.md)",   "markdown",        False),
+                                                ("tex",  "LaTeX (.tex)",     "integration_instructions", False),
+                                            ]
+                                        ],
+                                        cls="output-fmt-group",
+                                    ),
+                                    cls="output-fmt-section",
                                 ),
                                 cls="preview-card",
                             ),

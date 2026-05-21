@@ -500,10 +500,29 @@ MAIN_DOM_JS = r"""
             if (!btn) return;
             var hasTemplate = !!_selectedTemplateSlug;
             var hasCustomSpec = _customSpecSelected;
-            var canGenerate = hasTemplate || hasCustomSpec;
+            var hasSource = document.querySelectorAll('.ctx-source-card.selected').length > 0;
+            var canGenerate = (hasTemplate || hasCustomSpec) && hasSource;
             btn.disabled = !canGenerate;
-
         }
+
+        // ── Context source cards: click-to-toggle ─────────────────────
+        (function() {
+            function toggleSource(card) {
+                if (card.classList.contains('ctx-source-required')) return; // Code is always on
+                card.classList.toggle('selected');
+                card.setAttribute('aria-pressed', card.classList.contains('selected') ? 'true' : 'false');
+                updateGenerateButton();
+            }
+            document.querySelectorAll('.ctx-source-card').forEach(function(card) {
+                card.addEventListener('click', function() { toggleSource(card); });
+                card.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleSource(card);
+                    }
+                });
+            });
+        })();
 
         // ── Template gallery ───────────────────────────────────────────
         function loadBuiltinTemplates() {
@@ -619,6 +638,10 @@ MAIN_DOM_JS = r"""
                 + '<div class="preview-description">' + _esc(tpl.description) + '</div>'
                 + '</div>'
                 + '<div class="preview-sections">' + sectionsHtml + '</div>';
+
+            // Populate edit template textarea with the template's YAML
+            var editArea = document.getElementById('edit-template-yaml');
+            if (editArea) editArea.value = tpl.yaml_content || '';
         }
 
         // ── Dataset auto-resolution ────────────────────────────────────
@@ -1210,6 +1233,10 @@ MAIN_DOM_JS = r"""
                     if (specPathField) specPathField.value = specPath;
 
                     var fd = new FormData(mainForm);
+                    // Append selected context sources (card-based, not checkboxes)
+                    document.querySelectorAll('.ctx-source-card.selected').forEach(function(c) {
+                        fd.append('context_sources', c.getAttribute('data-value') || '');
+                    });
                     var pid = resolvedProjectId();
                     if (pid && !fd.get('projectId')) fd.append('projectId', pid);
                     if (_specCurrentDatasetId && !fd.get('datasetId')) fd.append('datasetId', _specCurrentDatasetId);
