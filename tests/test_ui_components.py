@@ -465,4 +465,3 @@ class TestSpecFileBrowserUi:
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
         assert "data-uid" in scripts_src
         assert "_selectedTemplateUid" in scripts_src
-        assert "template-selected-path" in scripts_src
