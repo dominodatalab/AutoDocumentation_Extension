@@ -629,7 +629,6 @@ async def index(req: Request):
                             cls="project-context-chip",
                         ) if (project_display_name or project_id) else None,
                         Div(id="layout-switcher-slot", cls="layout-switcher-slot"),
-                        Div(id="history-btn-slot", cls="history-btn-slot"),
                         cls="results-nav-row",
                     ),
                     Div(

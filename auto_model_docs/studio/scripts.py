@@ -230,17 +230,6 @@ MAIN_DOM_JS = r"""
         function _applyLayoutMode() {
             var historyDetails = document.getElementById('history-details');
             if (historyDetails) historyDetails.style.display = 'none';
-            renderHistoryBtn();
-        }
-
-        function renderHistoryBtn() {
-            var slot = document.getElementById('history-btn-slot');
-            if (!slot) return;
-            slot.innerHTML = '<button type="button" id="history-drawer-open-btn" class="history-drawer-btn">'
-                + '<span class="material-symbols-outlined">history</span>History'
-                + '</button>';
-            var btn = slot.querySelector('#history-drawer-open-btn');
-            if (btn) btn.addEventListener('click', openHistoryDrawer);
         }
 
         // ── Drawer open/close ──────────────────────────────────────────
