@@ -539,6 +539,78 @@ class TestSpecUploadIntegration:
         assert "Missing required field" in body.get("error", "")
         mock_write.assert_not_called()
 
+    def test_upload_valid_yaml_returns_200(self, client, integration_env, monkeypatch):
+        valid_yaml = (
+            b"slug: my-tpl\ncard_title: My Template\n"
+            b"card_description: Desc\nsections:\n  - name: Overview\n"
+        )
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        import spec_template_sync as _sts
+        monkeypatch.setattr(_sts, "sync_builtins_to_autodoc_dataset", MagicMock())
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("mytemplate.yaml", valid_yaml, "application/x-yaml")},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("valid") is True
+        assert body.get("fileName") == "mytemplate.yaml"
+        mock_write.assert_called_once()
+        call_args = mock_write.call_args
+        assert call_args[0][0] == "ds-1"
+        assert call_args[0][1] == "spec-templates/mytemplate.yaml"
+        assert call_args[0][2] == valid_yaml
+
+    def test_upload_unparseable_yaml_returns_400(self, client, integration_env, monkeypatch):
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("bad.yaml", b": : invalid :\n", "application/x-yaml")},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("valid") is False
+        mock_write.assert_not_called()
+
+    def test_upload_empty_sections_returns_400(self, client, integration_env, monkeypatch):
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={
+                "file": (
+                    "nosec.yaml",
+                    b"slug: s\ncard_title: T\ncard_description: D\nsections: []\n",
+                    "application/x-yaml",
+                )
+            },
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("valid") is False
+        assert "sections" in body.get("error", "").lower()
+        mock_write.assert_not_called()
+
+    def test_upload_non_yaml_extension_returns_400(self, client, integration_env):
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("spec.txt", b"slug: s\n", "text/plain")},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "yaml" in body.get("error", "").lower()
+
 
 # ===========================================================================
 # Job route integration tests

@@ -458,6 +458,114 @@ class TestApiRoutes:
         assert "Missing required field" in body["error"]
         mock_write.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_upload_spec_succeeds_with_valid_yaml(self, _mock_studio_modules, monkeypatch):
+        import spec_template_sync as _sts
+        monkeypatch.setattr(_sts, "validate_gallery_template_yaml", lambda content: {"slug": "s"})
+        monkeypatch.setattr(_sts, "dataset_rel_path", lambda f: f"spec-templates/{f}")
+        mock_write = MagicMock()
+        monkeypatch.setattr("dataset_manager.DatasetManager.write_file", staticmethod(mock_write))
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-abc"}
+        _mock_studio_modules["state"].domino_datasets.get_rw_snapshot_id.return_value = "snap-1"
+        monkeypatch.setattr(_sts, "sync_builtins_to_autodoc_dataset", MagicMock())
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        uf = MagicMock()
+        uf.filename = "mytemplate.yaml"
+        valid_yaml = b"slug: my-tpl\ncard_title: T\ncard_description: D\nsections:\n  - name: S1\n"
+
+        async def _read():
+            return valid_yaml
+
+        uf.read = _read
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            form_data={"file": uf},
+        )
+        result = await routes["/api/upload-spec-to-dataset"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body.get("valid") is True
+        assert body.get("fileName") == "mytemplate.yaml"
+        mock_write.assert_called_once_with("ds-abc", "spec-templates/mytemplate.yaml", valid_yaml)
+
+    @pytest.mark.asyncio
+    async def test_upload_spec_rejects_unparseable_yaml(self, _mock_studio_modules, monkeypatch):
+        import spec_template_sync as _sts
+        monkeypatch.setattr(
+            _sts, "validate_gallery_template_yaml",
+            lambda content: (_ for _ in ()).throw(ValueError("invalid YAML")),
+        )
+        mock_write = MagicMock()
+        monkeypatch.setattr("dataset_manager.DatasetManager.write_file", staticmethod(mock_write))
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        uf = MagicMock()
+        uf.filename = "bad.yaml"
+
+        async def _read():
+            return b": : invalid\n"
+
+        uf.read = _read
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            form_data={"file": uf},
+        )
+        result = await routes["/api/upload-spec-to-dataset"](req)
+        assert result.status_code == 400
+        body = json.loads(result.body)
+        assert body["valid"] is False
+        mock_write.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_upload_spec_rejects_empty_sections(self, _mock_studio_modules, monkeypatch):
+        import spec_template_sync as _sts
+        monkeypatch.setattr(
+            _sts, "validate_gallery_template_yaml",
+            lambda content: (_ for _ in ()).throw(ValueError("Missing required field: sections (must be non-empty)")),
+        )
+        mock_write = MagicMock()
+        monkeypatch.setattr("dataset_manager.DatasetManager.write_file", staticmethod(mock_write))
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        uf = MagicMock()
+        uf.filename = "nosec.yaml"
+
+        async def _read():
+            return b"slug: s\ncard_title: T\ncard_description: D\nsections: []\n"
+
+        uf.read = _read
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            form_data={"file": uf},
+        )
+        result = await routes["/api/upload-spec-to-dataset"](req)
+        assert result.status_code == 400
+        body = json.loads(result.body)
+        assert body["valid"] is False
+        assert "sections" in body["error"]
+        mock_write.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_upload_spec_rejects_non_yaml_extension(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        uf = MagicMock()
+        uf.filename = "spec.txt"
+
+        async def _read():
+            return b"slug: s\n"
+
+        uf.read = _read
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            form_data={"file": uf},
+        )
+        result = await routes["/api/upload-spec-to-dataset"](req)
+        assert result.status_code == 400
+        body = json.loads(result.body)
+        assert "yaml" in body["error"].lower()
+
 
     @pytest.mark.asyncio
     async def test_built_in_templates_empty_when_no_project(self, _mock_studio_modules):
