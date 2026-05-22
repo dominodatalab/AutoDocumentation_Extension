@@ -31,14 +31,12 @@ def _get_state_module():
     # If already imported, reload with mocks
     mock_domino_client = MagicMock()
     mock_domino_job_store = MagicMock()
-    mock_spec_store = MagicMock()
     mock_auth_context = MagicMock()
     mock_domino_datasets = MagicMock()
 
     # Pre-register the sibling modules so _import_sibling succeeds
     sys.modules["domino_client"] = mock_domino_client
     sys.modules["domino_job_store"] = mock_domino_job_store
-    sys.modules["spec_store"] = mock_spec_store
     sys.modules["auth_context"] = MagicMock()
     sys.modules["domino_datasets"] = mock_domino_datasets
 
@@ -61,7 +59,6 @@ def state_module():
     saved = {
         "domino_client": sys.modules.get("domino_client"),
         "domino_job_store": sys.modules.get("domino_job_store"),
-        "spec_store": sys.modules.get("spec_store"),
         "auth_context": sys.modules.get("auth_context"),
         "domino_datasets": sys.modules.get("domino_datasets"),
         "studio.state": sys.modules.get("studio.state"),

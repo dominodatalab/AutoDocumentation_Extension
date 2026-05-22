@@ -120,7 +120,6 @@ def _mock_studio_modules(monkeypatch):
         _dc.get_project_code_root
     )
     mock_state.domino_job_store = MagicMock()
-    mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
     mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
     mock_state.domino_datasets.ensure_dataset.return_value = {

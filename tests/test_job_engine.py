@@ -123,7 +123,6 @@ def _build_mock_state():
     mock_state.DominoJobRecord = DominoJobRecord
     mock_state.domino_client = MagicMock()
     mock_state.domino_job_store = MagicMock()
-    mock_state.spec_store = MagicMock()
     mock_state.domino_datasets = MagicMock()
     mock_state.domino_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
 
@@ -770,7 +769,6 @@ class TestSubmitDominoJob:
     @pytest.mark.asyncio
     async def test_requires_spec_path_field(self, _mock_studio):
         je = _import_job_engine()
-        spec_store = _mock_studio.spec_store
 
         req = _jr(
             spec_path="",
@@ -780,6 +778,5 @@ class TestSubmitDominoJob:
         )
         with pytest.raises(ValueError, match="spec file is required"):
             await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
-        spec_store.save_spec.assert_not_called()
 
 

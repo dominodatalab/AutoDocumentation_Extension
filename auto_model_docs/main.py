@@ -267,6 +267,7 @@ def main(
         from artifact_layout import init_layout, get_layout
         init_layout()
         output_dir = get_layout().docs_dir
+        console.print(f"[dim]DOMINO_RUN_ID=[/] {os.environ.get('DOMINO_RUN_ID', '(not set)')}")
         code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)
