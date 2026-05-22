@@ -1151,6 +1151,8 @@ MAIN_DOM_JS = r"""
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
 
+        var _lastResultsPanelKey = null;
+
         function renderResultsPanel(jobs) {
             var panel = document.getElementById('results-panel');
             if (!panel) return;
@@ -1158,6 +1160,13 @@ MAIN_DOM_JS = r"""
 
             var latestJob = jobs[0];
             var status = latestJob.status || 'queued';
+
+            var panelKey = (latestJob.job_id || latestJob.domino_run_id || '') + '|' + status;
+            var isTerminal = (status === 'succeeded' || status === 'failed' || status === 'cancelled');
+            if (isTerminal && panelKey === _lastResultsPanelKey) {
+                return;
+            }
+            _lastResultsPanelKey = panelKey;
 
             var html = '<div class="results-job-card">';
 

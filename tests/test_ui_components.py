@@ -460,4 +460,13 @@ class TestSpecFileBrowserUi:
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
         assert "data-uid" in scripts_src
+
+
+class TestResultsPanelNoRerenderInTerminalState:
+    def test_results_panel_skips_rerender_for_same_terminal_job(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_lastResultsPanelKey" in scripts_src
+        assert "panelKey === _lastResultsPanelKey" in scripts_src
+        assert "isTerminal" in scripts_src
         assert "_selectedTemplateUid" in scripts_src
