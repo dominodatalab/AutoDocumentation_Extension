@@ -267,7 +267,6 @@ def main(
         from artifact_layout import init_layout, get_layout
         init_layout()
         output_dir = get_layout().docs_dir
-        console.print(f"[dim]DOMINO_RUN_ID=[/] {os.environ.get('DOMINO_RUN_ID', '(not set)')}")
         code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)
@@ -290,9 +289,7 @@ def main(
         if filtered_models:
             model_names = [name.strip() for name in filtered_models.split(",") if name.strip()]
 
-        console.print(f"---------------- RUN ID BLAH BLAH BLAH = {os.environ.get('DOMINO_RUN_ID', '(not set)')}")
-        # Load document spec
-        console.print(f"\n[bold blue]Loading specification BLAH:[/] {spec}")
+        console.print(f"\n[bold blue]Loading specification:[/] {spec}")
         doc_spec = DocumentSpec.from_yaml(spec)
         console.print(f"[bold]Document:[/] {doc_spec.title}")
         console.print(f"[bold]Sections:[/] {len(doc_spec.sections)}")
