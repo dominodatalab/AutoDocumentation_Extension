@@ -37,9 +37,10 @@ class DocumentBuilder:
     title page, table of contents, and content sections.
     """
 
-    def __init__(self, output_dir: str = "docs", dataset_mount_path: str = ""):
+    def __init__(self, output_dir: str = "docs", dataset_mount_path: str = "", run_id: str = ""):
         self.output_dir = output_dir
         self.dataset_mount_path = dataset_mount_path
+        self.run_id = run_id
 
     async def build(
         self,
@@ -881,8 +882,9 @@ class DocumentBuilder:
         import local_data_manager
         from artifact_layout import get_layout
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"model_docs_{timestamp}.docx"
+        if not self.run_id:
+            raise BuilderError("DOMINO_RUN_ID is not set; cannot generate deterministic filename")
+        filename = f"model_docs_{self.run_id}.docx"
         dataset_path = f"{get_layout().docs_dir}/{filename}"
 
         buffer = io.BytesIO()

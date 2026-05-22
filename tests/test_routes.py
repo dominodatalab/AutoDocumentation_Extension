@@ -735,6 +735,65 @@ class TestApiRoutes:
 
 
 # ===========================================================================
+# /api/preview-doc
+# ===========================================================================
+
+class TestPreviewDoc:
+
+    @pytest.mark.asyncio
+    async def test_missing_run_id_returns_400(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/preview-doc"](req)
+        assert result.status_code == 400
+        assert "runId" in json.loads(result.body)["error"]
+
+    @pytest.mark.asyncio
+    async def test_file_not_found_returns_404(self, _mock_studio_modules, monkeypatch):
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-1", "rwSnapshotId": "snap-1"}
+        monkeypatch.setattr("dataset_manager.DatasetManager.file_exists", staticmethod(lambda snap, path: False))
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123", "runId": "run-abc"})
+        result = await routes["/api/preview-doc"](req)
+        assert result.status_code == 404
+        body = json.loads(result.body)
+        assert body["ready"] is False
+
+    @pytest.mark.asyncio
+    async def test_returns_html_when_file_exists(self, _mock_studio_modules, monkeypatch):
+        import io as _io
+        from docx import Document as _Document
+        buf = _io.BytesIO()
+        doc = _Document()
+        doc.add_paragraph("Hello preview")
+        doc.save(buf)
+        docx_bytes = buf.getvalue()
+
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-1", "rwSnapshotId": "snap-1"}
+        monkeypatch.setattr("dataset_manager.DatasetManager.file_exists", staticmethod(lambda snap, path: True))
+        monkeypatch.setattr("dataset_manager.DatasetManager.read_file", staticmethod(lambda snap, path: docx_bytes))
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123", "runId": "run-abc"})
+        result = await routes["/api/preview-doc"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body["ready"] is True
+        assert "Hello preview" in body["html"]
+
+    @pytest.mark.asyncio
+    async def test_missing_project_returns_400(self, _mock_studio_modules):
+        _mock_studio_modules["state"]._resolve_request_project_id.return_value = None
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"runId": "run-abc"})
+        result = await routes["/api/preview-doc"](req)
+        assert result.status_code == 400
+
+
+# ===========================================================================
 # routes_job.py
 # ===========================================================================
 

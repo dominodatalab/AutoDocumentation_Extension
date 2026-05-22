@@ -70,6 +70,7 @@ class Orchestrator:
         latest_only: bool = False,
         dataset_mount_path: str = "",
         language: str = "auto",
+        run_id: str = "",
     ):
         """Initialize the orchestrator.
 
@@ -144,7 +145,7 @@ class Orchestrator:
         )
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
-        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path)
+        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path, run_id=run_id)
 
         # Optional notebook builder
         if generate_notebook:

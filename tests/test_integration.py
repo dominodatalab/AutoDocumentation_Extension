@@ -613,6 +613,41 @@ class TestSpecUploadIntegration:
 
 
 # ===========================================================================
+# /api/preview-doc integration tests
+# ===========================================================================
+
+class TestPreviewDocIntegration:
+
+    def test_missing_run_id_returns_400(self, client):
+        resp = client.get("/api/preview-doc?projectId=proj-integration")
+        assert resp.status_code == 400
+        assert "runId" in resp.json().get("error", "")
+
+    def test_file_not_found_returns_404(self, client, integration_env, monkeypatch):
+        monkeypatch.setattr("dataset_manager.DatasetManager.file_exists", staticmethod(lambda snap, path: False))
+        resp = client.get("/api/preview-doc?projectId=proj-integration&runId=run-abc")
+        assert resp.status_code == 404
+        assert resp.json().get("ready") is False
+
+    def test_returns_html_when_file_exists(self, client, integration_env, monkeypatch):
+        import io as _io
+        from docx import Document as _Document
+        buf = _io.BytesIO()
+        doc = _Document()
+        doc.add_paragraph("Integration preview test")
+        doc.save(buf)
+        docx_bytes = buf.getvalue()
+
+        monkeypatch.setattr("dataset_manager.DatasetManager.file_exists", staticmethod(lambda snap, path: True))
+        monkeypatch.setattr("dataset_manager.DatasetManager.read_file", staticmethod(lambda snap, path: docx_bytes))
+        resp = client.get("/api/preview-doc?projectId=proj-integration&runId=run-abc")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("ready") is True
+        assert "Integration preview test" in body.get("html", "")
+
+
+# ===========================================================================
 # Job route integration tests
 # ===========================================================================
 

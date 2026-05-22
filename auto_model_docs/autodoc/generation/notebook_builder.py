@@ -931,7 +931,8 @@ from pathlib import Path
 output_dir = Path("{output_dir}")  # Embedded at generation time
 notebook_path = Path("{notebook_path_str}")  # Embedded at generation time
 
-exporter = NotebookExporter(output_dir=output_dir, dataset_mount_path="{self.dataset_mount_path}")
+import os as _os
+exporter = NotebookExporter(output_dir=output_dir, dataset_mount_path="{self.dataset_mount_path}", run_id=_os.environ.get("DOMINO_RUN_ID", ""))
 output_path = exporter.export_to_word(
     notebook_path=notebook_path,
     title=DOCUMENT_TITLE,

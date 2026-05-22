@@ -31,10 +31,10 @@ class NotebookExporter:
     and delegates to DocumentBuilder for Word assembly.
     """
 
-    def __init__(self, output_dir: Path = Path("./output"), dataset_mount_path: str = ""):
+    def __init__(self, output_dir: Path = Path("./output"), dataset_mount_path: str = "", run_id: str = ""):
         self.output_dir = output_dir
         self.dataset_mount_path = dataset_mount_path
-        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path)
+        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path, run_id=run_id)
 
     def export_to_word(
         self,

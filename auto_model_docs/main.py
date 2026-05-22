@@ -366,6 +366,7 @@ def main(
             latest_only=latest_only,
             dataset_mount_path=dataset_path,
             language=language,
+            run_id=os.environ.get("DOMINO_RUN_ID", ""),
         )
 
         # Run generation with progress

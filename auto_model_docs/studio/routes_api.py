@@ -593,3 +593,33 @@ def register_api_routes(rt):
             )
 
     rt("/api/sync-spec-templates")(api_sync_spec_templates)
+
+    async def api_preview_doc(req: Request):
+        pid = _resolve_request_project_id(req)
+        if not pid:
+            return Response(json.dumps({"error": "Project ID is required."}), status_code=400, media_type="application/json")
+        run_id = (req.query_params.get("runId") or "").strip()
+        if not run_id:
+            return Response(json.dumps({"error": "runId is required."}), status_code=400, media_type="application/json")
+        try:
+            require_project_write(pid)
+            ensured = domino_datasets.ensure_dataset(pid)
+            snap = ensured.get("rwSnapshotId") or domino_datasets.get_rw_snapshot_id(str(ensured.get("id") or ""))
+            if not snap:
+                return Response(json.dumps({"error": "Could not resolve dataset snapshot."}), status_code=500, media_type="application/json")
+            rel_path = f"docs/model_docs_{run_id}.docx"
+            if not DatasetManager.file_exists(snap, rel_path):
+                return Response(json.dumps({"error": "Document not found.", "ready": False}), status_code=404, media_type="application/json")
+            docx_bytes = DatasetManager.read_file(snap, rel_path)
+            import mammoth
+            import io
+            result = mammoth.convert_to_html(io.BytesIO(docx_bytes))
+            return Response(
+                json.dumps({"html": result.value, "ready": True}),
+                media_type="application/json",
+            )
+        except Exception as exc:
+            logger.warning("api_preview_doc failed", exc_info=True)
+            return Response(json.dumps({"error": str(exc)}), status_code=500, media_type="application/json")
+
+    rt("/api/preview-doc")(api_preview_doc)

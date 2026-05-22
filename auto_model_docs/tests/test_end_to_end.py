@@ -275,6 +275,7 @@ def test_pipeline_smoke_end_to_end(
         scan_workers=1,
         batch_size=4,
         dataset_mount_path=mount_path,
+        run_id="test-run-001",
     )
 
     output_path = asyncio.new_event_loop().run_until_complete(
@@ -331,6 +332,7 @@ def test_notebook_roundtrip(
             scan_workers=1,
             batch_size=4,
             dataset_mount_path=mem_store.dataset_mount_path,
+            run_id="test-run-notebook",
         )
         asyncio.new_event_loop().run_until_complete(orch.generate(simple_spec))
 
@@ -373,7 +375,7 @@ def test_notebook_roundtrip(
     nbformat.write(nb, buf)
     local_data_manager.write_file(mount, notebook_path, buf.getvalue().encode("utf-8"))
 
-    exporter = NotebookExporter(output_dir=Path("docs"), dataset_mount_path=mount)
+    exporter = NotebookExporter(output_dir=Path("docs"), dataset_mount_path=mount, run_id="test-run-roundtrip")
     exporter.export_to_word(Path(notebook_path), title="Test Model Documentation")
 
     docx_paths = [
@@ -460,6 +462,7 @@ def test_sanitizer_invariant_no_secrets_in_llm_prompts(
         scan_workers=1,
         batch_size=4,
         dataset_mount_path=mem_store.dataset_mount_path,
+        run_id="test-run-secrets",
     )
 
     asyncio.new_event_loop().run_until_complete(orch.generate(simple_spec))
@@ -474,3 +477,42 @@ def test_sanitizer_invariant_no_secrets_in_llm_prompts(
                 leaks.append(f"{name} ({secret[:10]}...) leaked in an LLM call")
 
     assert not leaks, "Secrets reached the LLM:\n" + "\n".join(leaks)
+
+
+# ===========================================================================
+# DocumentBuilder._save_document filename tests
+# ===========================================================================
+
+class TestDocumentBuilderFilename:
+
+    def test_save_document_uses_run_id(self, mem_store):
+        from unittest.mock import MagicMock
+        from autodoc.generation.builder import DocumentBuilder
+
+        builder = DocumentBuilder(
+            output_dir="docs",
+            dataset_mount_path=mem_store.dataset_mount_path,
+            run_id="abc123",
+        )
+        fake_doc = MagicMock()
+        fake_doc.save = lambda buf: buf.write(b"PK\x03\x04")
+
+        path = builder._save_document(fake_doc)
+        assert path == "docs/model_docs_abc123.docx"
+        assert local_data_manager.file_exists(mem_store.dataset_mount_path, path)
+
+    def test_save_document_fails_without_run_id(self, mem_store):
+        from autodoc.generation.builder import DocumentBuilder
+        from autodoc.core.exceptions import BuilderError
+
+        builder = DocumentBuilder(
+            output_dir="docs",
+            dataset_mount_path=mem_store.dataset_mount_path,
+            run_id="",
+        )
+        from unittest.mock import MagicMock
+        fake_doc = MagicMock()
+        fake_doc.save = lambda buf: buf.write(b"PK\x03\x04")
+
+        with pytest.raises(BuilderError, match="DOMINO_RUN_ID"):
+            builder._save_document(fake_doc)
