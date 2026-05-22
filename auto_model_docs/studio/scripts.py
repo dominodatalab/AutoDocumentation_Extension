@@ -1197,6 +1197,16 @@ MAIN_DOM_JS = r"""
                     + '</div>'
                     + (autodocLink ? autodocLink : '')
                     + '</div>';
+                if (latestJob.domino_run_id) {
+                    html += '<div class="doc-preview-wrap" id="doc-preview-wrap">'
+                        + '<div class="doc-preview-loading" id="doc-preview-loading">'
+                        + '<span class="material-symbols-outlined doc-preview-spin">autorenew</span>'
+                        + '<span>Loading preview…</span>'
+                        + '</div>'
+                        + '<div class="doc-preview-content" id="doc-preview-content" style="display:none"></div>'
+                        + '<div class="doc-preview-error" id="doc-preview-error" style="display:none"></div>'
+                        + '</div>';
+                }
                 html += '</div>';
             } else if (status === 'failed') {
                 html += '<div class="results-failed">';
@@ -1246,6 +1256,10 @@ MAIN_DOM_JS = r"""
 
             html += '</div>'; // end results-job-card
             panel.innerHTML = html;
+
+            if (status === 'succeeded' && latestJob.domino_run_id) {
+                _loadDocPreview(latestJob.domino_run_id);
+            }
 
             // Start or stop the progress label cycle
             if (status === 'running' || status === 'submitted' || status === 'pending') {
@@ -1319,6 +1333,36 @@ MAIN_DOM_JS = r"""
         var _progressInterval = null;
         var _progressStageList = ['Scanning code\u2026', 'Planning sections\u2026', 'Generating content\u2026', 'Finalizing document\u2026'];
         var _progressStageIdx = 0;
+        var _docPreviewRunId = null;
+        var _docPreviewTimer = null;
+
+        function _loadDocPreview(runId) {
+            _docPreviewRunId = runId;
+            if (_docPreviewTimer) { clearTimeout(_docPreviewTimer); _docPreviewTimer = null; }
+            var pid = _projectId;
+            fetch('/api/preview-doc?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var wrap = document.getElementById('doc-preview-wrap');
+                    if (!wrap || _docPreviewRunId !== runId) return;
+                    var loading = document.getElementById('doc-preview-loading');
+                    var content = document.getElementById('doc-preview-content');
+                    var err = document.getElementById('doc-preview-error');
+                    if (data.ready && data.html) {
+                        if (loading) loading.style.display = 'none';
+                        if (content) { content.innerHTML = data.html; content.style.display = ''; }
+                    } else if (!data.ready) {
+                        _docPreviewTimer = setTimeout(function() { _loadDocPreview(runId); }, 3000);
+                    } else {
+                        if (loading) loading.style.display = 'none';
+                        if (err) { err.textContent = data.error || 'Preview unavailable.'; err.style.display = ''; }
+                    }
+                })
+                .catch(function() {
+                    _docPreviewTimer = setTimeout(function() { _loadDocPreview(runId); }, 5000);
+                });
+        }
+
         function _startProgressCycle() {
             _progressStageIdx = 0;
             clearInterval(_progressInterval);

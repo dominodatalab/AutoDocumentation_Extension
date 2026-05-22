@@ -2923,6 +2923,43 @@ select.hw-tier-select option {
     font-family: var(--font-body);
 }
 
+/* ── Doc preview ────────────────────────────────────────────────── */
+.doc-preview-wrap {
+    margin-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 12px;
+    max-height: 480px;
+    overflow-y: auto;
+}
+.doc-preview-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    padding: 8px 0;
+}
+.doc-preview-spin {
+    animation: spin 1.2s linear infinite;
+    font-size: 18px;
+}
+.doc-preview-content {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+.doc-preview-content h1, .doc-preview-content h2, .doc-preview-content h3 {
+    margin: 12px 0 6px;
+    font-weight: 600;
+}
+.doc-preview-content p { margin: 0 0 8px; }
+.doc-preview-error {
+    color: var(--status-failed);
+    font-size: 12px;
+    padding: 6px 0;
+}
+
 /* ── Results: failed state ───────────────────────────────────────── */
 .results-failed {
     display: flex;
