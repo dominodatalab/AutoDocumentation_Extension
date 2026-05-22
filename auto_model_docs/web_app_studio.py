@@ -471,6 +471,12 @@ async def index(req: Request):
                                     ),
                                     cls="output-fmt-section",
                                 ),
+                                Div(
+                                    Span("hourglass_empty", cls="material-symbols-outlined preview-empty-icon"),
+                                    Span("Loading...", cls="preview-empty-text"),
+                                    id="preview-card-loading",
+                                    cls="preview-card-loading",
+                                ),
                                 cls="preview-card",
                             ),
                             cls="wizard-col-config",

@@ -1860,6 +1860,24 @@ select.hw-tier-select option {
     border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow: var(--shadow-sm);
+    position: relative;
+}
+.preview-card-loading {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: var(--outline);
+    text-align: center;
+    background: color-mix(in srgb, var(--surface-container-lowest) 88%, transparent);
+    backdrop-filter: blur(2px);
+    z-index: 2;
+}
+.preview-card-loading.active {
+    display: flex;
 }
 
 /* Edit template section */

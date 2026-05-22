@@ -537,15 +537,13 @@ MAIN_DOM_JS = r"""
             for (var i = 0; i < cards.length; i++) {
                 cards[i].classList.toggle('loading', !!loading);
             }
+            var overlay = document.getElementById('preview-card-loading');
+            if (overlay) overlay.classList.toggle('active', !!loading);
         }
 
         function loadYamlTemplatePreview(tpl) {
             var panel = document.getElementById('template-preview-panel');
             if (!panel) return;
-            panel.innerHTML = '<div class="preview-empty-state" id="template-preview-empty">'
-                + '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
-                + '<span class="preview-empty-text">Loading\u2026</span>'
-                + '</div>';
             _setTemplateLoading(true);
             var pid = resolvedProjectId();
             var tplFile = encodeURIComponent(tpl.template_file || '');
