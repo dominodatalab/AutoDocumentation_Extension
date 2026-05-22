@@ -485,6 +485,57 @@ def register_api_routes(rt):
 
     rt("/api/built-in-template")(api_built_in_template_yaml)
 
+    async def api_built_in_template_sections(req: Request):
+        import spec_template_sync
+        import yaml
+
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response("projectId required", status_code=400)
+        raw_param = (req.query_params.get("template_file") or "").strip()
+        base = raw_param.replace("\\", "/").split("/")[-1]
+        if not base:
+            return Response("template_file required", status_code=400)
+        if not base.lower().endswith((".yaml", ".yml")):
+            return Response("Not found", status_code=404)
+        try:
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
+            rel = spec_template_sync.dataset_rel_path(base)
+            raw = DatasetManager.read_file(snap, rel)
+        except Exception as exc:
+            logger.warning("built-in-template-sections read failed: %s", exc, exc_info=True)
+            return Response(str(exc), status_code=500)
+        text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
+        try:
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError:
+            parsed = None
+        sections: list[str] = []
+        per_model: list[str] = []
+        if isinstance(parsed, dict):
+            raw_sections = parsed.get("sections")
+            if isinstance(raw_sections, list):
+                for entry in raw_sections:
+                    if isinstance(entry, str):
+                        sections.append(entry)
+                    elif isinstance(entry, dict):
+                        title = entry.get("title") or entry.get("name") or entry.get("id")
+                        if isinstance(title, str) and title.strip():
+                            sections.append(title.strip())
+            elif isinstance(raw_sections, dict):
+                for key in raw_sections.keys():
+                    if isinstance(key, str):
+                        sections.append(key)
+            raw_per_model = parsed.get("per_model_sections")
+            if isinstance(raw_per_model, list):
+                for entry in raw_per_model:
+                    if isinstance(entry, str):
+                        per_model.append(entry)
+        payload = {"sections": sections, "per_model_sections": per_model}
+        return Response(json.dumps(payload), media_type="application/json")
+
+    rt("/api/built-in-template-sections")(api_built_in_template_sections)
+
     async def api_sync_spec_templates(req: Request):
         import spec_template_sync
 
