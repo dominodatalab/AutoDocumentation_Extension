@@ -426,7 +426,13 @@ class TestApiRoutes:
 
     @pytest.mark.asyncio
     async def test_upload_spec_rejects_invalid_yaml(self, _mock_studio_modules, monkeypatch):
-        _mock_studio_modules["autodoc_models"].DocumentSpec.validate_spec.return_value = ["missing title"]
+        # Force the gallery validator to raise ValueError as it would for a
+        # YAML missing required fields.
+        import spec_template_sync as _sts
+        monkeypatch.setattr(
+            _sts, "validate_gallery_template_yaml",
+            lambda content: (_ for _ in ()).throw(ValueError("Missing required field: slug")),
+        )
         mock_write = MagicMock()
         monkeypatch.setattr(
             "dataset_manager.DatasetManager.write_file",
@@ -443,13 +449,13 @@ class TestApiRoutes:
         uf.read = _read
         req = _make_request(
             query_params={"projectId": "proj-123"},
-            form_data={"file": uf, "datasetId": "ds-1", "relativeDir": ""},
+            form_data={"file": uf},
         )
         result = await routes["/api/upload-spec-to-dataset"](req)
         assert result.status_code == 400
         body = json.loads(result.body)
         assert body["valid"] is False
-        assert "missing title" in body["errors"]
+        assert "Missing required field" in body["error"]
         mock_write.assert_not_called()
 
 

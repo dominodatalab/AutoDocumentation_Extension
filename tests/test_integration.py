@@ -523,7 +523,7 @@ class TestApiRoutesIntegration:
 class TestSpecUploadIntegration:
 
     def test_upload_invalid_yaml_returns_400(self, client, integration_env, monkeypatch):
-        integration_env["doc_spec"].validate_spec.return_value = ["bad spec"]
+        # YAML missing required gallery fields (slug, card_title, card_description, sections).
         mock_write = MagicMock()
         monkeypatch.setattr(
             "dataset_manager.DatasetManager.write_file",
@@ -532,12 +532,11 @@ class TestSpecUploadIntegration:
         resp = client.post(
             "/api/upload-spec-to-dataset?projectId=proj-integration",
             files={"file": ("spec.yaml", b"foo: bar\n", "application/x-yaml")},
-            data={"datasetId": "ds-integration", "relativeDir": ""},
         )
         assert resp.status_code == 400
         body = resp.json()
         assert body.get("valid") is False
-        assert "bad spec" in body.get("errors", [])
+        assert "Missing required field" in body.get("error", "")
         mock_write.assert_not_called()
 
 

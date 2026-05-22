@@ -213,6 +213,7 @@ MAIN_DOM_JS = r"""
         var _selectedTemplateUid = null;  // currently selected template unique id (full dataset file path)
         var _customSpecSelected = false;  // user selected a file from dataset browser
         var _templateLoading = false;     // true while a template's YAML/sections are being fetched
+        var _editTplOriginalYaml = '';    // YAML content last loaded for the selected template; used for dirty-state
 
         // Dataset state (shared between spec browser and form submission)
         var _specDatasets = [];
@@ -509,6 +510,11 @@ MAIN_DOM_JS = r"""
             }
             var editArea = document.getElementById('edit-template-yaml');
             if (editArea) editArea.value = '';
+            _editTplOriginalYaml = '';
+            var editSection = document.getElementById('edit-tpl-section');
+            if (editSection) editSection.removeAttribute('data-uid');
+            _setEditTplStatus('', '');
+            _updateEditTplButtons();
         }
         function _renderTemplatePreviewSections(tpl, sections, perModelSections) {
             var panel = document.getElementById('template-preview-panel');
@@ -532,6 +538,93 @@ MAIN_DOM_JS = r"""
                 + '</div>'
                 + '<div class="preview-sections">' + sectionsHtml + '</div>';
         }
+
+        function _setEditTplStatus(text, kind) {
+            var el = document.getElementById('edit-tpl-status');
+            if (!el) return;
+            el.textContent = text || '';
+            el.classList.remove('error', 'success');
+            if (kind === 'error' || kind === 'success') el.classList.add(kind);
+        }
+
+        function _editTplFilename() {
+            var sec = document.getElementById('edit-tpl-section');
+            var uid = sec ? (sec.getAttribute('data-uid') || '') : '';
+            if (!uid) return '';
+            return uid.replace(/\\/g, '/').split('/').pop();
+        }
+
+        function _updateEditTplButtons() {
+            var saveBtn = document.getElementById('edit-tpl-save-btn');
+            var revertBtn = document.getElementById('edit-tpl-revert-btn');
+            var editArea = document.getElementById('edit-template-yaml');
+            var hasTemplate = !!_editTplFilename();
+            var current = editArea ? (editArea.value || '') : '';
+            var hasContent = current.length > 0;
+            var dirty = current !== _editTplOriginalYaml;
+            if (saveBtn) saveBtn.disabled = !(hasTemplate && hasContent && dirty);
+            if (revertBtn) revertBtn.disabled = !(hasTemplate && dirty);
+        }
+
+        function _editTplSave() {
+            var saveBtn = document.getElementById('edit-tpl-save-btn');
+            var editArea = document.getElementById('edit-template-yaml');
+            if (!editArea) return;
+            var filename = _editTplFilename();
+            if (!filename) return;
+            var content = editArea.value || '';
+            if (!content) return;
+
+            _setEditTplStatus('Saving...', '');
+            if (saveBtn) saveBtn.disabled = true;
+            var revertBtn = document.getElementById('edit-tpl-revert-btn');
+            if (revertBtn) revertBtn.disabled = true;
+
+            var pid = resolvedProjectId();
+            var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+            var blob = new Blob([content], { type: 'text/yaml' });
+            var fd = new FormData();
+            fd.append('file', blob, filename);
+            fd.append('filename', filename);
+
+            fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+                .then(function(res) {
+                    if (!res.ok || (res.body && res.body.error)) {
+                        var msg = (res.body && res.body.error) || 'Save failed';
+                        _setEditTplStatus(msg, 'error');
+                        _updateEditTplButtons();
+                        return;
+                    }
+                    _editTplOriginalYaml = content;
+                    _setEditTplStatus('Saved.', 'success');
+                    _updateEditTplButtons();
+                    // Refresh gallery so card metadata stays in sync if it changed.
+                    try { loadBuiltinTemplates(); } catch (e) {}
+                })
+                .catch(function(err) {
+                    _setEditTplStatus('Save failed: ' + (err && err.message ? err.message : String(err)), 'error');
+                    _updateEditTplButtons();
+                });
+        }
+
+        function _editTplRevert() {
+            var editArea = document.getElementById('edit-template-yaml');
+            if (!editArea) return;
+            editArea.value = _editTplOriginalYaml || '';
+            _setEditTplStatus('', '');
+            _updateEditTplButtons();
+        }
+
+        (function wireEditTemplateActions() {
+            var saveBtn = document.getElementById('edit-tpl-save-btn');
+            var revertBtn = document.getElementById('edit-tpl-revert-btn');
+            var editArea = document.getElementById('edit-template-yaml');
+            if (saveBtn) saveBtn.addEventListener('click', _editTplSave);
+            if (revertBtn) revertBtn.addEventListener('click', _editTplRevert);
+            if (editArea) editArea.addEventListener('input', _updateEditTplButtons);
+            _updateEditTplButtons();
+        })();
 
         (function wireEditTemplateMaximize() {
             var btn = document.getElementById('edit-tpl-maximize-btn');
@@ -562,6 +655,14 @@ MAIN_DOM_JS = r"""
             var panel = document.getElementById('template-preview-panel');
             if (!panel) return;
             _setTemplateLoading(true);
+            // Stamp the template uid as data-uid on the editor section + preview empty,
+            // mirroring the data-uid attribute on .template-card. Source of truth.
+            var uid = tpl.uid || tpl.template_path || tpl.template_file || '';
+            var editSection = document.getElementById('edit-tpl-section');
+            if (editSection) editSection.setAttribute('data-uid', uid);
+            var emptyEl = document.getElementById('template-preview-empty');
+            if (emptyEl) emptyEl.setAttribute('data-uid', uid);
+
             var pid = resolvedProjectId();
             var tplFile = encodeURIComponent(tpl.template_file || '');
             var pidQs = pid ? ('&projectId=' + encodeURIComponent(pid)) : '';
@@ -573,11 +674,18 @@ MAIN_DOM_JS = r"""
                 .then(function(r) { return r.text(); })
                 .then(function(text) {
                     var editArea = document.getElementById('edit-template-yaml');
-                    if (editArea) editArea.value = text || '';
+                    if (editArea) {
+                        editArea.value = text || '';
+                        _editTplOriginalYaml = text || '';
+                    }
+                    _updateEditTplButtons();
+                    _setEditTplStatus('', '');
                 })
                 .catch(function() {
                     var editArea = document.getElementById('edit-template-yaml');
                     if (editArea) editArea.value = '';
+                    _editTplOriginalYaml = '';
+                    _updateEditTplButtons();
                 });
 
             var sectionsPromise = fetch(sectionsUrl)

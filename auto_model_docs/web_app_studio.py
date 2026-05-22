@@ -464,29 +464,29 @@ async def index(req: Request):
                                         placeholder="Select a template to edit its YAML...",
                                         spellcheck="false",
                                     ),
+                                    Div(
+                                        Button(
+                                            "Save",
+                                            type="button",
+                                            id="edit-tpl-save-btn",
+                                            cls="edit-tpl-action-btn edit-tpl-save-btn",
+                                            disabled=True,
+                                        ),
+                                        Button(
+                                            "Revert",
+                                            type="button",
+                                            id="edit-tpl-revert-btn",
+                                            cls="edit-tpl-action-btn edit-tpl-revert-btn",
+                                            disabled=True,
+                                        ),
+                                        cls="edit-tpl-actions",
+                                    ),
+                                    Div(
+                                        id="edit-tpl-status",
+                                        cls="edit-tpl-status",
+                                    ),
                                     cls="edit-tpl-section",
                                     id="edit-tpl-section",
-                                ),
-                                Div(
-                                    Span("Output format", cls="output-fmt-label"),
-                                    Div(
-                                        *[
-                                            Label(
-                                                Input(type="radio", name="output_format", value=val,
-                                                      checked=default, cls="output-fmt-radio"),
-                                                Span(icon, cls="material-symbols-outlined output-fmt-icon"),
-                                                Span(label_text, cls="output-fmt-text"),
-                                                cls="output-fmt-option",
-                                            )
-                                            for val, label_text, icon, default in [
-                                                ("docx", "Word (.docx)",   "description",              True),
-                                                ("md",   "Markdown (.md)", "markdown",                 False),
-                                                ("tex",  "LaTeX (.tex)",   "integration_instructions", False),
-                                            ]
-                                        ],
-                                        cls="output-fmt-group",
-                                    ),
-                                    cls="output-fmt-section",
                                 ),
                                 Div(
                                     Span("hourglass_empty", cls="material-symbols-outlined preview-empty-icon"),

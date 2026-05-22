@@ -1964,6 +1964,50 @@ select.hw-tier-select option {
     color: var(--muted);
     font-style: italic;
 }
+.edit-tpl-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.edit-tpl-action-btn {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0.35rem 0.85rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+    color: var(--on-surface);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.edit-tpl-action-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.edit-tpl-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.edit-tpl-save-btn:not(:disabled) {
+    background: var(--primary);
+    color: var(--on-primary);
+    border-color: var(--primary);
+}
+.edit-tpl-save-btn:not(:disabled):hover {
+    background: color-mix(in srgb, var(--primary) 88%, black);
+    color: var(--on-primary);
+}
+.edit-tpl-status {
+    font-size: 12px;
+    line-height: 1.4;
+    min-height: 1.2em;
+}
+.edit-tpl-status.error {
+    color: var(--error);
+}
+.edit-tpl-status.success {
+    color: var(--success);
+}
 
 /* Output format section */
 .output-fmt-section {
