@@ -258,14 +258,14 @@ MAIN_DOM_JS = r"""
             if (drawer) drawer.classList.remove('open');
         }
 
-        (function() {
+        document.addEventListener('DOMContentLoaded', function() {
             var closeBtn = document.getElementById('history-drawer-close');
             if (closeBtn) closeBtn.addEventListener('click', closeHistoryDrawer);
             var overlay = document.getElementById('history-drawer-overlay');
             if (overlay) overlay.addEventListener('click', closeHistoryDrawer);
             var landingBtn = document.getElementById('landing-history-btn');
             if (landingBtn) landingBtn.addEventListener('click', openHistoryDrawer);
-        })();
+        });
 
         // ── Advanced options modal ─────────────────────────────────────
         (function() {
