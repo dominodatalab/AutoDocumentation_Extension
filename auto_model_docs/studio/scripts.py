@@ -212,6 +212,7 @@ MAIN_DOM_JS = r"""
         var _builtinTemplates = [];      // loaded from API
         var _selectedTemplateUid = null;  // currently selected template unique id (full dataset file path)
         var _customSpecSelected = false;  // user selected a file from dataset browser
+        var _templateLoading = false;     // true while a template's YAML/sections are being fetched
 
         // Dataset state (shared between spec browser and form submission)
         var _specDatasets = [];
@@ -530,6 +531,14 @@ MAIN_DOM_JS = r"""
                 + '<div class="preview-sections">' + sectionsHtml + '</div>';
         }
 
+        function _setTemplateLoading(loading) {
+            _templateLoading = !!loading;
+            var cards = document.querySelectorAll('.template-card');
+            for (var i = 0; i < cards.length; i++) {
+                cards[i].classList.toggle('loading', !!loading);
+            }
+        }
+
         function loadYamlTemplatePreview(tpl) {
             var panel = document.getElementById('template-preview-panel');
             if (!panel) return;
@@ -537,14 +546,14 @@ MAIN_DOM_JS = r"""
                 + '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
                 + '<span class="preview-empty-text">Loading\u2026</span>'
                 + '</div>';
+            _setTemplateLoading(true);
             var pid = resolvedProjectId();
             var tplFile = encodeURIComponent(tpl.template_file || '');
             var pidQs = pid ? ('&projectId=' + encodeURIComponent(pid)) : '';
             var yamlUrl = _adUrl('api/built-in-template') + '?template_file=' + tplFile + pidQs;
             var sectionsUrl = _adUrl('api/built-in-template-sections') + '?template_file=' + tplFile + pidQs;
 
-            // YAML text -> edit template textarea
-            fetch(yamlUrl)
+            var yamlPromise = fetch(yamlUrl)
                 .then(_checkResp)
                 .then(function(r) { return r.text(); })
                 .then(function(text) {
@@ -556,8 +565,7 @@ MAIN_DOM_JS = r"""
                     if (editArea) editArea.value = '';
                 });
 
-            // Sections -> preview panel
-            fetch(sectionsUrl)
+            var sectionsPromise = fetch(sectionsUrl)
                 .then(_checkResp)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
@@ -572,6 +580,10 @@ MAIN_DOM_JS = r"""
                             + '</div>';
                     }
                 });
+
+            Promise.all([yamlPromise, sectionsPromise]).then(function() {
+                _setTemplateLoading(false);
+            });
         }
 
         function renderTemplateGallery(templates) {
@@ -621,6 +633,7 @@ MAIN_DOM_JS = r"""
         }
 
         function selectTemplate(uid) {
+            if (_templateLoading) return;
             _selectedTemplateUid = uid;
             _customSpecSelected = false;
 

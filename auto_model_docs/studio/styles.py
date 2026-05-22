@@ -2408,6 +2408,14 @@ select.hw-tier-select option {
     background: var(--primary-fixed);
     box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.18);
 }
+.template-card.loading {
+    pointer-events: none;
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.template-card.loading.selected {
+    opacity: 0.85;
+}
 .template-card-header {
     display: flex;
     align-items: center;
