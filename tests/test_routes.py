@@ -66,7 +66,6 @@ class _MockDominoJobRecord:
     domino_status: Optional[str] = None
     job_url: Optional[str] = None
     dataset_id: Optional[str] = None
-    dataset_url: Optional[str] = None
     spec_path: Optional[str] = None
     submitted_at: Optional[str] = None
     completed_at: Optional[str] = None
@@ -728,7 +727,8 @@ class TestJobRoutes:
         body = json.loads(result.body)
         assert "jobs" in body
         assert len(body["jobs"]) == 1
-        assert body.get("document_url") == ""
+        assert body["jobs"][0].get("document_url") == ""
+        assert "document_url" not in body
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.assert_called_with(
             "proj-123", "test_user", limit=50
         )
@@ -738,7 +738,9 @@ class TestJobRoutes:
     async def test_job_history_document_url_uses_autodoc_dataset(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
+        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = [
+            {"id": "j1", "status": "succeeded"}
+        ]
         _mock_studio_modules["state"].domino_datasets.list_datasets.return_value = [
             {"id": "other", "name": "other-ds"},
             {"id": "ds-autodoc", "name": "autodoc"},
@@ -750,7 +752,8 @@ class TestJobRoutes:
         ) as mock_b:
             result = await routes["/job-history"](req)
         body = json.loads(result.body)
-        assert body["document_url"] == "https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc/docs"
+        assert body["jobs"][0]["document_url"] == "https://domino/u/o/p/data/rw/upload/autodoc/ds-autodoc/docs"
+        assert "document_url" not in body
         mock_b.assert_called_once_with("proj-123", "ds-autodoc")
 
     @pytest.mark.asyncio
@@ -766,7 +769,7 @@ class TestJobRoutes:
         )
         body = json.loads(result.body)
         assert body["ok"] is True
-        assert body.get("document_url") == ""
+        assert "document_url" not in body
 
     @pytest.mark.asyncio
     async def test_job_history_no_forwarded_token_returns_empty(self, _mock_studio_modules, monkeypatch):
@@ -777,7 +780,7 @@ class TestJobRoutes:
         result = await routes["/job-history"](req)
         body = json.loads(result.body)
         assert body["jobs"] == []
-        assert body.get("document_url") == ""
+        assert "document_url" not in body
 
     @pytest.mark.asyncio
     async def test_cancel_queued_jobs_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):
@@ -789,7 +792,7 @@ class TestJobRoutes:
         _mock_studio_modules["state"].domino_job_store.cancel_queued_jobs.assert_not_called()
         body = json.loads(result.body)
         assert body["ok"] is False
-        assert body.get("document_url") == ""
+        assert "document_url" not in body
 
     @pytest.mark.asyncio
     async def test_run_no_forwarded_token_is_noop(self, _mock_studio_modules, monkeypatch):

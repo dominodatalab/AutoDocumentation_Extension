@@ -59,7 +59,6 @@ def _mock_dependencies(monkeypatch):
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
         dataset_id: Optional[str] = None
-        dataset_url: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -190,7 +189,6 @@ class TestDbRecordToDataclass:
             "domino_status": "Executing",
             "job_url": "https://domino/jobs/1",
             "dataset_id": "ds-9",
-            "dataset_url": "https://domino/ds",
             "spec_path": "/spec.yaml",
             "submitted_at": "2026-01-01T00:00:00",
             "completed_at": None,
@@ -202,7 +200,6 @@ class TestDbRecordToDataclass:
         assert record.status == "running"
         assert record.domino_run_id == "run-1"
         assert record.dataset_id == "ds-9"
-        assert record.dataset_url == "https://domino/ds"
 
     def test_handles_missing_optional_fields(self):
         ui = _import_ui()
@@ -212,7 +209,6 @@ class TestDbRecordToDataclass:
         assert record.status == "queued"  # default
         assert record.domino_run_id is None
         assert record.dataset_id is None
-        assert record.dataset_url is None
 
 
 # ---------------------------------------------------------------------------

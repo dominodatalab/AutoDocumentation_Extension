@@ -240,7 +240,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
         dataset_id: Optional[str] = None
-        dataset_url: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -551,10 +550,9 @@ class TestJobRoutesIntegration:
     def test_job_history_empty(self, client):
         resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
-        assert resp.json().get("jobs") == []
-        assert resp.json().get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
-        )
+        body = resp.json()
+        assert body.get("jobs") == []
+        assert "document_url" not in body
 
     def test_submit_job_calls_domino(self, client, integration_env):
         """POST /run submits to Domino and records the run for the current user."""
@@ -588,9 +586,7 @@ class TestJobRoutesIntegration:
         body = resp.json()
         assert body.get("ok") is True
         assert body.get("jobs") == []
-        assert body.get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
-        )
+        assert "document_url" not in body
 
 
 # ===========================================================================
@@ -707,7 +703,6 @@ class TestCrossCuttingIntegration:
         client.post("/cancel-queued-jobs?projectId=proj-integration")
         resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
-        assert resp.json().get("jobs") == []
-        assert resp.json().get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
-        )
+        body = resp.json()
+        assert body.get("jobs") == []
+        assert "document_url" not in body

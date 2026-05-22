@@ -1023,8 +1023,8 @@ MAIN_DOM_JS = r"""
                 : '<td>\u2014</td>';
             var isActive = _ACTIVE_STATUSES[status];
             var docCell;
-            if (status === 'succeeded' && j.dataset_url) {
-                docCell = '<td><a href="' + _esc(j.dataset_url) + '" target="_blank" rel="noopener">Open \u2192</a></td>';
+            if (status === 'succeeded' && j.document_url) {
+                docCell = '<td><a href="' + _esc(j.document_url) + '" target="_blank" rel="noopener">Open \u2192</a></td>';
             } else if (isActive) {
                 docCell = '<td class="history-pending-cell">Pending\u2026</td>';
             } else {
@@ -1076,8 +1076,8 @@ MAIN_DOM_JS = r"""
             // State-specific content
             if (status === 'succeeded') {
                 html += '<div class="results-success">';
-                var autodocLink = latestJob.dataset_url
-                    ? '<a href="' + _esc(latestJob.dataset_url) + '" target="_blank" rel="noopener" class="success-open-btn">'
+                var autodocLink = latestJob.document_url
+                    ? '<a href="' + _esc(latestJob.document_url) + '" target="_blank" rel="noopener" class="success-open-btn">'
                         + '<span class="material-symbols-outlined" style="font-size:15px">folder_open</span>Open AutoDoc file</a>'
                     : '';
                 html += '<div class="results-success-banner">'

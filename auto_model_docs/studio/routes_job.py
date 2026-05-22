@@ -53,9 +53,14 @@ def _jobs_payload(project_id: str, owner_id: str) -> list:
     if not owner_id or not project_id:
         return []
     try:
-        return domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
+        jobs = domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
     except RuntimeError:
         return []
+    doc_url = _job_history_document_url(project_id)
+    for j in jobs:
+        j["document_url"] = doc_url
+        j.pop("dataset_url", None)
+    return jobs
 
 
 def _job_history_document_url(project_id: str) -> str:
@@ -136,27 +141,27 @@ def register_job_routes(rt):
     async def job_history(req: Request):
         owner_id = _current_owner_id()
         if not owner_id:
-            return _json({"jobs": [], "document_url": ""})
+            return _json({"jobs": []})
         project_id = _resolve_request_project_id(req)
         if not project_id:
-            return _json({"jobs": [], "document_url": ""})
+            return _json({"jobs": []})
         require_domino_job_list(project_id)
         jobs = _jobs_payload(project_id, owner_id)
-        return _json({"jobs": jobs, "document_url": _job_history_document_url(project_id)})
+        return _json({"jobs": jobs})
 
     rt("/job-history")(job_history)
 
     async def cancel_queued_jobs(req: Request):
         owner_id = _current_owner_id()
         if not owner_id:
-            return _json({"ok": False, "error": "not authenticated", "jobs": [], "document_url": ""})
+            return _json({"ok": False, "error": "not authenticated", "jobs": []})
         project_id = _resolve_request_project_id(req)
         if not project_id:
-            return _json({"ok": False, "error": "missing project_id", "jobs": [], "document_url": ""})
+            return _json({"ok": False, "error": "missing project_id", "jobs": []})
         require_domino_job_list(project_id)
         domino_job_store.cancel_queued_jobs(project_id, owner_id)
         jobs = _jobs_payload(project_id, owner_id)
-        return _json({"ok": True, "jobs": jobs, "document_url": _job_history_document_url(project_id)})
+        return _json({"ok": True, "jobs": jobs})
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
 
