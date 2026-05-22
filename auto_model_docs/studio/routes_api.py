@@ -512,24 +512,35 @@ def register_api_routes(rt):
             parsed = None
         sections: list[str] = []
         per_model: list[str] = []
+
+        def _split_per_model(name: str) -> str:
+            if ":" in name:
+                head, _, tail = name.rpartition(":")
+                if tail.strip().lower() == "per_model":
+                    cleaned = head.strip()
+                    if cleaned:
+                        per_model.append(cleaned)
+                        return cleaned
+            return name
+
         if isinstance(parsed, dict):
             raw_sections = parsed.get("sections")
             if isinstance(raw_sections, list):
                 for entry in raw_sections:
                     if isinstance(entry, str):
-                        sections.append(entry)
+                        sections.append(_split_per_model(entry))
                     elif isinstance(entry, dict):
                         title = entry.get("title") or entry.get("name") or entry.get("id")
                         if isinstance(title, str) and title.strip():
-                            sections.append(title.strip())
+                            sections.append(_split_per_model(title.strip()))
             elif isinstance(raw_sections, dict):
                 for key in raw_sections.keys():
                     if isinstance(key, str):
-                        sections.append(key)
+                        sections.append(_split_per_model(key))
             raw_per_model = parsed.get("per_model_sections")
             if isinstance(raw_per_model, list):
                 for entry in raw_per_model:
-                    if isinstance(entry, str):
+                    if isinstance(entry, str) and entry not in per_model:
                         per_model.append(entry)
         payload = {"sections": sections, "per_model_sections": per_model}
         return Response(json.dumps(payload), media_type="application/json")
