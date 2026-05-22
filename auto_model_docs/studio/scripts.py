@@ -616,7 +616,7 @@ MAIN_DOM_JS = r"""
             _updateEditTplButtons();
         }
 
-        (function wireEditTemplateActions() {
+        function wireEditTemplateActions() {
             var saveBtn = document.getElementById('edit-tpl-save-btn');
             var revertBtn = document.getElementById('edit-tpl-revert-btn');
             var editArea = document.getElementById('edit-template-yaml');
@@ -624,9 +624,10 @@ MAIN_DOM_JS = r"""
             if (revertBtn) revertBtn.addEventListener('click', _editTplRevert);
             if (editArea) editArea.addEventListener('input', _updateEditTplButtons);
             _updateEditTplButtons();
-        })();
+        }
+        wireEditTemplateActions();
 
-        (function wireEditTemplateMaximize() {
+        function wireEditTemplateMaximize() {
             var btn = document.getElementById('edit-tpl-maximize-btn');
             if (!btn) return;
             btn.addEventListener('click', function() {
@@ -639,7 +640,8 @@ MAIN_DOM_JS = r"""
                 var icon = btn.querySelector('.edit-tpl-maximize-icon');
                 if (icon) icon.textContent = maximized ? 'close_fullscreen' : 'open_in_full';
             });
-        })();
+        }
+        wireEditTemplateMaximize();
 
         function _setTemplateLoading(loading) {
             _templateLoading = !!loading;
@@ -1140,17 +1142,21 @@ MAIN_DOM_JS = r"""
             } else {
                 docCell = '<td>\u2014</td>';
             }
+            var previewCell = (status === 'succeeded' && j.domino_run_id)
+                ? '<td><a href="#" class="history-preview-link" data-run-id="' + _esc(j.domino_run_id) + '">Preview</a></td>'
+                : '<td>\u2014</td>';
             return '<tr>'
                 + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
                 + jobCell
                 + docCell
+                + previewCell
                 + '</tr>';
         }
 
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Branch</th><th>Status</th><th>Submitted</th><th>Job</th><th>AutoDoc file</th></tr></thead>';
+            var header = '<thead><tr><th>Branch</th><th>Status</th><th>Submitted</th><th>Job</th><th>AutoDoc file</th><th>Preview</th></tr></thead>';
             var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
@@ -1300,6 +1306,13 @@ MAIN_DOM_JS = r"""
 
                 var refreshBtn = el.querySelector('[id^="job-history-refresh-btn"]');
                 if (refreshBtn) refreshBtn.addEventListener('click', function(e) { e.preventDefault(); fetchJobHistory(); });
+                el.querySelectorAll('.history-preview-link').forEach(function(link) {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var runId = link.getAttribute('data-run-id');
+                        if (runId) _openLandingDocPreview(runId);
+                    });
+                });
                 var cancelBtn = el.querySelector('[id^="job-cancel-queued-btn"]');
                 if (cancelBtn) {
                     cancelBtn.addEventListener('click', function(e) {
@@ -1339,8 +1352,8 @@ MAIN_DOM_JS = r"""
         function _loadDocPreview(runId) {
             _docPreviewRunId = runId;
             if (_docPreviewTimer) { clearTimeout(_docPreviewTimer); _docPreviewTimer = null; }
-            var pid = _projectId;
-            fetch('/api/preview-doc?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+            var pid = resolvedProjectId();
+            fetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var wrap = document.getElementById('doc-preview-wrap');
@@ -1361,6 +1374,56 @@ MAIN_DOM_JS = r"""
                 .catch(function() {
                     _docPreviewTimer = setTimeout(function() { _loadDocPreview(runId); }, 5000);
                 });
+        }
+
+        var _landingPreviewOriginalHtml = null;
+
+        function _openLandingDocPreview(runId) {
+            var card = document.querySelector('.preview-card');
+            if (!card) return;
+            _landingPreviewOriginalHtml = card.innerHTML;
+            card.innerHTML = '<div class="landing-doc-preview">'
+                + '<div class="landing-doc-preview-header">'
+                + '<span class="landing-doc-preview-title">Document Preview</span>'
+                + '<button type="button" class="landing-doc-preview-close" id="landing-doc-preview-close">'
+                + '<span class="material-symbols-outlined">close</span></button>'
+                + '</div>'
+                + '<div class="landing-doc-preview-body" id="landing-doc-preview-body">'
+                + '<div class="doc-preview-loading">'
+                + '<span class="material-symbols-outlined doc-preview-spin">autorenew</span>'
+                + '<span>Loading preview…</span>'
+                + '</div>'
+                + '</div>'
+                + '</div>';
+            var closeBtn = document.getElementById('landing-doc-preview-close');
+            if (closeBtn) closeBtn.addEventListener('click', _closeLandingDocPreview);
+            var pid = resolvedProjectId();
+            fetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var body = document.getElementById('landing-doc-preview-body');
+                    if (!body) return;
+                    if (data.ready && data.html) {
+                        body.innerHTML = '<div class="doc-preview-content">' + data.html + '</div>';
+                    } else {
+                        body.innerHTML = '<div class="doc-preview-error">'
+                            + (data.error || (data.ready === false ? 'Document not ready yet.' : 'Preview unavailable.'))
+                            + '</div>';
+                    }
+                })
+                .catch(function() {
+                    var body = document.getElementById('landing-doc-preview-body');
+                    if (body) body.innerHTML = '<div class="doc-preview-error">Failed to load preview.</div>';
+                });
+        }
+
+        function _closeLandingDocPreview() {
+            var card = document.querySelector('.preview-card');
+            if (!card || _landingPreviewOriginalHtml === null) return;
+            card.innerHTML = _landingPreviewOriginalHtml;
+            _landingPreviewOriginalHtml = null;
+            wireEditTemplateActions();
+            wireEditTemplateMaximize();
         }
 
         function _startProgressCycle() {

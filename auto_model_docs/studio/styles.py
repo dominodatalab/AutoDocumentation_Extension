@@ -2960,6 +2960,42 @@ select.hw-tier-select option {
     padding: 6px 0;
 }
 
+/* ── Landing page doc preview overlay ───────────────────────────── */
+.landing-doc-preview {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+.landing-doc-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.landing-doc-preview-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+.landing-doc-preview-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+}
+.landing-doc-preview-close:hover { color: var(--text-primary); }
+.landing-doc-preview-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+}
+
 /* ── Results: failed state ───────────────────────────────────────── */
 .results-failed {
     display: flex;
