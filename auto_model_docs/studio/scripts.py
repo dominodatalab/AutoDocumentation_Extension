@@ -249,6 +249,7 @@ MAIN_DOM_JS = r"""
             var drawer = document.getElementById('history-drawer');
             if (overlay) overlay.classList.add('open');
             if (drawer) drawer.classList.add('open');
+            fetchJobHistory();
         }
 
         function closeHistoryDrawer() {
