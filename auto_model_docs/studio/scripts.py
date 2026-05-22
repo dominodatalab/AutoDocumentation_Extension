@@ -531,6 +531,21 @@ MAIN_DOM_JS = r"""
                 + '<div class="preview-sections">' + sectionsHtml + '</div>';
         }
 
+        (function wireEditTemplateMaximize() {
+            var btn = document.getElementById('edit-tpl-maximize-btn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                var card = btn.closest('.preview-card');
+                if (!card) return;
+                var maximized = card.classList.toggle('edit-maximized');
+                btn.setAttribute('aria-pressed', maximized ? 'true' : 'false');
+                btn.setAttribute('title', maximized ? 'Restore editor' : 'Maximize editor');
+                btn.setAttribute('aria-label', maximized ? 'Restore editor' : 'Maximize editor');
+                var icon = btn.querySelector('.edit-tpl-maximize-icon');
+                if (icon) icon.textContent = maximized ? 'close_fullscreen' : 'open_in_full';
+            });
+        })();
+
         function _setTemplateLoading(loading) {
             _templateLoading = !!loading;
             var cards = document.querySelectorAll('.template-card');

@@ -1894,6 +1894,45 @@ select.hw-tier-select option {
     align-items: center;
     gap: 0.5rem;
 }
+.edit-tpl-maximize-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--on-surface-variant);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.edit-tpl-maximize-btn:hover {
+    background: var(--surface-container-low);
+    color: var(--primary);
+}
+.edit-tpl-maximize-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+/* Maximized editor: hide preview panel, let edit section take its space.
+   Output format stays visible at bottom. */
+.preview-card.edit-maximized #template-preview-panel,
+.preview-card.edit-maximized .preview-panel-header {
+    display: none;
+}
+.preview-card.edit-maximized .edit-tpl-section {
+    flex: 1 1 auto;
+    border-top: none;
+    min-height: 0;
+}
+.preview-card.edit-maximized .edit-tpl-textarea {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+}
 .edit-tpl-label {
     font-size: 11px;
     font-weight: 700;

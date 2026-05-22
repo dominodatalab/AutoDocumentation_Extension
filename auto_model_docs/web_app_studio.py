@@ -440,6 +440,15 @@ async def index(req: Request):
                                 Div(
                                     Div(
                                         Span("Edit template", cls="edit-tpl-label"),
+                                        Button(
+                                            Span("open_in_full", cls="material-symbols-outlined edit-tpl-maximize-icon"),
+                                            type="button",
+                                            id="edit-tpl-maximize-btn",
+                                            cls="edit-tpl-maximize-btn",
+                                            title="Maximize editor",
+                                            aria_label="Maximize editor",
+                                            aria_pressed="false",
+                                        ),
                                         cls="edit-tpl-header",
                                     ),
                                     Textarea(
@@ -449,6 +458,7 @@ async def index(req: Request):
                                         spellcheck="false",
                                     ),
                                     cls="edit-tpl-section",
+                                    id="edit-tpl-section",
                                 ),
                                 Div(
                                     Span("Output format", cls="output-fmt-label"),
