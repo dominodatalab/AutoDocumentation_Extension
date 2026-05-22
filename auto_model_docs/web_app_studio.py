@@ -425,6 +425,13 @@ async def index(req: Request):
                                         Span("Preview", cls="preview-panel-tag"),
                                         style="display:flex;align-items:center;gap:0.5rem;",
                                     ),
+                                    Button(
+                                        Span("history", cls="material-symbols-outlined"),
+                                        "History",
+                                        type="button",
+                                        id="landing-history-btn",
+                                        cls="history-drawer-btn",
+                                    ),
                                     cls="preview-panel-header",
                                 ),
                                 Div(

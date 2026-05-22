@@ -262,6 +262,8 @@ MAIN_DOM_JS = r"""
             if (closeBtn) closeBtn.addEventListener('click', closeHistoryDrawer);
             var overlay = document.getElementById('history-drawer-overlay');
             if (overlay) overlay.addEventListener('click', closeHistoryDrawer);
+            var landingBtn = document.getElementById('landing-history-btn');
+            if (landingBtn) landingBtn.addEventListener('click', openHistoryDrawer);
         })();
 
         // ── Advanced options modal ─────────────────────────────────────
