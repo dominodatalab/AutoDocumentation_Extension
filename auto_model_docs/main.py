@@ -290,8 +290,9 @@ def main(
         if filtered_models:
             model_names = [name.strip() for name in filtered_models.split(",") if name.strip()]
 
+        console.print(f"---------------- RUN ID BLAH BLAH BLAH = {os.environ.get('DOMINO_RUN_ID', '(not set)')}")
         # Load document spec
-        console.print(f"\n[bold blue]Loading specification:[/] {spec}")
+        console.print(f"\n[bold blue]Loading specification BLAH:[/] {spec}")
         doc_spec = DocumentSpec.from_yaml(spec)
         console.print(f"[bold]Document:[/] {doc_spec.title}")
         console.print(f"[bold]Sections:[/] {len(doc_spec.sections)}")
