@@ -499,29 +499,78 @@ MAIN_DOM_JS = r"""
             }
         }
         function resetTemplateYamlPreview() {
-            var el = document.getElementById('template-preview-empty');
-            if (el && _previewEmptyDefaultHtml !== null) {
-                el.innerHTML = _previewEmptyDefaultHtml;
+            var panel = document.getElementById('template-preview-panel');
+            if (panel && _previewEmptyDefaultHtml !== null) {
+                panel.innerHTML = '<div class="preview-empty-state" id="template-preview-empty">'
+                    + _previewEmptyDefaultHtml + '</div>';
             }
+            var editArea = document.getElementById('edit-template-yaml');
+            if (editArea) editArea.value = '';
         }
+        function _renderTemplatePreviewSections(tpl, sections, perModelSections) {
+            var panel = document.getElementById('template-preview-panel');
+            if (!panel) return;
+            sections = sections || [];
+            var perModelSet = {};
+            (perModelSections || []).forEach(function(s) { perModelSet[s] = true; });
+            var sectionsHtml = '';
+            for (var i = 0; i < sections.length; i++) {
+                var badge = perModelSet[sections[i]]
+                    ? '<span class="preview-section-badge">once per model</span>' : '';
+                sectionsHtml += '<div class="preview-section-item">'
+                    + '<span class="preview-section-num">' + (i + 1) + '</span>'
+                    + '<span class="preview-section-name">' + _esc(sections[i]) + '</span>'
+                    + badge
+                    + '</div>';
+            }
+            panel.innerHTML = '<div class="preview-header">'
+                + '<div class="preview-title">' + _esc(tpl.name || '') + '</div>'
+                + '<div class="preview-description">' + _esc(tpl.description || '') + '</div>'
+                + '</div>'
+                + '<div class="preview-sections">' + sectionsHtml + '</div>';
+        }
+
         function loadYamlTemplatePreview(tpl) {
-            var el = document.getElementById('template-preview-empty');
-            if (!el) return;
-            el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
-                + '<span class="preview-empty-text">Loading\u2026</span>';
+            var panel = document.getElementById('template-preview-panel');
+            if (!panel) return;
+            panel.innerHTML = '<div class="preview-empty-state" id="template-preview-empty">'
+                + '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
+                + '<span class="preview-empty-text">Loading\u2026</span>'
+                + '</div>';
             var pid = resolvedProjectId();
-            var url = _adUrl('api/built-in-template')
-                + '?template_file=' + encodeURIComponent(tpl.template_file || '');
-            if (pid) url += '&projectId=' + encodeURIComponent(pid);
-            fetch(url)
+            var tplFile = encodeURIComponent(tpl.template_file || '');
+            var pidQs = pid ? ('&projectId=' + encodeURIComponent(pid)) : '';
+            var yamlUrl = _adUrl('api/built-in-template') + '?template_file=' + tplFile + pidQs;
+            var sectionsUrl = _adUrl('api/built-in-template-sections') + '?template_file=' + tplFile + pidQs;
+
+            // YAML text -> edit template textarea
+            fetch(yamlUrl)
                 .then(_checkResp)
                 .then(function(r) { return r.text(); })
                 .then(function(text) {
-                    el.innerHTML = '<pre class="preview-yaml-pre">' + _esc(text) + '</pre>';
+                    var editArea = document.getElementById('edit-template-yaml');
+                    if (editArea) editArea.value = text || '';
                 })
                 .catch(function() {
-                    el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">error</span>'
-                        + '<span class="preview-empty-text">Could not load template</span>';
+                    var editArea = document.getElementById('edit-template-yaml');
+                    if (editArea) editArea.value = '';
+                });
+
+            // Sections -> preview panel
+            fetch(sectionsUrl)
+                .then(_checkResp)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    _renderTemplatePreviewSections(tpl, (data && data.sections) || [], (data && data.per_model_sections) || []);
+                })
+                .catch(function() {
+                    var p = document.getElementById('template-preview-panel');
+                    if (p) {
+                        p.innerHTML = '<div class="preview-empty-state" id="template-preview-empty">'
+                            + '<span class="material-symbols-outlined preview-empty-icon">error</span>'
+                            + '<span class="preview-empty-text">Could not load template</span>'
+                            + '</div>';
+                    }
                 });
         }
 

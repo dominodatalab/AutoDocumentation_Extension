@@ -437,6 +437,40 @@ async def index(req: Request):
                                     id="template-preview-panel",
                                     cls="template-preview-panel",
                                 ),
+                                Div(
+                                    Div(
+                                        Span("Edit template", cls="edit-tpl-label"),
+                                        cls="edit-tpl-header",
+                                    ),
+                                    Textarea(
+                                        id="edit-template-yaml",
+                                        cls="edit-tpl-textarea",
+                                        placeholder="Select a template to edit its YAML...",
+                                        spellcheck="false",
+                                    ),
+                                    cls="edit-tpl-section",
+                                ),
+                                Div(
+                                    Span("Output format", cls="output-fmt-label"),
+                                    Div(
+                                        *[
+                                            Label(
+                                                Input(type="radio", name="output_format", value=val,
+                                                      checked=default, cls="output-fmt-radio"),
+                                                Span(icon, cls="material-symbols-outlined output-fmt-icon"),
+                                                Span(label_text, cls="output-fmt-text"),
+                                                cls="output-fmt-option",
+                                            )
+                                            for val, label_text, icon, default in [
+                                                ("docx", "Word (.docx)",   "description",              True),
+                                                ("md",   "Markdown (.md)", "markdown",                 False),
+                                                ("tex",  "LaTeX (.tex)",   "integration_instructions", False),
+                                            ]
+                                        ],
+                                        cls="output-fmt-group",
+                                    ),
+                                    cls="output-fmt-section",
+                                ),
                                 cls="preview-card",
                             ),
                             cls="wizard-col-config",
