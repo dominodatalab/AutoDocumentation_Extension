@@ -212,6 +212,8 @@ MAIN_DOM_JS = r"""
         var _builtinTemplates = [];      // loaded from API
         var _selectedTemplateUid = null;  // currently selected template unique id (full dataset file path)
         var _customSpecSelected = false;  // user selected a file from dataset browser
+        var _templateLoading = false;     // true while a template's YAML/sections are being fetched
+        var _editTplOriginalYaml = '';    // YAML content last loaded for the selected template; used for dirty-state
 
         // Dataset state (shared between spec browser and form submission)
         var _specDatasets = [];
@@ -228,17 +230,6 @@ MAIN_DOM_JS = r"""
         function _applyLayoutMode() {
             var historyDetails = document.getElementById('history-details');
             if (historyDetails) historyDetails.style.display = 'none';
-            renderHistoryBtn();
-        }
-
-        function renderHistoryBtn() {
-            var slot = document.getElementById('history-btn-slot');
-            if (!slot) return;
-            slot.innerHTML = '<button type="button" id="history-drawer-open-btn" class="history-drawer-btn">'
-                + '<span class="material-symbols-outlined">history</span>History'
-                + '</button>';
-            var btn = slot.querySelector('#history-drawer-open-btn');
-            if (btn) btn.addEventListener('click', openHistoryDrawer);
         }
 
         // ── Drawer open/close ──────────────────────────────────────────
@@ -247,6 +238,7 @@ MAIN_DOM_JS = r"""
             var drawer = document.getElementById('history-drawer');
             if (overlay) overlay.classList.add('open');
             if (drawer) drawer.classList.add('open');
+            fetchJobHistory();
         }
 
         function closeHistoryDrawer() {
@@ -259,8 +251,10 @@ MAIN_DOM_JS = r"""
         (function() {
             var closeBtn = document.getElementById('history-drawer-close');
             if (closeBtn) closeBtn.addEventListener('click', closeHistoryDrawer);
-            var overlay = document.getElementById('history-drawer-overlay');
-            if (overlay) overlay.addEventListener('click', closeHistoryDrawer);
+            var drawerOverlay = document.getElementById('history-drawer-overlay');
+            if (drawerOverlay) drawerOverlay.addEventListener('click', closeHistoryDrawer);
+            var landingBtn = document.getElementById('landing-history-btn');
+            if (landingBtn) landingBtn.addEventListener('click', openHistoryDrawer);
         })();
 
         // ── Advanced options modal ─────────────────────────────────────
@@ -499,30 +493,212 @@ MAIN_DOM_JS = r"""
             }
         }
         function resetTemplateYamlPreview() {
-            var el = document.getElementById('template-preview-empty');
-            if (el && _previewEmptyDefaultHtml !== null) {
-                el.innerHTML = _previewEmptyDefaultHtml;
+            var panel = document.getElementById('template-preview-panel');
+            if (panel && _previewEmptyDefaultHtml !== null) {
+                panel.innerHTML = '<div class="preview-empty-state" id="template-preview-empty">'
+                    + _previewEmptyDefaultHtml + '</div>';
             }
+            var editArea = document.getElementById('edit-template-yaml');
+            if (editArea) editArea.value = '';
+            _editTplOriginalYaml = '';
+            var editSection = document.getElementById('edit-tpl-section');
+            if (editSection) editSection.removeAttribute('data-uid');
+            _setEditTplStatus('', '');
+            _updateEditTplButtons();
         }
-        function loadYamlTemplatePreview(tpl) {
-            var el = document.getElementById('template-preview-empty');
+        function _renderTemplatePreviewSections(tpl, sections, perModelSections) {
+            var panel = document.getElementById('template-preview-panel');
+            if (!panel) return;
+            sections = sections || [];
+            var perModelSet = {};
+            (perModelSections || []).forEach(function(s) { perModelSet[s] = true; });
+            var sectionsHtml = '';
+            for (var i = 0; i < sections.length; i++) {
+                var badge = perModelSet[sections[i]]
+                    ? '<span class="preview-section-badge">once per model</span>' : '';
+                sectionsHtml += '<div class="preview-section-item">'
+                    + '<span class="preview-section-num">' + (i + 1) + '</span>'
+                    + '<span class="preview-section-name">' + _esc(sections[i]) + '</span>'
+                    + badge
+                    + '</div>';
+            }
+            panel.innerHTML = '<div class="preview-header">'
+                + '<div class="preview-title">' + _esc(tpl.name || '') + '</div>'
+                + '<div class="preview-description">' + _esc(tpl.description || '') + '</div>'
+                + '</div>'
+                + '<div class="preview-sections">' + sectionsHtml + '</div>';
+        }
+
+        function _setEditTplStatus(text, kind) {
+            var el = document.getElementById('edit-tpl-status');
             if (!el) return;
-            el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">hourglass_empty</span>'
-                + '<span class="preview-empty-text">Loading\u2026</span>';
+            el.textContent = text || '';
+            el.classList.remove('error', 'success');
+            if (kind === 'error' || kind === 'success') el.classList.add(kind);
+        }
+
+        function _editTplFilename() {
+            var sec = document.getElementById('edit-tpl-section');
+            var uid = sec ? (sec.getAttribute('data-uid') || '') : '';
+            if (!uid) return '';
+            return uid.replace(/\\/g, '/').split('/').pop();
+        }
+
+        function _updateEditTplButtons() {
+            var saveBtn = document.getElementById('edit-tpl-save-btn');
+            var revertBtn = document.getElementById('edit-tpl-revert-btn');
+            var editArea = document.getElementById('edit-template-yaml');
+            var hasTemplate = !!_editTplFilename();
+            var current = editArea ? (editArea.value || '') : '';
+            var hasContent = current.length > 0;
+            var dirty = current !== _editTplOriginalYaml;
+            if (saveBtn) saveBtn.disabled = !(hasTemplate && hasContent && dirty);
+            if (revertBtn) revertBtn.disabled = !(hasTemplate && dirty);
+        }
+
+        function _editTplSave() {
+            var saveBtn = document.getElementById('edit-tpl-save-btn');
+            var editArea = document.getElementById('edit-template-yaml');
+            if (!editArea) return;
+            var filename = _editTplFilename();
+            if (!filename) return;
+            var content = editArea.value || '';
+            if (!content) return;
+
+            _setEditTplStatus('Saving...', '');
+            if (saveBtn) saveBtn.disabled = true;
+            var revertBtn = document.getElementById('edit-tpl-revert-btn');
+            if (revertBtn) revertBtn.disabled = true;
+
             var pid = resolvedProjectId();
-            var url = _adUrl('api/built-in-template')
-                + '?template_file=' + encodeURIComponent(tpl.template_file || '');
-            if (pid) url += '&projectId=' + encodeURIComponent(pid);
-            fetch(url)
+            var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+            var blob = new Blob([content], { type: 'text/yaml' });
+            var fd = new FormData();
+            fd.append('file', blob, filename);
+            fd.append('filename', filename);
+
+            fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+                .then(function(res) {
+                    if (!res.ok || (res.body && res.body.error)) {
+                        var msg = (res.body && res.body.error) || 'Save failed';
+                        _setEditTplStatus(msg, 'error');
+                        _updateEditTplButtons();
+                        return;
+                    }
+                    _editTplOriginalYaml = content;
+                    _setEditTplStatus('Saved.', 'success');
+                    _updateEditTplButtons();
+                    // Refresh gallery so card metadata stays in sync if it changed.
+                    try { loadBuiltinTemplates(); } catch (e) {}
+                })
+                .catch(function(err) {
+                    _setEditTplStatus('Save failed: ' + (err && err.message ? err.message : String(err)), 'error');
+                    _updateEditTplButtons();
+                });
+        }
+
+        function _editTplRevert() {
+            var editArea = document.getElementById('edit-template-yaml');
+            if (!editArea) return;
+            editArea.value = _editTplOriginalYaml || '';
+            _setEditTplStatus('', '');
+            _updateEditTplButtons();
+        }
+
+        function wireEditTemplateActions() {
+            var saveBtn = document.getElementById('edit-tpl-save-btn');
+            var revertBtn = document.getElementById('edit-tpl-revert-btn');
+            var editArea = document.getElementById('edit-template-yaml');
+            if (saveBtn) saveBtn.addEventListener('click', _editTplSave);
+            if (revertBtn) revertBtn.addEventListener('click', _editTplRevert);
+            if (editArea) editArea.addEventListener('input', _updateEditTplButtons);
+            _updateEditTplButtons();
+        }
+        wireEditTemplateActions();
+
+        function wireEditTemplateMaximize() {
+            var btn = document.getElementById('edit-tpl-maximize-btn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                var card = btn.closest('.preview-card');
+                if (!card) return;
+                var maximized = card.classList.toggle('edit-maximized');
+                btn.setAttribute('aria-pressed', maximized ? 'true' : 'false');
+                btn.setAttribute('title', maximized ? 'Restore editor' : 'Maximize editor');
+                btn.setAttribute('aria-label', maximized ? 'Restore editor' : 'Maximize editor');
+                var icon = btn.querySelector('.edit-tpl-maximize-icon');
+                if (icon) icon.textContent = maximized ? 'close_fullscreen' : 'open_in_full';
+            });
+        }
+        wireEditTemplateMaximize();
+
+        function _setTemplateLoading(loading) {
+            _templateLoading = !!loading;
+            var cards = document.querySelectorAll('.template-card');
+            for (var i = 0; i < cards.length; i++) {
+                cards[i].classList.toggle('loading', !!loading);
+            }
+            var overlay = document.getElementById('preview-card-loading');
+            if (overlay) overlay.classList.toggle('active', !!loading);
+        }
+
+        function loadYamlTemplatePreview(tpl) {
+            var panel = document.getElementById('template-preview-panel');
+            if (!panel) return;
+            _setTemplateLoading(true);
+            // Stamp the template uid as data-uid on the editor section + preview empty,
+            // mirroring the data-uid attribute on .template-card. Source of truth.
+            var uid = tpl.uid || tpl.template_path || tpl.template_file || '';
+            var editSection = document.getElementById('edit-tpl-section');
+            if (editSection) editSection.setAttribute('data-uid', uid);
+            var emptyEl = document.getElementById('template-preview-empty');
+            if (emptyEl) emptyEl.setAttribute('data-uid', uid);
+
+            var pid = resolvedProjectId();
+            var tplFile = encodeURIComponent(tpl.template_file || '');
+            var pidQs = pid ? ('&projectId=' + encodeURIComponent(pid)) : '';
+            var yamlUrl = _adUrl('api/built-in-template') + '?template_file=' + tplFile + pidQs;
+            var sectionsUrl = _adUrl('api/built-in-template-sections') + '?template_file=' + tplFile + pidQs;
+
+            var yamlPromise = fetch(yamlUrl)
                 .then(_checkResp)
                 .then(function(r) { return r.text(); })
                 .then(function(text) {
-                    el.innerHTML = '<pre class="preview-yaml-pre">' + _esc(text) + '</pre>';
+                    var editArea = document.getElementById('edit-template-yaml');
+                    if (editArea) {
+                        editArea.value = text || '';
+                        _editTplOriginalYaml = text || '';
+                    }
+                    _updateEditTplButtons();
+                    _setEditTplStatus('', '');
                 })
                 .catch(function() {
-                    el.innerHTML = '<span class="material-symbols-outlined preview-empty-icon">error</span>'
-                        + '<span class="preview-empty-text">Could not load template</span>';
+                    var editArea = document.getElementById('edit-template-yaml');
+                    if (editArea) editArea.value = '';
+                    _editTplOriginalYaml = '';
+                    _updateEditTplButtons();
                 });
+
+            var sectionsPromise = fetch(sectionsUrl)
+                .then(_checkResp)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    _renderTemplatePreviewSections(tpl, (data && data.sections) || [], (data && data.per_model_sections) || []);
+                })
+                .catch(function() {
+                    var p = document.getElementById('template-preview-panel');
+                    if (p) {
+                        p.innerHTML = '<div class="preview-empty-state" id="template-preview-empty">'
+                            + '<span class="material-symbols-outlined preview-empty-icon">error</span>'
+                            + '<span class="preview-empty-text">Could not load template</span>'
+                            + '</div>';
+                    }
+                });
+
+            Promise.all([yamlPromise, sectionsPromise]).then(function() {
+                _setTemplateLoading(false);
+            });
         }
 
         function renderTemplateGallery(templates) {
@@ -572,6 +748,7 @@ MAIN_DOM_JS = r"""
         }
 
         function selectTemplate(uid) {
+            if (_templateLoading) return;
             _selectedTemplateUid = uid;
             _customSpecSelected = false;
 
@@ -938,37 +1115,55 @@ MAIN_DOM_JS = r"""
 
         var _ACTIVE_STATUSES = { queued: true, submitted: true, pending: true, running: true };
 
+        function _formatSubmitted(iso) {
+            if (!iso) return '\u2014';
+            // Backend serializes as UTC without a 'Z' suffix; Date treats no-suffix ISO as local.
+            // Append 'Z' so it's parsed as UTC, then format in the browser's local TZ.
+            var raw = String(iso);
+            var d = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw + 'Z');
+            if (isNaN(d.getTime())) return iso;
+            var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+            return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + pad(d.getFullYear() % 100)
+                + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+
         function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
-            var branch = j.branch || '\u2014';
-            var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '\u2014';
+            var submitted = _formatSubmitted(j.submitted_at);
+            var runId = j.domino_run_id || '';
             var jobCell = j.job_url
                 ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener">View \u2192</a></td>'
                 : '<td>\u2014</td>';
             var isActive = _ACTIVE_STATUSES[status];
             var docCell;
-            if (status === 'succeeded' && j.dataset_url) {
-                docCell = '<td><a href="' + _esc(j.dataset_url) + '" target="_blank" rel="noopener">Open \u2192</a></td>';
+            if (status === 'succeeded' && j.document_url) {
+                var openLink = '<a href="' + _esc(j.document_url) + '" target="_blank" rel="noopener">Open \u2192</a>';
+                var previewLink = runId
+                    ? '<a href="#" class="history-preview-link" data-run-id="' + _esc(runId) + '">Preview</a>'
+                    : '';
+                docCell = '<td class="history-documents-cell">' + openLink + (previewLink ? '<br>' + previewLink : '') + '</td>';
             } else if (isActive) {
                 docCell = '<td class="history-pending-cell">Pending\u2026</td>';
             } else {
                 docCell = '<td>\u2014</td>';
             }
-            return '<tr>'
-                + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
+            var rowAttrs = runId ? ' data-run-id="' + _esc(runId) + '"' : '';
+            return '<tr' + rowAttrs + '>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
-                + '<td>' + _esc(submitted) + '</td>'
-                + jobCell
+                + '<td class="history-submitted-cell">' + _esc(submitted) + '</td>'
                 + docCell
+                + jobCell
                 + '</tr>';
         }
 
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Branch</th><th>Status</th><th>Submitted</th><th>Job</th><th>AutoDoc file</th></tr></thead>';
+            var header = '<thead><tr><th>Status</th><th>Submitted</th><th>Documents</th><th>Job</th></tr></thead>';
             var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
+
+        var _lastResultsPanelKey = null;
 
         function renderResultsPanel(jobs) {
             var panel = document.getElementById('results-panel');
@@ -977,6 +1172,13 @@ MAIN_DOM_JS = r"""
 
             var latestJob = jobs[0];
             var status = latestJob.status || 'queued';
+
+            var panelKey = (latestJob.job_id || latestJob.domino_run_id || '') + '|' + status;
+            var isTerminal = (status === 'succeeded' || status === 'failed' || status === 'cancelled');
+            if (isTerminal && panelKey === _lastResultsPanelKey) {
+                return;
+            }
+            _lastResultsPanelKey = panelKey;
 
             var html = '<div class="results-job-card">';
 
@@ -1001,8 +1203,8 @@ MAIN_DOM_JS = r"""
             // State-specific content
             if (status === 'succeeded') {
                 html += '<div class="results-success">';
-                var autodocLink = latestJob.dataset_url
-                    ? '<a href="' + _esc(latestJob.dataset_url) + '" target="_blank" rel="noopener" class="success-open-btn">'
+                var autodocLink = latestJob.document_url
+                    ? '<a href="' + _esc(latestJob.document_url) + '" target="_blank" rel="noopener" class="success-open-btn">'
                         + '<span class="material-symbols-outlined" style="font-size:15px">folder_open</span>Open AutoDoc file</a>'
                     : '';
                 html += '<div class="results-success-banner">'
@@ -1012,6 +1214,16 @@ MAIN_DOM_JS = r"""
                     + '</div>'
                     + (autodocLink ? autodocLink : '')
                     + '</div>';
+                if (latestJob.domino_run_id) {
+                    html += '<div class="doc-preview-wrap" id="doc-preview-wrap">'
+                        + '<div class="doc-preview-loading" id="doc-preview-loading">'
+                        + '<span class="material-symbols-outlined doc-preview-spin">autorenew</span>'
+                        + '<span>Loading preview…</span>'
+                        + '</div>'
+                        + '<div class="doc-preview-content" id="doc-preview-content" style="display:none"></div>'
+                        + '<div class="doc-preview-error" id="doc-preview-error" style="display:none"></div>'
+                        + '</div>';
+                }
                 html += '</div>';
             } else if (status === 'failed') {
                 html += '<div class="results-failed">';
@@ -1062,6 +1274,10 @@ MAIN_DOM_JS = r"""
             html += '</div>'; // end results-job-card
             panel.innerHTML = html;
 
+            if (status === 'succeeded' && latestJob.domino_run_id) {
+                _loadDocPreview(latestJob.domino_run_id);
+            }
+
             // Start or stop the progress label cycle
             if (status === 'running' || status === 'submitted' || status === 'pending') {
                 _startProgressCycle();
@@ -1101,6 +1317,16 @@ MAIN_DOM_JS = r"""
 
                 var refreshBtn = el.querySelector('[id^="job-history-refresh-btn"]');
                 if (refreshBtn) refreshBtn.addEventListener('click', function(e) { e.preventDefault(); fetchJobHistory(); });
+                el.querySelectorAll('.history-preview-link').forEach(function(link) {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var runId = link.getAttribute('data-run-id');
+                        if (runId) {
+                            closeHistoryDrawer();
+                            _openLandingDocPreview(runId);
+                        }
+                    });
+                });
                 var cancelBtn = el.querySelector('[id^="job-cancel-queued-btn"]');
                 if (cancelBtn) {
                     cancelBtn.addEventListener('click', function(e) {
@@ -1134,6 +1360,86 @@ MAIN_DOM_JS = r"""
         var _progressInterval = null;
         var _progressStageList = ['Scanning code\u2026', 'Planning sections\u2026', 'Generating content\u2026', 'Finalizing document\u2026'];
         var _progressStageIdx = 0;
+        var _docPreviewRunId = null;
+        var _docPreviewTimer = null;
+
+        function _loadDocPreview(runId) {
+            _docPreviewRunId = runId;
+            if (_docPreviewTimer) { clearTimeout(_docPreviewTimer); _docPreviewTimer = null; }
+            var pid = resolvedProjectId();
+            fetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var wrap = document.getElementById('doc-preview-wrap');
+                    if (!wrap || _docPreviewRunId !== runId) return;
+                    var loading = document.getElementById('doc-preview-loading');
+                    var content = document.getElementById('doc-preview-content');
+                    var err = document.getElementById('doc-preview-error');
+                    if (data.ready && data.html) {
+                        if (loading) loading.style.display = 'none';
+                        if (content) { content.innerHTML = data.html; content.style.display = ''; }
+                    } else if (!data.ready) {
+                        _docPreviewTimer = setTimeout(function() { _loadDocPreview(runId); }, 3000);
+                    } else {
+                        if (loading) loading.style.display = 'none';
+                        if (err) { err.textContent = data.error || 'Preview unavailable.'; err.style.display = ''; }
+                    }
+                })
+                .catch(function() {
+                    _docPreviewTimer = setTimeout(function() { _loadDocPreview(runId); }, 5000);
+                });
+        }
+
+        var _landingPreviewOriginalHtml = null;
+
+        function _openLandingDocPreview(runId) {
+            var card = document.querySelector('.preview-card');
+            if (!card) return;
+            _landingPreviewOriginalHtml = card.innerHTML;
+            card.innerHTML = '<div class="landing-doc-preview">'
+                + '<div class="landing-doc-preview-header">'
+                + '<span class="landing-doc-preview-title">Document Preview</span>'
+                + '<button type="button" class="landing-doc-preview-close" id="landing-doc-preview-close">'
+                + '<span class="material-symbols-outlined">close</span></button>'
+                + '</div>'
+                + '<div class="landing-doc-preview-body" id="landing-doc-preview-body">'
+                + '<div class="doc-preview-loading">'
+                + '<span class="material-symbols-outlined doc-preview-spin">autorenew</span>'
+                + '<span>Loading preview…</span>'
+                + '</div>'
+                + '</div>'
+                + '</div>';
+            var closeBtn = document.getElementById('landing-doc-preview-close');
+            if (closeBtn) closeBtn.addEventListener('click', _closeLandingDocPreview);
+            var pid = resolvedProjectId();
+            fetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var body = document.getElementById('landing-doc-preview-body');
+                    if (!body) return;
+                    if (data.ready && data.html) {
+                        body.innerHTML = '<div class="doc-preview-content">' + data.html + '</div>';
+                    } else {
+                        body.innerHTML = '<div class="doc-preview-error">'
+                            + (data.error || (data.ready === false ? 'Document not ready yet.' : 'Preview unavailable.'))
+                            + '</div>';
+                    }
+                })
+                .catch(function() {
+                    var body = document.getElementById('landing-doc-preview-body');
+                    if (body) body.innerHTML = '<div class="doc-preview-error">Failed to load preview.</div>';
+                });
+        }
+
+        function _closeLandingDocPreview() {
+            var card = document.querySelector('.preview-card');
+            if (!card || _landingPreviewOriginalHtml === null) return;
+            card.innerHTML = _landingPreviewOriginalHtml;
+            _landingPreviewOriginalHtml = null;
+            wireEditTemplateActions();
+            wireEditTemplateMaximize();
+        }
+
         function _startProgressCycle() {
             _progressStageIdx = 0;
             clearInterval(_progressInterval);

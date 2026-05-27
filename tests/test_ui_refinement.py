@@ -21,13 +21,11 @@ def mock_domino_modules():
     """Patch Domino imports so web_app loads without the SDK."""
     mock_client = MagicMock()
     mock_store = MagicMock()
-    mock_spec_store = MagicMock()
     with patch.dict("sys.modules", {
         "domino_client": mock_client,
         "domino_job_store": mock_store,
-        "spec_store": mock_spec_store,
     }):
-        yield mock_client, mock_store, mock_spec_store
+        yield mock_client, mock_store
 
 
 # ---------------------------------------------------------------------------

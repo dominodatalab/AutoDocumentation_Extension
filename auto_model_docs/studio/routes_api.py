@@ -186,12 +186,20 @@ def register_api_routes(rt):
     rt("/api/dataset-files")(api_dataset_files)
 
     async def api_upload_spec_to_dataset(req: Request):
-        """Upload a spec file to a dataset."""
+        """Save a spec template YAML into the project's autodoc dataset.
+
+        Accepts multipart form with:
+          - file: the YAML content (filename used as the destination basename)
+          - filename (optional): override basename
+        Destination dataset is the project's autodoc dataset (resolved via
+        ensure_dataset). Destination path is spec_template_sync.dataset_rel_path(basename).
+        """
+        import spec_template_sync
+
         pid = _resolve_request_project_id(req)
         require_project_write(pid)
         form = await req.form()
         file_upload = form.get("file")
-        dataset_id = form.get("datasetId", "")
 
         if not file_upload or not hasattr(file_upload, "read"):
             return Response(
@@ -199,72 +207,86 @@ def register_api_routes(rt):
                 status_code=400,
                 media_type="application/json",
             )
-        if not dataset_id:
-            return Response(
-                json.dumps({"error": "datasetId is required"}),
-                status_code=400,
-                media_type="application/json",
-            )
 
-        raw_filename = getattr(file_upload, "filename", "spec.yaml")
-        filename = raw_filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] or "spec.yaml"
+        raw_filename = (
+            str(form.get("filename", "") or "").strip()
+            or getattr(file_upload, "filename", "")
+            or "spec.yaml"
+        )
+        basename = raw_filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] or "spec.yaml"
         content = await file_upload.read()
 
-        try:
-            rel_dir = sanitize_dataset_subpath(
-                str(form.get("relativeDir", "") or "").strip()
-            )
-        except ValueError as exc:
+        fn_low = basename.lower()
+        if not fn_low.endswith((".yaml", ".yml")):
             return Response(
-                json.dumps({"error": str(exc)}),
+                json.dumps({"error": "filename must end in .yaml or .yml"}),
                 status_code=400,
                 media_type="application/json",
             )
 
-        fn_low = filename.lower()
-        if fn_low.endswith((".yaml", ".yml")):
-            try:
-                text = content.decode("utf-8")
-            except UnicodeDecodeError:
-                return Response(
-                    json.dumps({
-                        "error": "Spec file must be valid UTF-8",
-                        "valid": False,
-                        "errors": ["File is not valid UTF-8"],
-                    }),
-                    status_code=400,
-                    media_type="application/json",
-                )
-            val_errors = DocumentSpec.validate_spec(text)
-            if val_errors:
-                return Response(
-                    json.dumps({
-                        "error": "Spec validation failed",
-                        "valid": False,
-                        "errors": val_errors,
-                    }),
-                    status_code=400,
-                    media_type="application/json",
-                )
-
         try:
-            import spec_template_sync
-
-            upload_path = f"{rel_dir}/{filename}" if rel_dir else filename
-            DatasetManager.write_file(dataset_id, upload_path, content)
-            if fn_low.endswith((".yaml", ".yml")):
-                try:
-                    dest_snap = domino_datasets.get_rw_snapshot_id(dataset_id)
-                    spec_template_sync.sync_builtins_to_autodoc_dataset(
-                        dataset_id,
-                        dest_snapshot_id=dest_snap,
-                    )
-                except Exception:
-                    logger.warning("sync built-ins after spec upload failed", exc_info=True)
+            content.decode("utf-8")
+        except UnicodeDecodeError:
             return Response(
                 json.dumps({
-                    "path": upload_path,
-                    "fileName": filename,
+                    "error": "Spec file must be valid UTF-8",
+                    "valid": False,
+                    "errors": ["File is not valid UTF-8"],
+                }),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        try:
+            spec_template_sync.validate_gallery_template_yaml(content)
+        except ValueError as exc:
+            msg = str(exc)
+            missing_prefix = "Missing required field:"
+            if missing_prefix in msg:
+                fields = []
+                for part in msg.split(";"):
+                    part = part.strip()
+                    if part.startswith(missing_prefix):
+                        fields.append(part[len(missing_prefix):].strip())
+                if fields:
+                    return Response(
+                        json.dumps({
+                            "error": "Missing required field: " + ", ".join(fields),
+                            "kind": "missing_fields",
+                            "valid": False,
+                        }),
+                        status_code=400,
+                        media_type="application/json",
+                    )
+            return Response(
+                json.dumps({"error": msg, "valid": False}),
+                status_code=400,
+                media_type="application/json",
+            )
+
+        try:
+            ensured = domino_datasets.ensure_dataset(pid)
+            dataset_id = str(ensured.get("id") or "").strip()
+            if not dataset_id:
+                return Response(
+                    json.dumps({"error": "autodoc dataset has no id"}),
+                    status_code=500,
+                    media_type="application/json",
+                )
+            dest_rel = spec_template_sync.dataset_rel_path(basename)
+            DatasetManager.write_file(dataset_id, dest_rel, content)
+            try:
+                dest_snap = domino_datasets.get_rw_snapshot_id(dataset_id)
+                spec_template_sync.sync_builtins_to_autodoc_dataset(
+                    dataset_id,
+                    dest_snapshot_id=dest_snap,
+                )
+            except Exception:
+                logger.warning("sync built-ins after spec upload failed", exc_info=True)
+            return Response(
+                json.dumps({
+                    "path": dest_rel,
+                    "fileName": basename,
                     "valid": True,
                 }),
                 media_type="application/json",
@@ -485,6 +507,68 @@ def register_api_routes(rt):
 
     rt("/api/built-in-template")(api_built_in_template_yaml)
 
+    async def api_built_in_template_sections(req: Request):
+        import spec_template_sync
+        import yaml
+
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response("projectId required", status_code=400)
+        raw_param = (req.query_params.get("template_file") or "").strip()
+        base = raw_param.replace("\\", "/").split("/")[-1]
+        if not base:
+            return Response("template_file required", status_code=400)
+        if not base.lower().endswith((".yaml", ".yml")):
+            return Response("Not found", status_code=404)
+        try:
+            snap = _active_autodoc_snapshot_for_spec_templates(pid)
+            rel = spec_template_sync.dataset_rel_path(base)
+            raw = DatasetManager.read_file(snap, rel)
+        except Exception as exc:
+            logger.warning("built-in-template-sections read failed: %s", exc, exc_info=True)
+            return Response(str(exc), status_code=500)
+        text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
+        try:
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError:
+            parsed = None
+        sections: list[str] = []
+        per_model: list[str] = []
+
+        def _split_per_model(name: str) -> str:
+            if ":" in name:
+                head, _, tail = name.rpartition(":")
+                if tail.strip().lower() == "per_model":
+                    cleaned = head.strip()
+                    if cleaned:
+                        per_model.append(cleaned)
+                        return cleaned
+            return name
+
+        if isinstance(parsed, dict):
+            raw_sections = parsed.get("sections")
+            if isinstance(raw_sections, list):
+                for entry in raw_sections:
+                    if isinstance(entry, str):
+                        sections.append(_split_per_model(entry))
+                    elif isinstance(entry, dict):
+                        title = entry.get("title") or entry.get("name") or entry.get("id")
+                        if isinstance(title, str) and title.strip():
+                            sections.append(_split_per_model(title.strip()))
+            elif isinstance(raw_sections, dict):
+                for key in raw_sections.keys():
+                    if isinstance(key, str):
+                        sections.append(_split_per_model(key))
+            raw_per_model = parsed.get("per_model_sections")
+            if isinstance(raw_per_model, list):
+                for entry in raw_per_model:
+                    if isinstance(entry, str) and entry not in per_model:
+                        per_model.append(entry)
+        payload = {"sections": sections, "per_model_sections": per_model}
+        return Response(json.dumps(payload), media_type="application/json")
+
+    rt("/api/built-in-template-sections")(api_built_in_template_sections)
+
     async def api_sync_spec_templates(req: Request):
         import spec_template_sync
 
@@ -509,3 +593,30 @@ def register_api_routes(rt):
             )
 
     rt("/api/sync-spec-templates")(api_sync_spec_templates)
+
+    async def api_preview_doc(req: Request):
+        pid = _resolve_request_project_id(req)
+        if not pid:
+            return Response(json.dumps({"error": "Project ID is required."}), status_code=400, media_type="application/json")
+        run_id = (req.query_params.get("runId") or "").strip()
+        if not run_id:
+            return Response(json.dumps({"error": "runId is required."}), status_code=400, media_type="application/json")
+        try:
+            require_project_write(pid)
+            short = run_id[:8]
+            artifact_path = f"docs/{short}/model_docs.docx"
+            docx_bytes = domino_client.download_artifact_at_head(pid, artifact_path)
+            if docx_bytes is None:
+                return Response(json.dumps({"error": "Document not found.", "ready": False}), status_code=404, media_type="application/json")
+            import mammoth
+            import io
+            result = mammoth.convert_to_html(io.BytesIO(docx_bytes))
+            return Response(
+                json.dumps({"html": result.value, "ready": True}),
+                media_type="application/json",
+            )
+        except Exception as exc:
+            logger.warning("api_preview_doc failed", exc_info=True)
+            return Response(json.dumps({"error": str(exc)}), status_code=500, media_type="application/json")
+
+    rt("/api/preview-doc")(api_preview_doc)

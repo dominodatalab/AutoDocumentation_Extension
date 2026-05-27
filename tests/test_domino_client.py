@@ -399,34 +399,33 @@ class TestBuildJobCommandStr:
 
     def test_includes_notebook_flag_when_enabled(self):
         req = _make_job_request(notebook=True)
-        cmd = _bld_cmd(req, "/mnt/spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml")
         assert "--notebook" in cmd
 
     def test_omits_notebook_when_disabled(self):
         req = _make_job_request(notebook=False)
-        cmd = _bld_cmd(req, "/mnt/spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/mnt/spec.yaml")
         assert "--notebook" not in cmd
 
     def test_includes_spec_path(self):
         """Spec path should appear in the command."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, "/mnt/data/specs/my_spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/mnt/data/specs/my_spec.yaml")
         assert "--spec" in cmd
         assert "/mnt/data/specs/my_spec.yaml" in cmd
 
     def test_no_artifacts_copy(self):
         """Command should not include any cp or artifacts step."""
         req = _make_job_request()
-        cmd = _bld_cmd(req, "/spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/spec.yaml")
         assert "cp" not in cmd
-        assert "artifacts" not in cmd
 
     def test_includes_provider_base_url_when_set(self):
         req = _make_job_request(
             provider="openai",
             provider_base_url="https://api.example/v1",
         )
-        cmd = _bld_cmd(req, "/spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/spec.yaml")
         assert "--provider-base-url" in cmd
         assert "https://api.example/v1" in cmd
 
@@ -435,7 +434,7 @@ class TestBuildJobCommandStr:
             provider="anthropic",
             provider_base_url="https://api.anthropic.example",
         )
-        cmd = _bld_cmd(req, "/spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/spec.yaml")
         assert "--provider-base-url" in cmd
         assert "https://api.anthropic.example" in cmd
 
@@ -443,6 +442,6 @@ class TestBuildJobCommandStr:
         from default_consts import DEFAULT_LANGUAGE
 
         req = _make_job_request()
-        cmd = _bld_cmd(req, "/spec.yaml", _ds)
+        cmd = _bld_cmd(req, "/spec.yaml")
         parts = shlex.split(cmd)
         assert parts[parts.index("--language") + 1] == DEFAULT_LANGUAGE

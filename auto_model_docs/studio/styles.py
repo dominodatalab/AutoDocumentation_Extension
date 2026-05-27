@@ -1860,6 +1860,216 @@ select.hw-tier-select option {
     border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow: var(--shadow-sm);
+    position: relative;
+}
+.preview-card-loading {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: var(--outline);
+    text-align: center;
+    background: color-mix(in srgb, var(--surface-container-lowest) 88%, transparent);
+    backdrop-filter: blur(2px);
+    z-index: 2;
+}
+.preview-card-loading.active {
+    display: flex;
+}
+
+/* Edit template section */
+.edit-tpl-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--outline-variant);
+}
+.edit-tpl-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.edit-tpl-maximize-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--on-surface-variant);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.edit-tpl-maximize-btn:hover {
+    background: var(--surface-container-low);
+    color: var(--primary);
+}
+.edit-tpl-maximize-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+/* Maximized editor: hide preview panel, let edit section take its space.
+   Output format stays visible at bottom. */
+.preview-card.edit-maximized #template-preview-panel,
+.preview-card.edit-maximized .preview-panel-header {
+    display: none;
+}
+.preview-card.edit-maximized .edit-tpl-section {
+    flex: 1 1 auto;
+    border-top: none;
+    min-height: 0;
+}
+.preview-card.edit-maximized .edit-tpl-textarea {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+}
+.edit-tpl-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--on-surface-variant);
+}
+.edit-tpl-textarea {
+    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--on-surface);
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    resize: vertical;
+    min-height: 180px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+    outline: none;
+}
+.edit-tpl-textarea:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.12);
+}
+.edit-tpl-textarea::placeholder {
+    color: var(--muted);
+    font-style: italic;
+}
+.edit-tpl-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.edit-tpl-action-btn {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0.35rem 0.85rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+    color: var(--on-surface);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.edit-tpl-action-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.edit-tpl-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.edit-tpl-save-btn:not(:disabled) {
+    background: var(--primary);
+    color: var(--on-primary);
+    border-color: var(--primary);
+}
+.edit-tpl-save-btn:not(:disabled):hover {
+    background: color-mix(in srgb, var(--primary) 88%, black);
+    color: var(--on-primary);
+}
+.edit-tpl-status {
+    font-size: 12px;
+    line-height: 1.4;
+    min-height: 1.2em;
+}
+.edit-tpl-status.error {
+    color: var(--error);
+}
+.edit-tpl-status.success {
+    color: var(--success);
+}
+
+/* Output format section */
+.output-fmt-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--outline-variant);
+}
+.output-fmt-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--on-surface-variant);
+}
+.output-fmt-group {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.output-fmt-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border: 1.5px solid var(--outline-variant);
+    border-radius: 999px;
+    background: var(--surface-container-lowest);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+    white-space: nowrap;
+}
+.output-fmt-option:has(.output-fmt-radio:checked) {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+}
+.output-fmt-option:hover {
+    border-color: var(--primary);
+    background: var(--primary-fixed);
+}
+.output-fmt-radio {
+    accent-color: var(--primary);
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.output-fmt-icon {
+    font-size: 13px;
+    color: var(--on-surface-variant);
+}
+.output-fmt-option:has(.output-fmt-radio:checked) .output-fmt-icon {
+    color: var(--primary);
+}
+.output-fmt-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--on-surface);
 }
 .wizard-col-title {
     font-size: 20px;
@@ -2299,6 +2509,14 @@ select.hw-tier-select option {
     background: var(--primary-fixed);
     box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.18);
 }
+.template-card.loading {
+    pointer-events: none;
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.template-card.loading.selected {
+    opacity: 0.85;
+}
 .template-card-header {
     display: flex;
     align-items: center;
@@ -2381,8 +2599,8 @@ select.hw-tier-select option {
 
 /* ── Template preview panel ──────────────────────────────────────── */
 .template-preview-panel {
-    flex: 1;
-    min-height: 0;
+    flex: 1 1 0;
+    min-height: 200px;
     overflow-y: auto;
     padding: 1.25rem;
     display: flex;
@@ -2705,6 +2923,79 @@ select.hw-tier-select option {
     font-family: var(--font-body);
 }
 
+/* ── Doc preview ────────────────────────────────────────────────── */
+.doc-preview-wrap {
+    margin-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 12px;
+    max-height: 480px;
+    overflow-y: auto;
+}
+.doc-preview-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    padding: 8px 0;
+}
+.doc-preview-spin {
+    animation: spin 1.2s linear infinite;
+    font-size: 18px;
+}
+.doc-preview-content {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+.doc-preview-content h1, .doc-preview-content h2, .doc-preview-content h3 {
+    margin: 12px 0 6px;
+    font-weight: 600;
+}
+.doc-preview-content p { margin: 0 0 8px; }
+.doc-preview-error {
+    color: var(--status-failed);
+    font-size: 12px;
+    padding: 6px 0;
+}
+
+/* ── Landing page doc preview overlay ───────────────────────────── */
+.landing-doc-preview {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+.landing-doc-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.landing-doc-preview-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+.landing-doc-preview-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+}
+.landing-doc-preview-close:hover { color: var(--text-primary); }
+.landing-doc-preview-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+}
+
 /* ── Results: failed state ───────────────────────────────────────── */
 .results-failed {
     display: flex;
@@ -2930,7 +3221,7 @@ select.hw-tier-select option {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(520px, 92vw);
+    width: min(640px, 92vw);
     background: var(--surface-container-lowest);
     border-left: 1px solid var(--outline-variant);
     box-shadow: var(--shadow-lg, -4px 0 24px rgba(0,0,0,0.12));
@@ -3037,6 +3328,11 @@ select.hw-tier-select option {
     color: var(--on-surface-variant);
     font-style: italic;
     font-size: 12px;
+}
+
+.history-submitted-cell {
+    white-space: nowrap;
+    width: 1%;
 }
 
 /* ── Doc preview ──────────────────────────────────────────────────── */

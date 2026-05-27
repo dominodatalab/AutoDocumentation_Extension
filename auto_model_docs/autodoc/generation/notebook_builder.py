@@ -67,17 +67,13 @@ class NotebookBuilder:
 
     def __init__(
         self,
-        output_dir: str = "docs",
+        output_dir: str = "/mnt/artifacts",
         dependencies: List[str] | None = None,
-        notebook_path: str | None = None,
-        dataset_mount_path: str = "",
     ):
         self.output_dir = output_dir
         self.dependencies = (
             dependencies if dependencies is not None else self.DEFAULT_DEPENDENCIES.copy()
         )
-        self.notebook_path = notebook_path
-        self.dataset_mount_path = dataset_mount_path
 
     def _sanitize_for_notebook(self, text: str) -> str:
         """Remove emojis and problematic unicode from text.
@@ -139,15 +135,17 @@ class NotebookBuilder:
         self,
         spec: DocumentSpec,
         results: List[SectionResult],
+        output_path: str,
     ) -> str:
         """Build a Jupyter notebook from generated content.
 
         Args:
             spec: Document specification.
             results: List of generated section results.
+            output_path: Path relative to output_dir where the notebook will be written.
 
         Returns:
-            Path to the generated notebook.
+            Path to the generated notebook (same as output_path).
 
         Raises:
             BuilderError: If notebook building fails.
@@ -189,15 +187,13 @@ class NotebookBuilder:
 
             # Add export section
             nb.cells.append(self._create_export_instructions_cell())
-            nb.cells.append(self._create_export_cell())
+            nb.cells.append(self._create_export_cell(output_path))
 
             # Execute all cells except the export cell to generate outputs
             nb = self._execute_notebook(nb)
 
             # Save notebook with outputs
-            output_path = self._save_notebook(nb)
-
-            return output_path
+            return self._save_notebook(nb, output_path)
 
         except Exception as e:
             raise BuilderError(f"Notebook building failed: {e}") from e
@@ -905,21 +901,21 @@ After making your edits above, run the cell below to export this notebook to a W
 4. Find your Word document in the output directory"""
         return new_markdown_cell(source=content)
 
-    def _create_export_cell(self) -> nbformat.NotebookNode:
+    def _create_export_cell(self, notebook_output_path: str) -> nbformat.NotebookNode:
         """Create the export code cell with embedded paths.
 
-        Paths are dataset-relative strings (e.g. "docs"). The export cell
-        embeds them so the notebook can find its outputs when run interactively.
+        The export cell embeds the notebook path and the docx output path
+        so the notebook can re-export itself when run interactively.
         """
         # Get absolute path to auto_model_docs directory (where autodoc package lives)
         auto_model_docs_dir = Path(__file__).parent.parent.parent.resolve()
-        output_dir = self.output_dir  # dataset-relative string
+        artifacts_root = self.output_dir  # e.g. "/mnt/artifacts"
 
-        # Determine the notebook path
-        if self.notebook_path:
-            notebook_path_str = str(self.notebook_path)
+        # Docx output sits next to the notebook with .docx extension
+        if notebook_output_path.endswith(".ipynb"):
+            docx_output_path = notebook_output_path[:-len(".ipynb")] + ".docx"
         else:
-            notebook_path_str = f"{output_dir}/model_docs_notebook.ipynb"
+            docx_output_path = notebook_output_path + ".docx"
 
         code = f'''# Export to Word Document
 import sys
@@ -928,31 +924,27 @@ sys.path.insert(0, "{auto_model_docs_dir}")  # Embedded at generation time
 from autodoc.generation.notebook_exporter import NotebookExporter
 from pathlib import Path
 
-output_dir = Path("{output_dir}")  # Embedded at generation time
-notebook_path = Path("{notebook_path_str}")  # Embedded at generation time
+artifacts_root = "{artifacts_root}"  # Embedded at generation time
+notebook_path = Path("{notebook_output_path}")  # Embedded at generation time
+docx_output_path = "{docx_output_path}"  # Embedded at generation time
 
-exporter = NotebookExporter(output_dir=output_dir, dataset_mount_path="{self.dataset_mount_path}")
+exporter = NotebookExporter(output_dir=artifacts_root)
 output_path = exporter.export_to_word(
     notebook_path=notebook_path,
+    output_path=docx_output_path,
     title=DOCUMENT_TITLE,
     authors=DOCUMENT_AUTHORS,
 )
 print(f"Exported to: {{output_path}}")'''
         return new_code_cell(source=code)
 
-    def _save_notebook(self, nb: nbformat.NotebookNode) -> str:
+    def _save_notebook(self, nb: nbformat.NotebookNode, output_path: str) -> str:
         import io
-        import local_data_manager
-        from artifact_layout import get_layout
 
-        if self.notebook_path:
-            filename = str(self.notebook_path).rsplit("/", 1)[-1]
-        else:
-            filename = "model_docs_notebook.ipynb"
-
-        dataset_path = f"{get_layout().docs_dir}/{filename}"
+        full_path = Path(self.output_dir) / output_path
 
         buffer = io.StringIO()
         nbformat.write(nb, buffer)
-        local_data_manager.write_file(self.dataset_mount_path, dataset_path, buffer.getvalue().encode("utf-8"))
-        return dataset_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(buffer.getvalue().encode("utf-8"))
+        return output_path

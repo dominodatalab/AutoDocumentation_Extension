@@ -2,7 +2,7 @@
 
 Tests the full request -> route handler -> response path with:
 - Real HTTP via httpx AsyncClient + Starlette app
-- Monkeypatched DatasetManager (in-memory) for spec_store and other dataset I/O
+- Monkeypatched DatasetManager (in-memory) for dataset I/O
 - Real auth_context ContextVar propagation through middleware
 - Mocked Domino API client (no live API calls)
 
@@ -57,11 +57,10 @@ def _load_module(name: str, filename: str) -> ModuleType:
 def _build_test_app(tmp_path: Path, monkeypatch):
     """Construct a Starlette app wired with real route handlers.
 
-    Uses in-memory DatasetManager mock for spec_store (and paths that read specs),
+    Uses in-memory DatasetManager mock for dataset I/O,
     mocked domino_client, and real auth_context propagation.
     """
     import domino_job_store as store
-    import spec_store
     import auth_context
     import dataset_manager
     import artifact_layout
@@ -188,7 +187,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_state = ModuleType("studio.state")
     mock_state.domino_client = mock_client
     mock_state.domino_job_store = store
-    mock_state.spec_store = spec_store
     mock_state.domino_datasets = mock_datasets
     mock_state.auth_context = auth_context
     mock_state._max_jobs = lambda: 2
@@ -240,7 +238,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
         dataset_id: Optional[str] = None
-        dataset_url: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -405,7 +402,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     return {
         "app": app,
         "store": store,
-        "spec_store": spec_store,
         "domino_client": mock_client,
         "domino_datasets": mock_datasets,
         "auth_context": auth_context,
@@ -524,7 +520,7 @@ class TestApiRoutesIntegration:
 class TestSpecUploadIntegration:
 
     def test_upload_invalid_yaml_returns_400(self, client, integration_env, monkeypatch):
-        integration_env["doc_spec"].validate_spec.return_value = ["bad spec"]
+        # YAML missing required gallery fields (slug, card_title, card_description, sections).
         mock_write = MagicMock()
         monkeypatch.setattr(
             "dataset_manager.DatasetManager.write_file",
@@ -533,13 +529,118 @@ class TestSpecUploadIntegration:
         resp = client.post(
             "/api/upload-spec-to-dataset?projectId=proj-integration",
             files={"file": ("spec.yaml", b"foo: bar\n", "application/x-yaml")},
-            data={"datasetId": "ds-integration", "relativeDir": ""},
         )
         assert resp.status_code == 400
         body = resp.json()
         assert body.get("valid") is False
-        assert "bad spec" in body.get("errors", [])
+        assert "Missing required field" in body.get("error", "")
         mock_write.assert_not_called()
+
+    def test_upload_valid_yaml_returns_200(self, client, integration_env, monkeypatch):
+        valid_yaml = (
+            b"slug: my-tpl\ncard_title: My Template\n"
+            b"card_description: Desc\nsections:\n  - name: Overview\n"
+        )
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        import spec_template_sync as _sts
+        monkeypatch.setattr(_sts, "sync_builtins_to_autodoc_dataset", MagicMock())
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("mytemplate.yaml", valid_yaml, "application/x-yaml")},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("valid") is True
+        assert body.get("fileName") == "mytemplate.yaml"
+        mock_write.assert_called_once()
+        call_args = mock_write.call_args
+        assert call_args[0][0] == "ds-1"
+        assert call_args[0][1] == "spec-templates/mytemplate.yaml"
+        assert call_args[0][2] == valid_yaml
+
+    def test_upload_unparseable_yaml_returns_400(self, client, integration_env, monkeypatch):
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("bad.yaml", b": : invalid :\n", "application/x-yaml")},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("valid") is False
+        mock_write.assert_not_called()
+
+    def test_upload_empty_sections_returns_400(self, client, integration_env, monkeypatch):
+        mock_write = MagicMock()
+        monkeypatch.setattr(
+            "dataset_manager.DatasetManager.write_file",
+            staticmethod(mock_write),
+        )
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={
+                "file": (
+                    "nosec.yaml",
+                    b"slug: s\ncard_title: T\ncard_description: D\nsections: []\n",
+                    "application/x-yaml",
+                )
+            },
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("valid") is False
+        assert "sections" in body.get("error", "").lower()
+        mock_write.assert_not_called()
+
+    def test_upload_non_yaml_extension_returns_400(self, client, integration_env):
+        resp = client.post(
+            "/api/upload-spec-to-dataset?projectId=proj-integration",
+            files={"file": ("spec.txt", b"slug: s\n", "text/plain")},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "yaml" in body.get("error", "").lower()
+
+
+# ===========================================================================
+# /api/preview-doc integration tests
+# ===========================================================================
+
+class TestPreviewDocIntegration:
+
+    def test_missing_run_id_returns_400(self, client):
+        resp = client.get("/api/preview-doc?projectId=proj-integration")
+        assert resp.status_code == 400
+        assert "runId" in resp.json().get("error", "")
+
+    def test_file_not_found_returns_404(self, client, integration_env):
+        integration_env["domino_client"].download_artifact_at_head.return_value = None
+        resp = client.get("/api/preview-doc?projectId=proj-integration&runId=run-abc")
+        assert resp.status_code == 404
+        assert resp.json().get("ready") is False
+
+    def test_returns_html_when_file_exists(self, client, integration_env):
+        import io as _io
+        from docx import Document as _Document
+        buf = _io.BytesIO()
+        doc = _Document()
+        doc.add_paragraph("Integration preview test")
+        doc.save(buf)
+        docx_bytes = buf.getvalue()
+
+        integration_env["domino_client"].download_artifact_at_head.return_value = docx_bytes
+        resp = client.get("/api/preview-doc?projectId=proj-integration&runId=6a171f74cf54ab6ccad5e5f9")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("ready") is True
+        assert "Integration preview test" in body.get("html", "")
 
 
 # ===========================================================================
@@ -551,10 +652,9 @@ class TestJobRoutesIntegration:
     def test_job_history_empty(self, client):
         resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
-        assert resp.json().get("jobs") == []
-        assert resp.json().get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
-        )
+        body = resp.json()
+        assert body.get("jobs") == []
+        assert "document_url" not in body
 
     def test_submit_job_calls_domino(self, client, integration_env):
         """POST /run submits to Domino and records the run for the current user."""
@@ -575,8 +675,6 @@ class TestJobRoutesIntegration:
         )
         assert resp.status_code == 200
         assert resp.json().get("ok") is True
-        integration_env["domino_datasets"].get_existing_autodoc_dataset.assert_called_with("proj-integration")
-        integration_env["domino_datasets"].resolve_dataset_mount_path.assert_called_once()
         mock_client.submit_job.assert_called()
         jobs = store.get_user_jobs("proj-integration", "integration_user", limit=50)
         assert len(jobs) == 1
@@ -588,9 +686,7 @@ class TestJobRoutesIntegration:
         body = resp.json()
         assert body.get("ok") is True
         assert body.get("jobs") == []
-        assert body.get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
-        )
+        assert "document_url" not in body
 
 
 # ===========================================================================
@@ -621,7 +717,6 @@ class TestAuthorizationIntegration:
         )
         assert resp.status_code == 403
         assert resp.json().get("error")
-        integration_env["domino_datasets"].get_existing_autodoc_dataset.assert_called_with("proj-integration")
 
     def test_job_history_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_list")
@@ -707,7 +802,6 @@ class TestCrossCuttingIntegration:
         client.post("/cancel-queued-jobs?projectId=proj-integration")
         resp = client.get("/job-history?projectId=proj-integration")
         assert resp.status_code == 200
-        assert resp.json().get("jobs") == []
-        assert resp.json().get("document_url") == (
-            "https://domino.test/u/test-owner/test-project/data/rw/upload/autodoc/ds-autodoc-uuid/docs"
-        )
+        body = resp.json()
+        assert body.get("jobs") == []
+        assert "document_url" not in body

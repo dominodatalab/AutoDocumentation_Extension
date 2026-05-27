@@ -67,7 +67,6 @@ import auth_context  # type: ignore  # normal import; must not be re-loaded via 
 
 domino_client = _import_sibling("domino_client")
 domino_job_store = _import_sibling("domino_job_store")
-spec_store = _import_sibling("spec_store")
 domino_datasets = _import_sibling("domino_datasets")
 
 
@@ -113,7 +112,6 @@ class DominoJobRecord:
     domino_status: Optional[str] = None
     job_url: Optional[str] = None
     dataset_id: Optional[str] = None
-    dataset_url: Optional[str] = None
     spec_path: Optional[str] = None
     submitted_at: Optional[str] = None
     completed_at: Optional[str] = None

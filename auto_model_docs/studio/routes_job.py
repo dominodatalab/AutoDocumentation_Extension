@@ -13,11 +13,8 @@ from authorization import (
     require_domino_job_start,
 )
 
-from dataset_manager import AUTODOC_DATASET_NAME
-
 from .state import (
     _resolve_request_project_id,
-    domino_datasets,
     domino_job_store,
     logger,
 )
@@ -53,31 +50,18 @@ def _jobs_payload(project_id: str, owner_id: str) -> list:
     if not owner_id or not project_id:
         return []
     try:
-        return domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
+        jobs = domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
     except RuntimeError:
         return []
-
-
-def _job_history_document_url(project_id: str) -> str:
-    try:
-        rows = domino_datasets.list_datasets(project_id)
-    except Exception:
-        logger.debug("list_datasets for document_url failed", exc_info=True)
-        return ""
-    if not isinstance(rows, list):
-        return ""
-    ds_id = ""
-    for d in rows or []:
-        if str(d.get("name") or "") != AUTODOC_DATASET_NAME:
-            continue
-        ds_id = str(d.get("id") or "").strip()
-        break
-    if not ds_id:
-        return ""
     import domino_client
-
-    u = domino_client.build_autodoc_dataset_data_page_url(project_id, ds_id)
-    return u or ""
+    for j in jobs:
+        run_id = str(j.get("domino_run_id") or "").strip()
+        j["document_url"] = (
+            domino_client.build_autodoc_artifacts_run_url(project_id, run_id) or ""
+            if run_id else ""
+        )
+        j.pop("dataset_url", None)
+    return jobs
 
 
 def register_job_routes(rt):
@@ -93,30 +77,11 @@ def register_job_routes(rt):
         if not job_request.project_id:
             return _json({"error": "Project ID is required."}, 400)
         try:
-            dataset_row = domino_datasets.get_existing_autodoc_dataset(job_request.project_id)
-            if not dataset_row:
-                return _json(
-                    {
-                        "error": "Autodoc dataset not found for this project.",
-                    },
-                    404,
-                )
-            dataset_mount_path = domino_datasets.resolve_dataset_mount_path(dataset_row)
-        except Exception:
-            logger.exception(
-                "get_existing_autodoc_dataset or mount path resolution failed for project %s",
-                job_request.project_id,
-            )
-            return _json(
-                {"error": "Could not resolve the documentation dataset. Try again later."},
-                500,
-            )
-        try:
             require_domino_job_start(job_request.project_id)
         except HTTPException as e:
             return _json({"error": _error_body(e)}, e.status_code)
         try:
-            run_id, job_url = await _submit_domino_job(job_request, dataset_mount_path)
+            run_id, job_url = await _submit_domino_job(job_request)
         except ValueError as e:
             return _json({"error": str(e)}, 400)
         except Exception:
@@ -136,27 +101,27 @@ def register_job_routes(rt):
     async def job_history(req: Request):
         owner_id = _current_owner_id()
         if not owner_id:
-            return _json({"jobs": [], "document_url": ""})
+            return _json({"jobs": []})
         project_id = _resolve_request_project_id(req)
         if not project_id:
-            return _json({"jobs": [], "document_url": ""})
+            return _json({"jobs": []})
         require_domino_job_list(project_id)
         jobs = _jobs_payload(project_id, owner_id)
-        return _json({"jobs": jobs, "document_url": _job_history_document_url(project_id)})
+        return _json({"jobs": jobs})
 
     rt("/job-history")(job_history)
 
     async def cancel_queued_jobs(req: Request):
         owner_id = _current_owner_id()
         if not owner_id:
-            return _json({"ok": False, "error": "not authenticated", "jobs": [], "document_url": ""})
+            return _json({"ok": False, "error": "not authenticated", "jobs": []})
         project_id = _resolve_request_project_id(req)
         if not project_id:
-            return _json({"ok": False, "error": "missing project_id", "jobs": [], "document_url": ""})
+            return _json({"ok": False, "error": "missing project_id", "jobs": []})
         require_domino_job_list(project_id)
         domino_job_store.cancel_queued_jobs(project_id, owner_id)
         jobs = _jobs_payload(project_id, owner_id)
-        return _json({"ok": True, "jobs": jobs, "document_url": _job_history_document_url(project_id)})
+        return _json({"ok": True, "jobs": jobs})
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
 

@@ -661,3 +661,53 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
         return None
     seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
     return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
+
+
+def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
+    """Return the Domino UI URL for the artifacts browser at docs/<run_id[:8]>."""
+    if not _ui_host:
+        return None
+    rid = (run_id or "").strip()
+    if not rid:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+    short = rid[:8]
+    return f"{_ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"
+
+
+def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | None:
+    """Download an artifact file from a project's DFS at HEAD.
+
+    Uses GET /u/<owner>/<project>/raw/latest/<path>?inline=false, which redirects
+    to the commit-pinned URL and returns the file bytes. Returns None on 404.
+    """
+    import httpx
+
+    api_host = _resolve_api_host()
+    if not api_host:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+
+    path = (artifact_path or "").lstrip("/")
+    url = f"{api_host}/u/{powner}/{pname}/raw/latest/{path}"
+    headers = _get_auth_headers()
+    try:
+        with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
+            resp = client.get(url, params={"inline": "false"}, headers=headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.content
+    except Exception:
+        logger.exception("download_artifact_at_head failed for %s %s", project_id, artifact_path)
+        return None

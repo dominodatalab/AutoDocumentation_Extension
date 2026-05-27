@@ -17,8 +17,6 @@ import pytest
 from docx import Document as DocxDocument
 
 import artifact_layout
-import local_data_manager
-import dataset_manager
 
 from autodoc.core.models import (
     ArtifactContext,
@@ -31,51 +29,39 @@ from autodoc.orchestrator import Orchestrator
 from autodoc.scanning.sanitizer import ContentSanitizer
 
 
-class _MemStore:
-    """Thin in-memory facade used by tests that need to assert on file state."""
+class _ArtifactsRoot:
+    """Filesystem-backed facade for tests; rooted at a tmp directory."""
 
-    def __init__(self) -> None:
-        self._files: Dict[str, bytes] = {}
-        self.dataset_mount_path: str = ""
+    def __init__(self, root: Path) -> None:
+        self.root = root
 
-    def write_file(self, path: str, content: bytes) -> None:
-        self._files[path] = content
+    @property
+    def _files(self) -> Dict[str, bytes]:
+        result: Dict[str, bytes] = {}
+        for p in self.root.rglob("*"):
+            if p.is_file():
+                result[str(p.relative_to(self.root))] = p.read_bytes()
+        return result
 
     def read_file(self, path: str) -> bytes:
-        if path not in self._files:
+        full = self.root / path
+        if not full.exists():
             raise FileNotFoundError(path)
-        return self._files[path]
+        return full.read_bytes()
+
+    def write_file(self, path: str, content: bytes) -> None:
+        full = self.root / path
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_bytes(content)
 
     def file_exists(self, path: str) -> bool:
-        return path in self._files
+        return (self.root / path).exists()
 
 
 @pytest.fixture
-def mem_store(monkeypatch) -> _MemStore:
+def mem_store(tmp_path) -> _ArtifactsRoot:
     artifact_layout.init_layout()
-    store = _MemStore()
-
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "write_file",
-        staticmethod(lambda dsid, path, content: store.write_file(path, content)),
-    )
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "read_file",
-        staticmethod(lambda snap, path: store.read_file(path)),
-    )
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "file_exists",
-        staticmethod(lambda snap, path: store.file_exists(path)),
-    )
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "list_files",
-        staticmethod(lambda snap, path="": []),
-    )
-
-    import tempfile
-    _tmp = tempfile.mkdtemp()
-    store.dataset_mount_path = _tmp
-    yield store
+    yield _ArtifactsRoot(tmp_path)
     artifact_layout.reset_layout()
 
 
@@ -253,7 +239,7 @@ def simple_spec() -> DocumentSpec:
 
 
 def test_pipeline_smoke_end_to_end(
-    mem_store: _MemStore,
+    mem_store: _ArtifactsRoot,
     empty_artifact_context,
     sample_code_root: Path,
     simple_spec: DocumentSpec,
@@ -264,17 +250,15 @@ def test_pipeline_smoke_end_to_end(
     planning, content generation (narrative), and Word document assembly.
     """
     llm = FakeLLM()
-    mount_path = mem_store.dataset_mount_path
     orch = Orchestrator(
         llm=llm,
         sanitizer=ContentSanitizer(),
         code_root=sample_code_root,
-        output_dir=Path("docs"),
+        output_dir=str(mem_store.root),
         parallel_workers=1,
         planning_workers=1,
         scan_workers=1,
         batch_size=4,
-        dataset_mount_path=mount_path,
     )
 
     output_path = asyncio.new_event_loop().run_until_complete(
@@ -282,11 +266,11 @@ def test_pipeline_smoke_end_to_end(
     )
 
     assert output_path.endswith(".docx")
-    assert local_data_manager.file_exists(mount_path, output_path), (
+    assert mem_store.file_exists(output_path), (
         f"Expected docx at {output_path}"
     )
 
-    doc_bytes = local_data_manager.read_file(mount_path, output_path)
+    doc_bytes = mem_store.read_file(output_path)
     doc = DocxDocument(io.BytesIO(doc_bytes))
     all_text = "\n".join(p.text for p in doc.paragraphs)
 
@@ -301,7 +285,7 @@ def test_pipeline_smoke_end_to_end(
 
 
 def test_notebook_roundtrip(
-    mem_store: _MemStore,
+    mem_store: _ArtifactsRoot,
     empty_artifact_context,
     sample_code_root: Path,
     simple_spec: DocumentSpec,
@@ -324,28 +308,25 @@ def test_notebook_roundtrip(
             llm=llm,
             sanitizer=ContentSanitizer(),
             code_root=sample_code_root,
-            output_dir=Path("docs"),
+            output_dir=str(mem_store.root),
             generate_notebook=True,
             parallel_workers=1,
             planning_workers=1,
             scan_workers=1,
             batch_size=4,
-            dataset_mount_path=mem_store.dataset_mount_path,
         )
         asyncio.new_event_loop().run_until_complete(orch.generate(simple_spec))
 
-    mount = mem_store.dataset_mount_path
-    mount_p = Path(mount)
     notebook_paths = [
-        str(p.relative_to(mount_p))
-        for p in mount_p.rglob("*.ipynb")
+        path for path in mem_store._files.keys()
+        if path.endswith(".ipynb")
     ]
     assert len(notebook_paths) == 1, (
         f"Expected exactly one notebook, found: {notebook_paths}"
     )
     notebook_path = notebook_paths[0]
 
-    nb_bytes = local_data_manager.read_file(mount, notebook_path)
+    nb_bytes = mem_store.read_file(notebook_path)
     nb = nbformat.read(io.StringIO(nb_bytes.decode("utf-8")), as_version=4)
 
     marker = "EDITED_BY_TEST_MARKER_4242"
@@ -371,19 +352,17 @@ def test_notebook_roundtrip(
 
     buf = io.StringIO()
     nbformat.write(nb, buf)
-    local_data_manager.write_file(mount, notebook_path, buf.getvalue().encode("utf-8"))
+    mem_store.write_file(notebook_path, buf.getvalue().encode("utf-8"))
 
-    exporter = NotebookExporter(output_dir=Path("docs"), dataset_mount_path=mount)
-    exporter.export_to_word(Path(notebook_path), title="Test Model Documentation")
+    exporter = NotebookExporter(output_dir=str(mem_store.root))
+    exported_docx = "docs/roundtrip-export/model_docs.docx"
+    exporter.export_to_word(
+        Path(notebook_path),
+        output_path=exported_docx,
+        title="Test Model Documentation",
+    )
 
-    docx_paths = [
-        str(p.relative_to(mount_p))
-        for p in mount_p.rglob("*.docx")
-    ]
-    assert docx_paths, "No docx produced by notebook export"
-    exported_docx = sorted(docx_paths)[-1]
-
-    doc = DocxDocument(io.BytesIO(local_data_manager.read_file(mount, exported_docx)))
+    doc = DocxDocument(io.BytesIO(mem_store.read_file(exported_docx)))
     all_text = "\n".join(p.text for p in doc.paragraphs)
     assert marker in all_text, (
         f"Edit did not survive round-trip. Docx text: {all_text[:500]}"
@@ -409,7 +388,7 @@ _SECRETS = {
 
 
 def test_sanitizer_invariant_no_secrets_in_llm_prompts(
-    mem_store: _MemStore,
+    mem_store: _ArtifactsRoot,
     empty_artifact_context,
     tmp_path: Path,
     simple_spec: DocumentSpec,
@@ -454,12 +433,11 @@ def test_sanitizer_invariant_no_secrets_in_llm_prompts(
         llm=llm,
         sanitizer=ContentSanitizer(),
         code_root=tmp_path,
-        output_dir=Path("docs"),
+        output_dir=str(mem_store.root),
         parallel_workers=1,
         planning_workers=1,
         scan_workers=1,
         batch_size=4,
-        dataset_mount_path=mem_store.dataset_mount_path,
     )
 
     asyncio.new_event_loop().run_until_complete(orch.generate(simple_spec))
@@ -474,3 +452,25 @@ def test_sanitizer_invariant_no_secrets_in_llm_prompts(
                 leaks.append(f"{name} ({secret[:10]}...) leaked in an LLM call")
 
     assert not leaks, "Secrets reached the LLM:\n" + "\n".join(leaks)
+
+
+# ===========================================================================
+# DocumentBuilder._save_document writes to the path the caller specifies
+# ===========================================================================
+
+class TestDocumentBuilderSave:
+
+    def test_save_document_writes_to_caller_specified_path(self, mem_store):
+        from unittest.mock import MagicMock
+        from autodoc.generation.builder import DocumentBuilder
+
+        builder = DocumentBuilder(output_dir=str(mem_store.root))
+        fake_doc = MagicMock()
+        fake_doc.save = lambda buf: buf.write(b"PK\x03\x04")
+
+        output_path = "docs/2026-05-27_12-00-00/my_doc.docx"
+        result = builder._save_document(fake_doc, output_path)
+
+        assert result == output_path
+        assert mem_store.file_exists(output_path)
+        assert mem_store.read_file(output_path) == b"PK\x03\x04"

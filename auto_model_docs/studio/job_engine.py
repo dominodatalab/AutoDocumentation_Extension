@@ -179,21 +179,19 @@ async def _parse_request(req: Request) -> JobRequest:
 # Domino job command building
 # ---------------------------------------------------------------------------
 
-def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") -> list[str]:
+def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
     if not spec_path or not str(spec_path).strip():
         raise ValueError("internal: spec_path is required to build the job command")
-    if not (dataset_path or "").strip():
-        raise ValueError("internal: dataset_path is required to build the job command")
 
     code_root_arg = (req.code_root or "").strip()
 
     command = [
         "python",
-        "/mnt/imported/code/AutoDocumentation_Extension/auto_model_docs/main.py", #TODO: Change this to the correct path
+        "/mnt/imported/code/AutoDocumentation_Extension/auto_model_docs/main.py",
         "--spec",
         spec_path,
-        "--dataset-path",
-        dataset_path.strip(),
+        "--output_dir",
+        "/mnt/artifacts",
         "--code-root",
         code_root_arg,
         "--provider",
@@ -238,9 +236,9 @@ def _build_job_command(req: JobRequest, spec_path: str, dataset_path: str = "") 
     return command
 
 
-def _build_job_command_str(req: JobRequest, spec_path: str, dataset_path: str = "") -> str:
+def _build_job_command_str(req: JobRequest, spec_path: str) -> str:
     import shlex
-    parts = _build_job_command(req, spec_path, dataset_path)
+    parts = _build_job_command(req, spec_path)
     return " ".join(shlex.quote(p) for p in parts)
 
 
@@ -268,20 +266,17 @@ def launch_domino_job_run(
     return run_id, job_url
 
 
-async def _submit_domino_job(req: JobRequest, dataset_mount_path: str) -> tuple[str, str]:
+async def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
     spec_path = (req.spec_path or "").strip()
-    mount = (dataset_mount_path or "").strip()
 
     if not spec_path:
         raise ValueError(
             "A spec file is required. Set the spec path field (select a file in the browser or enter a path) before running."
         )
-    if not mount:
-        raise ValueError("Dataset mount path could not be resolved for this project.")
 
     _validate_job_inputs(req, spec_path)
 
-    command_str = _build_job_command_str(req, spec_path, mount)
+    command_str = _build_job_command_str(req, spec_path)
 
     try:
         run_id, job_url = launch_domino_job_run(

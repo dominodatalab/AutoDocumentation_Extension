@@ -48,7 +48,6 @@ def _db_record_to_dataclass(row: dict) -> DominoJobRecord:
         domino_status=row.get("domino_status"),
         job_url=row.get("job_url"),
         dataset_id=row.get("dataset_id"),
-        dataset_url=row.get("dataset_url"),
         spec_path=row.get("spec_path"),
         submitted_at=row.get("submitted_at"),
         completed_at=row.get("completed_at"),

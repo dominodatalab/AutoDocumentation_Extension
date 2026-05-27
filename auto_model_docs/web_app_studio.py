@@ -425,6 +425,13 @@ async def index(req: Request):
                                         Span("Preview", cls="preview-panel-tag"),
                                         style="display:flex;align-items:center;gap:0.5rem;",
                                     ),
+                                    Button(
+                                        Span("history", cls="material-symbols-outlined"),
+                                        "History",
+                                        type="button",
+                                        id="landing-history-btn",
+                                        cls="history-drawer-btn",
+                                    ),
                                     cls="preview-panel-header",
                                 ),
                                 Div(
@@ -436,6 +443,56 @@ async def index(req: Request):
                                     ),
                                     id="template-preview-panel",
                                     cls="template-preview-panel",
+                                ),
+                                Div(
+                                    Div(
+                                        Span("Edit template", cls="edit-tpl-label"),
+                                        Button(
+                                            Span("open_in_full", cls="material-symbols-outlined edit-tpl-maximize-icon"),
+                                            type="button",
+                                            id="edit-tpl-maximize-btn",
+                                            cls="edit-tpl-maximize-btn",
+                                            title="Maximize editor",
+                                            aria_label="Maximize editor",
+                                            aria_pressed="false",
+                                        ),
+                                        cls="edit-tpl-header",
+                                    ),
+                                    Textarea(
+                                        id="edit-template-yaml",
+                                        cls="edit-tpl-textarea",
+                                        placeholder="Select a template to edit its YAML...",
+                                        spellcheck="false",
+                                    ),
+                                    Div(
+                                        Button(
+                                            "Save",
+                                            type="button",
+                                            id="edit-tpl-save-btn",
+                                            cls="edit-tpl-action-btn edit-tpl-save-btn",
+                                            disabled=True,
+                                        ),
+                                        Button(
+                                            "Revert",
+                                            type="button",
+                                            id="edit-tpl-revert-btn",
+                                            cls="edit-tpl-action-btn edit-tpl-revert-btn",
+                                            disabled=True,
+                                        ),
+                                        cls="edit-tpl-actions",
+                                    ),
+                                    Div(
+                                        id="edit-tpl-status",
+                                        cls="edit-tpl-status",
+                                    ),
+                                    cls="edit-tpl-section",
+                                    id="edit-tpl-section",
+                                ),
+                                Div(
+                                    Span("hourglass_empty", cls="material-symbols-outlined preview-empty-icon"),
+                                    Span("Loading...", cls="preview-empty-text"),
+                                    id="preview-card-loading",
+                                    cls="preview-card-loading",
                                 ),
                                 cls="preview-card",
                             ),
@@ -572,7 +629,6 @@ async def index(req: Request):
                             cls="project-context-chip",
                         ) if (project_display_name or project_id) else None,
                         Div(id="layout-switcher-slot", cls="layout-switcher-slot"),
-                        Div(id="history-btn-slot", cls="history-btn-slot"),
                         cls="results-nav-row",
                     ),
                     Div(

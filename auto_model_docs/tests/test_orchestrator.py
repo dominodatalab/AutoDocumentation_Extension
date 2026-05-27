@@ -9,8 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import artifact_layout
-import local_data_manager
-import dataset_manager
 
 from autodoc.core.models import (
     ArtifactContext,
@@ -33,44 +31,15 @@ from autodoc.orchestrator import Orchestrator
 
 
 # ---------------------------------------------------------------------------
-# In-memory DatasetStore for cache tests
+# In-memory artifact store for cache tests
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _init_layout_and_store(monkeypatch):
-    """Set up ArtifactLayout, dataset ctx, and in-memory DatasetManager patches."""
+def _init_layout():
+    """Set up ArtifactLayout for tests."""
     artifact_layout.init_layout()
-
-    files: dict[str, bytes] = {}
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "write_file",
-        staticmethod(lambda dsid, path, content: files.__setitem__(path, content)),
-    )
-
-    def _read(snap, path):
-        if path not in files:
-            raise FileNotFoundError(path)
-        return files[path]
-
-    monkeypatch.setattr(dataset_manager.DatasetManager, "read_file", staticmethod(_read))
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "file_exists",
-        staticmethod(lambda snap, path: path in files),
-    )
-    monkeypatch.setattr(
-        dataset_manager.DatasetManager, "list_files",
-        staticmethod(lambda snap, path="": []),
-    )
-
-    import tempfile
-    _tmp = tempfile.mkdtemp()
-    _test_mount_path.value = _tmp
     yield
     artifact_layout.reset_layout()
-
-
-class _test_mount_path:
-    value = ""
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +342,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
 
         spec = _make_spec(title="Round Trip")
@@ -402,7 +370,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
 
         png_bytes = b"\x89PNG\r\n\x1a\nfake_chart_data"
@@ -439,7 +406,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         with pytest.raises(FileNotFoundError, match="No cached results"):
             orch._load_results_cache()
@@ -458,7 +424,6 @@ class TestCacheSerialization:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         results = [_make_section_result(errors=["narrative: timeout"])]
         spec = _make_spec()
@@ -489,7 +454,6 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         result = _make_section_result(number="2", name="Details")
         serialized = orch._serialize_section_result(result)
@@ -514,7 +478,6 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         raw_bytes = b"\x00\x01binary_chart_data"
         result = _make_section_result(
@@ -548,7 +511,6 @@ class TestSerializeDeserializeRoundTrip:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
         plan = SectionPlan(
             number="3",
@@ -767,7 +729,6 @@ class TestCacheSpecFields:
             sanitizer=_make_mock_sanitizer(),
             code_root=Path("/tmp"),
             output_dir=tmp_path,
-            dataset_mount_path=_test_mount_path.value,
         )
 
         spec = DocumentSpec(

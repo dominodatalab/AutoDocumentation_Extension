@@ -5,6 +5,7 @@ import time
 import base64
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -64,11 +65,9 @@ class Orchestrator:
         analysis_timeout: float = 90.0,
         scan_retries: int = 2,
         scan_workers: int = 2,
-        notebook_path: Optional[Path] = None,
         experiment_names: Optional[List[str]] = None,
         model_names: Optional[List[str]] = None,
         latest_only: bool = False,
-        dataset_mount_path: str = "",
         language: str = "auto",
     ):
         """Initialize the orchestrator.
@@ -84,8 +83,6 @@ class Orchestrator:
             max_files: Maximum files to scan.
             max_file_size: Maximum file size in characters.
             generate_notebook: Whether to also generate an editable Jupyter notebook.
-            notebook_path: Custom path for the generated notebook. If not provided,
-                uses <output_dir>/model_docs_notebook.ipynb.
             experiment_names: List of experiment names to include.
             model_names: List of specific model names to include.
             latest_only: Only include the latest version of each model.
@@ -94,8 +91,12 @@ class Orchestrator:
         self.code_root = code_root
         self.output_dir = output_dir
         self.generate_notebook = generate_notebook
-        self.notebook_path = notebook_path
-        self.dataset_mount_path = dataset_mount_path
+        import os
+        run_id = os.environ.get("DOMINO_RUN_ID", "")
+        if run_id:
+            self.run_dir = f"docs/{run_id[:8]}"
+        else:
+            self.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
         _lang = str(language or "auto").strip().lower()
         if _lang != "auto":
@@ -144,15 +145,11 @@ class Orchestrator:
         )
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
-        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path)
+        self.builder = DocumentBuilder(output_dir=output_dir)
 
         # Optional notebook builder
         if generate_notebook:
-            self.notebook_builder = NotebookBuilder(
-                output_dir=output_dir,
-                notebook_path=notebook_path,
-                dataset_mount_path=dataset_mount_path,
-            )
+            self.notebook_builder = NotebookBuilder(output_dir=output_dir)
 
         # Semaphore for limiting concurrent LLM calls during content generation
         self.semaphore = asyncio.Semaphore(parallel_workers)
@@ -262,19 +259,16 @@ class Orchestrator:
         if on_progress:
             on_progress("Building", 0.0)
 
-        output_path = await self.builder.build(spec, results)
+        docx_output_path = f"{self.run_dir}/model_docs.docx"
+        output_path = await self.builder.build(spec, results, docx_output_path)
 
         if on_progress:
             on_progress("Building", 0.5)
 
         # Phase 4b: Also build notebook if requested
         if self.generate_notebook:
-            # Sync notebook filename with docx when no custom path was provided
-            if not self.notebook_builder.notebook_path:
-                # output_path is a dataset-relative string (e.g. "docs/model_docs_*.docx")
-                base = output_path.rsplit(".", 1)[0] if "." in output_path else output_path
-                self.notebook_builder.notebook_path = f"{base}.ipynb"
-            await self.notebook_builder.build(spec, results)
+            notebook_output_path = f"{self.run_dir}/model_docs.ipynb"
+            await self.notebook_builder.build(spec, results, notebook_output_path)
 
         # Save results to cache for --notebook-from-cache rebuilds
         self._save_results_cache(spec, results)
@@ -313,12 +307,10 @@ class Orchestrator:
             on_progress("Building notebook", 0.0)
 
         if not hasattr(self, "notebook_builder"):
-            self.notebook_builder = NotebookBuilder(
-                output_dir=self.output_dir,
-                notebook_path=self.notebook_path if hasattr(self, "notebook_path") else None,
-            )
+            self.notebook_builder = NotebookBuilder(output_dir=self.output_dir)
 
-        notebook_path = await self.notebook_builder.build(spec, results)
+        notebook_output_path = f"{self.run_dir}/model_docs.ipynb"
+        notebook_path = await self.notebook_builder.build(spec, results, notebook_output_path)
 
         if on_progress:
             on_progress("Building notebook", 1.0)
@@ -352,7 +344,9 @@ class Orchestrator:
 
         cache_path = self._get_cache_path()
         content = json.dumps(cache_data, indent=2).encode("utf-8")
-        local_data_manager.write_file(self.dataset_mount_path, cache_path, content)
+        full_path = Path(self.output_dir) / cache_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(content)
 
     def _load_results_cache(self) -> tuple[DocumentSpec, List[SectionResult]]:
         """Load generation results from cache via filesystem.
@@ -363,15 +357,14 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If cache file doesn't exist.
         """
-        import local_data_manager
         cache_path = self._get_cache_path()
-        if not local_data_manager.file_exists(self.dataset_mount_path, cache_path):
+        full_path = Path(self.output_dir) / cache_path
+        if not full_path.exists():
             raise FileNotFoundError(
                 f"No cached results found at {cache_path}. "
                 "Run full generation first with --notebook flag."
             )
-
-        content = local_data_manager.read_file(self.dataset_mount_path, cache_path)
+        content = full_path.read_bytes()
         cache_data = json.loads(content)
 
         # Reconstruct DocumentSpec

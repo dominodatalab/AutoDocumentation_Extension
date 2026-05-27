@@ -59,7 +59,6 @@ def _mock_dependencies(monkeypatch):
         domino_status: Optional[str] = None
         job_url: Optional[str] = None
         dataset_id: Optional[str] = None
-        dataset_url: Optional[str] = None
         spec_path: Optional[str] = None
         submitted_at: Optional[str] = None
         completed_at: Optional[str] = None
@@ -190,7 +189,6 @@ class TestDbRecordToDataclass:
             "domino_status": "Executing",
             "job_url": "https://domino/jobs/1",
             "dataset_id": "ds-9",
-            "dataset_url": "https://domino/ds",
             "spec_path": "/spec.yaml",
             "submitted_at": "2026-01-01T00:00:00",
             "completed_at": None,
@@ -202,7 +200,6 @@ class TestDbRecordToDataclass:
         assert record.status == "running"
         assert record.domino_run_id == "run-1"
         assert record.dataset_id == "ds-9"
-        assert record.dataset_url == "https://domino/ds"
 
     def test_handles_missing_optional_fields(self):
         ui = _import_ui()
@@ -212,7 +209,6 @@ class TestDbRecordToDataclass:
         assert record.status == "queued"  # default
         assert record.domino_run_id is None
         assert record.dataset_id is None
-        assert record.dataset_url is None
 
 
 # ---------------------------------------------------------------------------
@@ -436,7 +432,7 @@ class TestSpecFileBrowserUi:
         assert 'id="spec-file-list"' in web
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
-        assert "<th>AutoDoc file</th>" in scripts
+        assert "<th>Documents</th>" in scripts
         assert "renderJobHistory" in scripts
         assert "field-environment_id" not in web
         assert "environment-revision-slot" not in web
@@ -464,4 +460,13 @@ class TestSpecFileBrowserUi:
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
         assert "data-uid" in scripts_src
+
+
+class TestResultsPanelNoRerenderInTerminalState:
+    def test_results_panel_skips_rerender_for_same_terminal_job(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_lastResultsPanelKey" in scripts_src
+        assert "panelKey === _lastResultsPanelKey" in scripts_src
+        assert "isTerminal" in scripts_src
         assert "_selectedTemplateUid" in scripts_src

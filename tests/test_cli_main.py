@@ -43,7 +43,7 @@ def test_requires_domino_project_id(tmp_path):
     env.pop("DOMINO_PROJECT_ID", None)
     r = runner.invoke(
         main,
-        ["--spec", spec, "--code-root", code, "--dataset-path", ds],
+        ["--spec", spec, "--code-root", code, "--output_dir", ds],
         env=env,
     )
     assert r.exit_code == 1
@@ -56,7 +56,7 @@ def test_requires_code_root_option(tmp_path):
     env = {**os.environ, "DOMINO_PROJECT_ID": "p1"}
     r = runner.invoke(
         main,
-        ["--spec", spec, "--dataset-path", ds],
+        ["--spec", spec, "--output_dir", ds],
         env=env,
     )
     assert r.exit_code != 0
