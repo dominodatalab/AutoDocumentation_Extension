@@ -3221,7 +3221,7 @@ select.hw-tier-select option {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(520px, 92vw);
+    width: min(640px, 92vw);
     background: var(--surface-container-lowest);
     border-left: 1px solid var(--outline-variant);
     box-shadow: var(--shadow-lg, -4px 0 24px rgba(0,0,0,0.12));
