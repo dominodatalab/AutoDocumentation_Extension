@@ -37,15 +37,14 @@ class DocumentBuilder:
     title page, table of contents, and content sections.
     """
 
-    def __init__(self, output_dir: str = "docs", dataset_mount_path: str = "", run_id: str = ""):
+    def __init__(self, output_dir: str = "/mnt/artifacts"):
         self.output_dir = output_dir
-        self.dataset_mount_path = dataset_mount_path
-        self.run_id = run_id
 
     async def build(
         self,
         spec: DocumentSpec,
         results: List[SectionResult],
+        output_path: str,
     ) -> str:
         """Build the Word document from generated content.
 
@@ -87,9 +86,7 @@ class DocumentBuilder:
                 self._add_traceability_appendix(doc, section_citations, registry)
 
             # Save document
-            output_path = self._save_document(doc)
-
-            return output_path
+            return self._save_document(doc, output_path)
 
         except Exception as e:
             raise BuilderError(f"Document building failed: {e}") from e
@@ -877,17 +874,14 @@ class DocumentBuilder:
                 else:
                     doc.add_paragraph(cid, style="List Bullet")
 
-    def _save_document(self, doc: Document) -> str:
+    def _save_document(self, doc: Document, output_path: str) -> str:
         import io
-        import local_data_manager
-        from artifact_layout import get_layout
+        from pathlib import Path
 
-        if not self.run_id:
-            raise BuilderError("DOMINO_RUN_ID is not set; cannot generate deterministic filename")
-        filename = f"model_docs_{self.run_id}.docx"
-        dataset_path = f"{get_layout().docs_dir}/{filename}"
+        full_path = Path(self.output_dir) / output_path
 
         buffer = io.BytesIO()
         doc.save(buffer)
-        local_data_manager.write_file(self.dataset_mount_path, dataset_path, buffer.getvalue())
-        return dataset_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(buffer.getvalue())
+        return output_path

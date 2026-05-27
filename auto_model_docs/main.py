@@ -167,10 +167,10 @@ console = Console()
     help="Programming language for scanning, or auto to detect from repository files",
 )
 @click.option(
-    "--dataset-path",
+    "--output_dir",
     type=click.Path(),
-    required=True,
-    help="Mount path of the autodoc dataset (e.g. /domino/datasets/local/autodoc)",
+    default="/mnt/artifacts",
+    help="Root artifacts directory where docs and cache are stored (default: /mnt/artifacts)",
 )
 def main(
     spec: str,
@@ -194,7 +194,7 @@ def main(
     filtered_models: str | None,
     latest_only: bool,
     language: str,
-    dataset_path: str,
+    output_dir: str,
 ) -> None:
     """Generate model documentation from ML codebases.
 
@@ -266,17 +266,12 @@ def main(
 
         from artifact_layout import init_layout, get_layout
         init_layout()
-        output_dir = get_layout().docs_dir
+        artifacts_root = output_dir.rstrip("/") or "/mnt/artifacts"
         code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)
         if notebook_from_cache:
-            _regenerate_notebook_from_cache(
-                output_dir,
-                verbose,
-                Path(notebook_path) if notebook_path else None,
-                dataset_mount_path=dataset_path,
-            )
+            _regenerate_notebook_from_cache(artifacts_root, verbose)
             return
 
         experiment_names = None
@@ -296,7 +291,7 @@ def main(
 
         if verbose:
             console.print(f"[dim]Code root:[/] {code_dir}")
-            console.print(f"[dim]Output dir:[/] {output_dir}")
+            console.print(f"[dim]Artifacts root:[/] {artifacts_root}")
             console.print(f"[dim]Provider:[/] {settings.llm_provider}")
             console.print(f"[dim]Model:[/] {settings.get_model_name()}")
             console.print(f"[dim]Max files:[/] {settings.max_files}")
@@ -345,14 +340,13 @@ def main(
             llm=llm,
             sanitizer=sanitizer,
             code_root=code_dir,
-            output_dir=output_dir,
+            output_dir=artifacts_root,
             mlflow_tracking_uri=settings.mlflow_tracking_uri,
             parallel_workers=settings.parallel_workers,
             planning_workers=settings.planning_workers,
             max_files=settings.max_files,
             max_file_size=settings.max_file_size,
             generate_notebook=notebook or bool(notebook_path),
-            notebook_path=Path(notebook_path) if notebook_path else None,
             exclude_patterns=settings.exclude_patterns,
             max_selected_files=settings.max_selected_files,
             batch_size=settings.batch_size,
@@ -363,9 +357,7 @@ def main(
             experiment_names=experiment_names,
             model_names=model_names,
             latest_only=latest_only,
-            dataset_mount_path=dataset_path,
             language=language,
-            run_id=os.environ.get("DOMINO_RUN_ID", ""),
         )
 
         # Run generation with progress
@@ -392,7 +384,7 @@ def main(
         console.print(f"\n[bold green]Success![/] Document generated:")
         console.print(f"  [cyan]{output_path}[/]")
         if notebook or notebook_path:
-            actual_notebook_path = orchestrator.notebook_builder.notebook_path
+            actual_notebook_path = f"{orchestrator.run_dir}/model_docs.ipynb"
             console.print(f"  [cyan]{actual_notebook_path}[/]")
         console.print()
 
@@ -413,19 +405,18 @@ def main(
 
 
 def _regenerate_notebook_from_cache(
-    output_dir: Path,
+    output_dir: str,
     verbose: bool,
-    notebook_path: Path | None = None,
-    dataset_mount_path: str = "",
 ) -> None:
     from autodoc.generation import NotebookBuilder
+    from datetime import datetime
+    from pathlib import Path as PathLib
 
     console.print("\n[bold blue]Regenerating notebook from cache...[/]\n")
 
     from artifact_layout import get_layout
-    import local_data_manager
     cache_path = get_layout().generation_cache
-    if not local_data_manager.file_exists(dataset_mount_path, cache_path):
+    if not (PathLib(output_dir) / cache_path).exists():
         console.print(
             f"[bold red]Error:[/] No cached results found at {cache_path}",
             style="red",
@@ -437,13 +428,8 @@ def _regenerate_notebook_from_cache(
 
     orchestrator = Orchestrator.__new__(Orchestrator)
     orchestrator.output_dir = output_dir
-    orchestrator.notebook_path = notebook_path
-    orchestrator.dataset_mount_path = dataset_mount_path
-    orchestrator.notebook_builder = NotebookBuilder(
-        output_dir=output_dir,
-        notebook_path=notebook_path,
-        dataset_mount_path=dataset_mount_path,
-    )
+    orchestrator.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    orchestrator.notebook_builder = NotebookBuilder(output_dir=output_dir)
 
     with Progress(
         SpinnerColumn(),

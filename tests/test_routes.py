@@ -802,11 +802,9 @@ class TestJobRoutes:
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
         _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = []
-        ds = _mock_studio_modules["state"].domino_datasets
         store = _mock_studio_modules["state"].domino_job_store
         req = _make_request()
         result = await routes["/run"](req)
-        ds.get_existing_autodoc_dataset.assert_called_once_with("proj-123")
         _mock_studio_modules["job_engine"]._submit_domino_job.assert_called_once()
         store.record_job.assert_called_once_with(
             "test_user",
@@ -841,50 +839,10 @@ class TestJobRoutes:
         store.get_user_jobs.return_value = []
         req = _make_request()
         result = await routes["/run"](req)
-        _mock_studio_modules["state"].domino_datasets.get_existing_autodoc_dataset.assert_called_once()
         store.record_job.assert_not_called()
         assert result.status_code == 500
         body = json.loads(result.body.decode())
         assert "error" in body
-
-    @pytest.mark.asyncio
-    async def test_run_fetch_dataset_failure_returns_500(self, _mock_studio_modules):
-        mod = _import_routes_job()
-        routes = _register(mod, "register_job_routes")
-        _mock_studio_modules["state"].domino_datasets.get_existing_autodoc_dataset.side_effect = RuntimeError(
-            "datasets api down",
-        )
-        req = _make_request()
-        result = await routes["/run"](req)
-        assert result.status_code == 500
-        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
-        _mock_studio_modules["authz"].require_domino_job_start.assert_not_called()
-        _mock_studio_modules["state"].domino_datasets.resolve_dataset_mount_path.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_run_missing_autodoc_dataset_returns_404(self, _mock_studio_modules):
-        mod = _import_routes_job()
-        routes = _register(mod, "register_job_routes")
-        _mock_studio_modules["state"].domino_datasets.get_existing_autodoc_dataset.return_value = None
-        req = _make_request()
-        result = await routes["/run"](req)
-        assert result.status_code == 404
-        body = json.loads(result.body.decode())
-        assert body.get("error") == "Autodoc dataset not found for this project."
-        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
-        _mock_studio_modules["authz"].require_domino_job_start.assert_not_called()
-        _mock_studio_modules["state"].domino_datasets.resolve_dataset_mount_path.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_run_resolve_mount_failure_returns_500(self, _mock_studio_modules):
-        mod = _import_routes_job()
-        routes = _register(mod, "register_job_routes")
-        _mock_studio_modules["state"].domino_datasets.resolve_dataset_mount_path.side_effect = RuntimeError("no mount")
-        req = _make_request()
-        result = await routes["/run"](req)
-        assert result.status_code == 500
-        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
-        _mock_studio_modules["authz"].require_domino_job_start.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_job_history(self, _mock_studio_modules):

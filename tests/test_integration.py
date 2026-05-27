@@ -676,8 +676,6 @@ class TestJobRoutesIntegration:
         )
         assert resp.status_code == 200
         assert resp.json().get("ok") is True
-        integration_env["domino_datasets"].get_existing_autodoc_dataset.assert_called_with("proj-integration")
-        integration_env["domino_datasets"].resolve_dataset_mount_path.assert_called_once()
         mock_client.submit_job.assert_called()
         jobs = store.get_user_jobs("proj-integration", "integration_user", limit=50)
         assert len(jobs) == 1
@@ -720,7 +718,6 @@ class TestAuthorizationIntegration:
         )
         assert resp.status_code == 403
         assert resp.json().get("error")
-        integration_env["domino_datasets"].get_existing_autodoc_dataset.assert_called_with("proj-integration")
 
     def test_job_history_denied_returns_403(self, client, integration_env):
         self._deny(integration_env["authz"], "require_domino_job_list")

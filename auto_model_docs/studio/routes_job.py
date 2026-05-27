@@ -98,30 +98,11 @@ def register_job_routes(rt):
         if not job_request.project_id:
             return _json({"error": "Project ID is required."}, 400)
         try:
-            dataset_row = domino_datasets.get_existing_autodoc_dataset(job_request.project_id)
-            if not dataset_row:
-                return _json(
-                    {
-                        "error": "Autodoc dataset not found for this project.",
-                    },
-                    404,
-                )
-            dataset_mount_path = domino_datasets.resolve_dataset_mount_path(dataset_row)
-        except Exception:
-            logger.exception(
-                "get_existing_autodoc_dataset or mount path resolution failed for project %s",
-                job_request.project_id,
-            )
-            return _json(
-                {"error": "Could not resolve the documentation dataset. Try again later."},
-                500,
-            )
-        try:
             require_domino_job_start(job_request.project_id)
         except HTTPException as e:
             return _json({"error": _error_body(e)}, e.status_code)
         try:
-            run_id, job_url = await _submit_domino_job(job_request, dataset_mount_path)
+            run_id, job_url = await _submit_domino_job(job_request)
         except ValueError as e:
             return _json({"error": str(e)}, 400)
         except Exception:

@@ -31,43 +31,42 @@ class NotebookExporter:
     and delegates to DocumentBuilder for Word assembly.
     """
 
-    def __init__(self, output_dir: Path = Path("./output"), dataset_mount_path: str = "", run_id: str = ""):
+    def __init__(self, output_dir: str = "/mnt/artifacts"):
         self.output_dir = output_dir
-        self.dataset_mount_path = dataset_mount_path
-        self.builder = DocumentBuilder(output_dir=output_dir, dataset_mount_path=dataset_mount_path, run_id=run_id)
+        self.builder = DocumentBuilder(output_dir=output_dir)
 
     def export_to_word(
         self,
         notebook_path: Path,
+        output_path: str,
         title: str = "Model Documentation",
         authors: str = "Data Science Team",
-    ) -> Path:
+    ) -> str:
         """Export a notebook to Word document.
 
         Args:
-            notebook_path: Path to the Jupyter notebook.
+            notebook_path: Path to the Jupyter notebook (relative to output_dir).
+            output_path: Path relative to output_dir where the docx will be written.
             title: Document title (can be overridden from notebook).
             authors: Document authors (can be overridden from notebook).
 
         Returns:
-            Path to the generated Word document.
+            Path to the generated Word document (same as output_path).
 
         Raises:
             BuilderError: If export fails.
         """
         try:
             import io
-            import local_data_manager
-            content = local_data_manager.read_file(self.dataset_mount_path, str(notebook_path))
+            full_path = Path(self.output_dir) / str(notebook_path)
+            content = full_path.read_bytes()
             nb = nbformat.read(io.StringIO(content.decode("utf-8")), as_version=4)
 
             # Extract document metadata and content
             spec, results = self._parse_notebook(nb, title, authors)
 
             # Use DocumentBuilder to create Word document
-            output_path = self._run_async(self.builder.build(spec, results))
-
-            return output_path
+            return self._run_async(self.builder.build(spec, results, output_path))
 
         except Exception as e:
             raise BuilderError(f"Notebook export failed: {e}") from e

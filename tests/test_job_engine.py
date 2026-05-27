@@ -396,9 +396,6 @@ async def test_parse_request_raises_when_no_query_project_id():
 # _build_job_command
 # ---------------------------------------------------------------------------
 
-_DS = "/domino/datasets/autodoc"
-
-
 class TestBuildJobCommand:
     def test_minimal_command(self):
         je = _import_job_engine()
@@ -408,12 +405,12 @@ class TestBuildJobCommand:
             notebook=True,
             verbose=True,
         )
-        cmd = je._build_job_command(req, "/path/spec.yaml", _DS)
+        cmd = je._build_job_command(req, "/path/spec.yaml")
         assert cmd[0] == "python"
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
-        assert "--dataset-path" in cmd
-        assert _DS in cmd
+        assert "--output_dir" in cmd
+        assert "/mnt/artifacts" in cmd
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
@@ -437,7 +434,7 @@ class TestBuildJobCommand:
             notebook=False,
             verbose=False,
         )
-        cmd = je._build_job_command(req, "/spec.yaml", _DS)
+        cmd = je._build_job_command(req, "/spec.yaml")
         assert "--notebook" not in cmd
         assert "--verbose" not in cmd
 
@@ -453,7 +450,6 @@ class TestBuildJobCommand:
                 verbose=False,
             ),
             "/spec.yaml",
-            _DS,
         )
         assert "--provider-base-url" in cmd_anth
         assert "https://proxy/v1" in cmd_anth
@@ -467,7 +463,6 @@ class TestBuildJobCommand:
                 verbose=False,
             ),
             "/spec.yaml",
-            _DS,
         )
         assert "--provider-base-url" in cmd_open
         assert "https://proxy/v1" in cmd_open
@@ -492,7 +487,7 @@ class TestBuildJobCommand:
             max_backoff=120.0,
             backoff_jitter=0.2,
         )
-        cmd = je._build_job_command(req, "/spec.yaml", _DS)
+        cmd = je._build_job_command(req, "/spec.yaml")
         assert "--model" in cmd and "gpt-4" in cmd
         assert "--code-root" in cmd
         assert "--output" not in cmd
@@ -515,11 +510,11 @@ class TestBuildJobCommand:
                 filtered_experiment_names=fe,
                 filtered_model_names=fm,
             )
-            cmd = je._build_job_command(req, "/spec.yaml", _DS)
+            cmd = je._build_job_command(req, "/spec.yaml")
             assert "--filtered-experiments" not in cmd
             assert "--filtered-models" not in cmd
 
-    def test_build_requires_spec_and_dataset_paths(self):
+    def test_build_requires_spec_path(self):
         je = _import_job_engine()
         req = _jr(
             provider="anthropic",
@@ -528,9 +523,7 @@ class TestBuildJobCommand:
             verbose=False,
         )
         with pytest.raises(ValueError, match="spec_path"):
-            je._build_job_command(req, "", _DS)
-        with pytest.raises(ValueError, match="dataset_path"):
-            je._build_job_command(req, "/spec.yaml", "")
+            je._build_job_command(req, "")
 
     def test_command_str_joins_parts(self):
         je = _import_job_engine()
@@ -540,7 +533,7 @@ class TestBuildJobCommand:
             notebook=False,
             verbose=False,
         )
-        cmd_str = je._build_job_command_str(req, "/spec.yaml", _DS)
+        cmd_str = je._build_job_command_str(req, "/spec.yaml")
         assert isinstance(cmd_str, str)
         assert "python" in cmd_str
         assert "--spec" in cmd_str
@@ -666,12 +659,12 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        rid, url = await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+        rid, url = await je._submit_domino_job(req)
         assert rid == "run-abc"
         assert url == "https://domino/jobs/run-abc"
         client.submit_job.assert_called_once()
         cmd = client.submit_job.call_args[0][0]
-        assert "/domino/datasets/local/autodoc" in cmd
+        assert "/mnt/artifacts" in cmd
         client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
 
     @pytest.mark.asyncio
@@ -679,7 +672,7 @@ class TestSubmitDominoJob:
         je = _import_job_engine()
         req = _jr(provider="anthropic", project_id="proj-123")
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+            await je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_launch_failure_propagates(self, _mock_studio):
@@ -694,7 +687,7 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
         )
         with pytest.raises(RuntimeError, match="API down"):
-            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+            await je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_raises_when_missing_hardware_tier(self, _mock_studio):
@@ -707,7 +700,7 @@ class TestSubmitDominoJob:
             hardware_tier="",
         )
         with pytest.raises(ValueError, match="Hardware tier"):
-            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+            await je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_raises_when_missing_environment(self, _mock_studio):
@@ -720,7 +713,7 @@ class TestSubmitDominoJob:
             environment_id="",
         )
         with pytest.raises(ValueError, match="Environment is required"):
-            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+            await je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_raises_when_missing_environment_revision(self, _mock_studio):
@@ -733,21 +726,7 @@ class TestSubmitDominoJob:
             environment_revision_id="",
         )
         with pytest.raises(ValueError, match="Environment revision"):
-            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
-
-    @pytest.mark.asyncio
-    async def test_raises_when_mount_path_empty(self, _mock_studio):
-        je = _import_job_engine()
-        req = _jr(
-            spec_path="/spec.yaml",
-            provider="anthropic",
-            project_id="proj-123",
-            code_root="/mnt/code",
-        )
-        with pytest.raises(ValueError, match="mount path"):
-            await je._submit_domino_job(req, "")
-        with pytest.raises(ValueError, match="mount path"):
-            await je._submit_domino_job(req, "   ")
+            await je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_absolute_spec_path_in_command(self, _mock_studio):
@@ -762,7 +741,7 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+        await je._submit_domino_job(req)
         cmd = client.submit_job.call_args[0][0]
         assert "doc_spec.yaml" in cmd
 
@@ -777,6 +756,6 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
         )
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req, "/domino/datasets/local/autodoc")
+            await je._submit_domino_job(req)
 
 
