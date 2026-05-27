@@ -387,16 +387,70 @@ MAIN_DOM_JS = r"""
             var file = input.files && input.files[0];
             if (!file) return;
             _uploadedSpecFile = file;
-            _showSpecConfirm(file.name, 'upload');
             input.value = '';
+
+            var bar = document.getElementById('spec-confirm-bar');
+            if (bar) {
+                bar.innerHTML =
+                    '<span class="spec-confirm-icon material-symbols-outlined">upload_file</span>' +
+                    '<span class="spec-confirm-name">' + _esc(file.name) + '</span>' +
+                    '<span class="spec-confirm-source">Uploading…</span>';
+                bar.style.display = 'flex';
+            }
+
+            var pid = resolvedProjectId();
+            var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
+            var fd = new FormData();
+            fd.append('file', file, file.name);
+            fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+                .then(function(res) {
+                    if (!res.ok || (res.body && res.body.error)) {
+                        var msg = (res.body && res.body.error) || 'Upload failed';
+                        if (bar) {
+                            bar.innerHTML =
+                                '<span class="spec-confirm-icon material-symbols-outlined">error</span>' +
+                                '<span class="spec-confirm-name">' + _esc(file.name) + '</span>' +
+                                '<span class="spec-confirm-source" style="color:var(--color-error)">' + _esc(msg) + '</span>' +
+                                '<button type="button" class="spec-confirm-remove" onclick="removeUploadedSpec()" title="Remove">' +
+                                '  <span class="material-symbols-outlined" style="font-size:15px">close</span>' +
+                                '</button>';
+                        }
+                        _uploadedSpecFile = null;
+                        return;
+                    }
+                    var path = res.body.path || '';
+                    _customSpecSelected = true;
+                    var specField = document.getElementById('field-spec_path');
+                    if (specField) specField.value = path;
+                    _showSpecConfirm(res.body.fileName || file.name, 'upload');
+                    updateGenerateButton();
+                })
+                .catch(function(err) {
+                    var msg = (err && err.message) ? err.message : String(err);
+                    if (bar) {
+                        bar.innerHTML =
+                            '<span class="spec-confirm-icon material-symbols-outlined">error</span>' +
+                            '<span class="spec-confirm-name">' + _esc(file.name) + '</span>' +
+                            '<span class="spec-confirm-source" style="color:var(--color-error)">Upload failed: ' + _esc(msg) + '</span>' +
+                            '<button type="button" class="spec-confirm-remove" onclick="removeUploadedSpec()" title="Remove">' +
+                            '  <span class="material-symbols-outlined" style="font-size:15px">close</span>' +
+                            '</button>';
+                    }
+                    _uploadedSpecFile = null;
+                });
         }
         window.handleYamlUpload = handleYamlUpload;
 
         function removeUploadedSpec() {
             _uploadedSpecFile = null;
             _browseSelectedFile = null;
+            _customSpecSelected = false;
+            var specField = document.getElementById('field-spec_path');
+            if (specField) specField.value = '';
             var bar = document.getElementById('spec-confirm-bar');
             if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
+            updateGenerateButton();
         }
         window.removeUploadedSpec = removeUploadedSpec;
 
