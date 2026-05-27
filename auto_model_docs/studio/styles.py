@@ -3330,6 +3330,11 @@ select.hw-tier-select option {
     font-size: 12px;
 }
 
+.history-submitted-cell {
+    white-space: nowrap;
+    width: 1%;
+}
+
 /* ── Doc preview ──────────────────────────────────────────────────── */
 .doc-preview-details {
     margin-top: 1rem;

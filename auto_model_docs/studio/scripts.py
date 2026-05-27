@@ -1115,10 +1115,22 @@ MAIN_DOM_JS = r"""
 
         var _ACTIVE_STATUSES = { queued: true, submitted: true, pending: true, running: true };
 
+        function _formatSubmitted(iso) {
+            if (!iso) return '\u2014';
+            // Backend serializes as UTC without a 'Z' suffix; Date treats no-suffix ISO as local.
+            // Append 'Z' so it's parsed as UTC, then format in the browser's local TZ.
+            var raw = String(iso);
+            var d = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw + 'Z');
+            if (isNaN(d.getTime())) return iso;
+            var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+            return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + pad(d.getFullYear() % 100)
+                + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+
         function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
-            var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '\u2014';
+            var submitted = _formatSubmitted(j.submitted_at);
             var runId = j.domino_run_id || '';
             var jobCell = j.job_url
                 ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener">View \u2192</a></td>'
@@ -1139,14 +1151,14 @@ MAIN_DOM_JS = r"""
             var rowAttrs = runId ? ' data-run-id="' + _esc(runId) + '"' : '';
             return '<tr' + rowAttrs + '>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
-                + '<td>' + _esc(submitted) + '</td>'
-                + jobCell
+                + '<td class="history-submitted-cell">' + _esc(submitted) + '</td>'
                 + docCell
+                + jobCell
                 + '</tr>';
         }
 
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Status</th><th>Submitted</th><th>Job</th><th>Documents</th></tr></thead>';
+            var header = '<thead><tr><th>Status</th><th>Submitted</th><th>Documents</th><th>Job</th></tr></thead>';
             var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
