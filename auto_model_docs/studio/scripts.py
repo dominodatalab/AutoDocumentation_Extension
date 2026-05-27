@@ -425,6 +425,7 @@ MAIN_DOM_JS = r"""
                     if (specField) specField.value = path;
                     _showSpecConfirm(res.body.fileName || file.name, 'upload');
                     updateGenerateButton();
+                    setTimeout(function() { try { loadBuiltinTemplates(); } catch(e) {} }, 500);
                 })
                 .catch(function(err) {
                     var msg = (err && err.message) ? err.message : String(err);
