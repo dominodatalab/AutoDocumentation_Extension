@@ -432,7 +432,7 @@ class TestSpecFileBrowserUi:
         assert 'id="spec-file-list"' in web
         assert 'id="field-spec_path"' in web
         assert "absoluteSpecFromRelative" in scripts
-        assert "<th>AutoDoc file</th>" in scripts
+        assert "<th>Documents</th>" in scripts
         assert "renderJobHistory" in scripts
         assert "field-environment_id" not in web
         assert "environment-revision-slot" not in web

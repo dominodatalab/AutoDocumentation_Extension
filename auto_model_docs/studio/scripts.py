@@ -1118,7 +1118,6 @@ MAIN_DOM_JS = r"""
         function _jobRow(j) {
             var status = j.status || 'queued';
             var statusCls = 'history-status history-status-' + status;
-            var branch = j.branch || '\u2014';
             var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '\u2014';
             var runId = j.domino_run_id || '';
             var jobCell = j.job_url
@@ -1127,28 +1126,27 @@ MAIN_DOM_JS = r"""
             var isActive = _ACTIVE_STATUSES[status];
             var docCell;
             if (status === 'succeeded' && j.document_url) {
-                docCell = '<td><a href="' + _esc(j.document_url) + '" target="_blank" rel="noopener">Open \u2192</a></td>';
+                var openLink = '<a href="' + _esc(j.document_url) + '" target="_blank" rel="noopener">Open \u2192</a>';
+                var previewLink = runId
+                    ? '<a href="#" class="history-preview-link" data-run-id="' + _esc(runId) + '">Preview</a>'
+                    : '';
+                docCell = '<td class="history-documents-cell">' + openLink + (previewLink ? '<br>' + previewLink : '') + '</td>';
             } else if (isActive) {
                 docCell = '<td class="history-pending-cell">Pending\u2026</td>';
             } else {
                 docCell = '<td>\u2014</td>';
             }
-            var previewCell = (status === 'succeeded' && runId)
-                ? '<td><a href="#" class="history-preview-link" data-run-id="' + _esc(runId) + '">Preview</a></td>'
-                : '<td>\u2014</td>';
             var rowAttrs = runId ? ' data-run-id="' + _esc(runId) + '"' : '';
             return '<tr' + rowAttrs + '>'
-                + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'
                 + jobCell
                 + docCell
-                + previewCell
                 + '</tr>';
         }
 
         function _tableHtml(jobs) {
-            var header = '<thead><tr><th>Branch</th><th>Status</th><th>Submitted</th><th>Job</th><th>AutoDoc file</th><th>Preview</th></tr></thead>';
+            var header = '<thead><tr><th>Status</th><th>Submitted</th><th>Job</th><th>Documents</th></tr></thead>';
             var rows = jobs.map(function(j) { return _jobRow(j); }).join('');
             return '<table class="history-table">' + header + '<tbody>' + rows + '</tbody></table>';
         }
@@ -1311,7 +1309,10 @@ MAIN_DOM_JS = r"""
                     link.addEventListener('click', function(e) {
                         e.preventDefault();
                         var runId = link.getAttribute('data-run-id');
-                        if (runId) _openLandingDocPreview(runId);
+                        if (runId) {
+                            closeHistoryDrawer();
+                            _openLandingDocPreview(runId);
+                        }
                     });
                 });
                 var cancelBtn = el.querySelector('[id^="job-cancel-queued-btn"]');
