@@ -91,7 +91,12 @@ class Orchestrator:
         self.code_root = code_root
         self.output_dir = output_dir
         self.generate_notebook = generate_notebook
-        self.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        import os
+        run_id = os.environ.get("DOMINO_RUN_ID", "")
+        if run_id:
+            self.run_dir = f"docs/{run_id[:8]}"
+        else:
+            self.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
         _lang = str(language or "auto").strip().lower()
         if _lang != "auto":

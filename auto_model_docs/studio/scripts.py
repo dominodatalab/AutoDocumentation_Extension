@@ -1120,6 +1120,7 @@ MAIN_DOM_JS = r"""
             var statusCls = 'history-status history-status-' + status;
             var branch = j.branch || '\u2014';
             var submitted = j.submitted_at ? j.submitted_at.slice(0, 16).replace('T', ' ') : '\u2014';
+            var runId = j.domino_run_id || '';
             var jobCell = j.job_url
                 ? '<td><a href="' + _esc(j.job_url) + '" target="_blank" rel="noopener">View \u2192</a></td>'
                 : '<td>\u2014</td>';
@@ -1132,10 +1133,11 @@ MAIN_DOM_JS = r"""
             } else {
                 docCell = '<td>\u2014</td>';
             }
-            var previewCell = (status === 'succeeded' && j.domino_run_id)
-                ? '<td><a href="#" class="history-preview-link" data-run-id="' + _esc(j.domino_run_id) + '">Preview</a></td>'
+            var previewCell = (status === 'succeeded' && runId)
+                ? '<td><a href="#" class="history-preview-link" data-run-id="' + _esc(runId) + '">Preview</a></td>'
                 : '<td>\u2014</td>';
-            return '<tr>'
+            var rowAttrs = runId ? ' data-run-id="' + _esc(runId) + '"' : '';
+            return '<tr' + rowAttrs + '>'
                 + '<td title="' + _esc(branch) + '">' + _esc(branch) + '</td>'
                 + '<td><span class="' + statusCls + '">' + _esc(status.toUpperCase()) + '</span></td>'
                 + '<td>' + _esc(submitted) + '</td>'

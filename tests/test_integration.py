@@ -621,7 +621,7 @@ class TestPreviewDocIntegration:
         assert "runId" in resp.json().get("error", "")
 
     def test_file_not_found_returns_404(self, client, integration_env, monkeypatch):
-        monkeypatch.setattr("dataset_manager.DatasetManager.file_exists", staticmethod(lambda snap, path: False))
+        monkeypatch.setattr("pathlib.Path.exists", lambda self: False)
         resp = client.get("/api/preview-doc?projectId=proj-integration&runId=run-abc")
         assert resp.status_code == 404
         assert resp.json().get("ready") is False
@@ -635,9 +635,9 @@ class TestPreviewDocIntegration:
         doc.save(buf)
         docx_bytes = buf.getvalue()
 
-        monkeypatch.setattr("dataset_manager.DatasetManager.file_exists", staticmethod(lambda snap, path: True))
-        monkeypatch.setattr("dataset_manager.DatasetManager.read_file", staticmethod(lambda snap, path: docx_bytes))
-        resp = client.get("/api/preview-doc?projectId=proj-integration&runId=run-abc")
+        monkeypatch.setattr("pathlib.Path.exists", lambda self: True)
+        monkeypatch.setattr("pathlib.Path.read_bytes", lambda self: docx_bytes)
+        resp = client.get("/api/preview-doc?projectId=proj-integration&runId=6a171f74cf54ab6ccad5e5f9")
         assert resp.status_code == 200
         body = resp.json()
         assert body.get("ready") is True

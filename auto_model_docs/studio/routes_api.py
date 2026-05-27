@@ -603,14 +603,12 @@ def register_api_routes(rt):
             return Response(json.dumps({"error": "runId is required."}), status_code=400, media_type="application/json")
         try:
             require_project_write(pid)
-            ensured = domino_datasets.ensure_dataset(pid)
-            snap = ensured.get("rwSnapshotId") or domino_datasets.get_rw_snapshot_id(str(ensured.get("id") or ""))
-            if not snap:
-                return Response(json.dumps({"error": "Could not resolve dataset snapshot."}), status_code=500, media_type="application/json")
-            rel_path = f"docs/model_docs_{run_id}.docx"
-            if not DatasetManager.file_exists(snap, rel_path):
+            from pathlib import Path
+            short = run_id[:8]
+            docx_path = Path("/mnt/artifacts") / "docs" / short / "model_docs.docx"
+            if not docx_path.exists():
                 return Response(json.dumps({"error": "Document not found.", "ready": False}), status_code=404, media_type="application/json")
-            docx_bytes = DatasetManager.read_file(snap, rel_path)
+            docx_bytes = docx_path.read_bytes()
             import mammoth
             import io
             result = mammoth.convert_to_html(io.BytesIO(docx_bytes))

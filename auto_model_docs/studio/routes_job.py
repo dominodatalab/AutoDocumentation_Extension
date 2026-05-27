@@ -13,11 +13,8 @@ from authorization import (
     require_domino_job_start,
 )
 
-from dataset_manager import AUTODOC_DATASET_NAME
-
 from .state import (
     _resolve_request_project_id,
-    domino_datasets,
     domino_job_store,
     logger,
 )
@@ -56,33 +53,15 @@ def _jobs_payload(project_id: str, owner_id: str) -> list:
         jobs = domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
     except RuntimeError:
         return []
-    doc_url = _job_history_document_url(project_id)
+    import domino_client
     for j in jobs:
-        j["document_url"] = doc_url
+        run_id = str(j.get("domino_run_id") or "").strip()
+        j["document_url"] = (
+            domino_client.build_autodoc_artifacts_run_url(project_id, run_id) or ""
+            if run_id else ""
+        )
         j.pop("dataset_url", None)
     return jobs
-
-
-def _job_history_document_url(project_id: str) -> str:
-    try:
-        rows = domino_datasets.list_datasets(project_id)
-    except Exception:
-        logger.debug("list_datasets for document_url failed", exc_info=True)
-        return ""
-    if not isinstance(rows, list):
-        return ""
-    ds_id = ""
-    for d in rows or []:
-        if str(d.get("name") or "") != AUTODOC_DATASET_NAME:
-            continue
-        ds_id = str(d.get("id") or "").strip()
-        break
-    if not ds_id:
-        return ""
-    import domino_client
-
-    u = domino_client.build_autodoc_dataset_data_page_url(project_id, ds_id)
-    return u or ""
 
 
 def register_job_routes(rt):

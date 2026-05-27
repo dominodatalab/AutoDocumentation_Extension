@@ -661,3 +661,20 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
         return None
     seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
     return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
+
+
+def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
+    """Return the Domino UI URL for the artifacts browser at docs/<run_id[:8]>."""
+    if not _ui_host:
+        return None
+    rid = (run_id or "").strip()
+    if not rid:
+        return None
+    try:
+        _, pname, powner = get_project_context(project_id)
+    except ValueError:
+        return None
+    if not powner or not pname:
+        return None
+    short = rid[:8]
+    return f"{_ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"

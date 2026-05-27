@@ -428,7 +428,11 @@ def _regenerate_notebook_from_cache(
 
     orchestrator = Orchestrator.__new__(Orchestrator)
     orchestrator.output_dir = output_dir
-    orchestrator.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    run_id = os.environ.get("DOMINO_RUN_ID", "")
+    if run_id:
+        orchestrator.run_dir = f"docs/{run_id[:8]}"
+    else:
+        orchestrator.run_dir = f"docs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     orchestrator.notebook_builder = NotebookBuilder(output_dir=output_dir)
 
     with Progress(
