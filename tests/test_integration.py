@@ -620,13 +620,13 @@ class TestPreviewDocIntegration:
         assert resp.status_code == 400
         assert "runId" in resp.json().get("error", "")
 
-    def test_file_not_found_returns_404(self, client, integration_env, monkeypatch):
-        monkeypatch.setattr("pathlib.Path.exists", lambda self: False)
+    def test_file_not_found_returns_404(self, client, integration_env):
+        integration_env["domino_client"].download_artifact_at_head.return_value = None
         resp = client.get("/api/preview-doc?projectId=proj-integration&runId=run-abc")
         assert resp.status_code == 404
         assert resp.json().get("ready") is False
 
-    def test_returns_html_when_file_exists(self, client, integration_env, monkeypatch):
+    def test_returns_html_when_file_exists(self, client, integration_env):
         import io as _io
         from docx import Document as _Document
         buf = _io.BytesIO()
@@ -635,8 +635,7 @@ class TestPreviewDocIntegration:
         doc.save(buf)
         docx_bytes = buf.getvalue()
 
-        monkeypatch.setattr("pathlib.Path.exists", lambda self: True)
-        monkeypatch.setattr("pathlib.Path.read_bytes", lambda self: docx_bytes)
+        integration_env["domino_client"].download_artifact_at_head.return_value = docx_bytes
         resp = client.get("/api/preview-doc?projectId=proj-integration&runId=6a171f74cf54ab6ccad5e5f9")
         assert resp.status_code == 200
         body = resp.json()

@@ -603,12 +603,11 @@ def register_api_routes(rt):
             return Response(json.dumps({"error": "runId is required."}), status_code=400, media_type="application/json")
         try:
             require_project_write(pid)
-            from pathlib import Path
             short = run_id[:8]
-            docx_path = Path("/mnt/artifacts") / "docs" / short / "model_docs.docx"
-            if not docx_path.exists():
+            artifact_path = f"docs/{short}/model_docs.docx"
+            docx_bytes = domino_client.download_artifact_at_head(pid, artifact_path)
+            if docx_bytes is None:
                 return Response(json.dumps({"error": "Document not found.", "ready": False}), status_code=404, media_type="application/json")
-            docx_bytes = docx_path.read_bytes()
             import mammoth
             import io
             result = mammoth.convert_to_html(io.BytesIO(docx_bytes))

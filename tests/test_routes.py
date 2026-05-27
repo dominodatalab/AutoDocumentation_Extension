@@ -749,9 +749,8 @@ class TestPreviewDoc:
         assert "runId" in json.loads(result.body)["error"]
 
     @pytest.mark.asyncio
-    async def test_file_not_found_returns_404(self, _mock_studio_modules, tmp_path, monkeypatch):
-        # /mnt/artifacts doesn't exist or has no run dir
-        monkeypatch.setattr("pathlib.Path.exists", lambda self: False)
+    async def test_file_not_found_returns_404(self, _mock_studio_modules):
+        _mock_studio_modules["state"].domino_client.download_artifact_at_head.return_value = None
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={"projectId": "proj-123", "runId": "run-abc"})
@@ -761,7 +760,7 @@ class TestPreviewDoc:
         assert body["ready"] is False
 
     @pytest.mark.asyncio
-    async def test_returns_html_when_file_exists(self, _mock_studio_modules, tmp_path, monkeypatch):
+    async def test_returns_html_when_file_exists(self, _mock_studio_modules):
         import io as _io
         from docx import Document as _Document
         buf = _io.BytesIO()
@@ -770,10 +769,7 @@ class TestPreviewDoc:
         doc.save(buf)
         docx_bytes = buf.getvalue()
 
-        # Stub Path("/mnt/artifacts")/docs/<short>/model_docs.docx by patching
-        # Path.exists and Path.read_bytes on any Path instance.
-        monkeypatch.setattr("pathlib.Path.exists", lambda self: True)
-        monkeypatch.setattr("pathlib.Path.read_bytes", lambda self: docx_bytes)
+        _mock_studio_modules["state"].domino_client.download_artifact_at_head.return_value = docx_bytes
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={"projectId": "proj-123", "runId": "6a171f74cf54ab6ccad5e5f9"})
@@ -782,6 +778,9 @@ class TestPreviewDoc:
         body = json.loads(result.body)
         assert body["ready"] is True
         assert "Hello preview" in body["html"]
+        _mock_studio_modules["state"].domino_client.download_artifact_at_head.assert_called_once_with(
+            "proj-123", "docs/6a171f74/model_docs.docx"
+        )
 
     @pytest.mark.asyncio
     async def test_missing_project_returns_400(self, _mock_studio_modules):
