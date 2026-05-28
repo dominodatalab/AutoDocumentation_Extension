@@ -2970,7 +2970,8 @@ select.hw-tier-select option {
 .landing-doc-preview {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 .landing-doc-preview-header {
@@ -3379,7 +3380,7 @@ select.hw-tier-select option {
     border-radius: var(--radius-sm);
 }
 .preview-summary-link:hover { text-decoration: underline; }
-.doc-preview-content {
+.results-panel .doc-preview-content {
     padding: 1.25rem 1.5rem;
     background: var(--surface-container-lowest);
     max-height: 60vh;
