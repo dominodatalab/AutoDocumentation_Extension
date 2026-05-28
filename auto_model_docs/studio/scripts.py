@@ -1493,6 +1493,8 @@ MAIN_DOM_JS = r"""
             _landingPreviewOriginalHtml = null;
             wireEditTemplateActions();
             wireEditTemplateMaximize();
+            var landingBtn = document.getElementById('landing-history-btn');
+            if (landingBtn) landingBtn.addEventListener('click', openHistoryDrawer);
         }
 
         function _startProgressCycle() {
