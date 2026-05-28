@@ -2767,6 +2767,12 @@ select.hw-tier-select option {
     box-shadow: var(--shadow-sm);
     margin-bottom: 1rem;
     min-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+.results-panel:has(.landing-doc-preview) {
+    padding: 0;
+    min-height: 480px;
 }
 .results-submitting {
     display: flex;
