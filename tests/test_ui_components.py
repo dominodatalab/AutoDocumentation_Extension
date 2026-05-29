@@ -470,3 +470,13 @@ class TestResultsPanelNoRerenderInTerminalState:
         assert "panelKey === _lastResultsPanelKey" in scripts_src
         assert "isTerminal" in scripts_src
         assert "_selectedTemplateUid" in scripts_src
+
+
+class TestLandingDocPreviewRestoresEditYaml:
+    def test_close_landing_preview_restores_edit_template_yaml(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_landingPreviewOriginalEditYaml" in scripts_src
+        assert "edit-template-yaml" in scripts_src
+        assert "_landingPreviewOriginalEditYaml = null" in scripts_src
+        assert "editArea.value = _landingPreviewOriginalEditYaml" in scripts_src

@@ -1504,11 +1504,14 @@ MAIN_DOM_JS = r"""
         }
 
         var _landingPreviewOriginalHtml = null;
+        var _landingPreviewOriginalEditYaml = null;
 
         function _openLandingDocPreview(runId) {
             var card = document.querySelector('.preview-card');
             if (!card) return;
             _landingPreviewOriginalHtml = card.innerHTML;
+            var _editAreaSnap = document.getElementById('edit-template-yaml');
+            _landingPreviewOriginalEditYaml = _editAreaSnap ? _editAreaSnap.value : null;
             card.innerHTML = '<div class="landing-doc-preview">'
                 + '<div class="landing-doc-preview-header">'
                 + '<span class="landing-doc-preview-title">Document Preview</span>'
@@ -1549,6 +1552,11 @@ MAIN_DOM_JS = r"""
             if (!card || _landingPreviewOriginalHtml === null) return;
             card.innerHTML = _landingPreviewOriginalHtml;
             _landingPreviewOriginalHtml = null;
+            if (_landingPreviewOriginalEditYaml !== null) {
+                var editArea = document.getElementById('edit-template-yaml');
+                if (editArea) editArea.value = _landingPreviewOriginalEditYaml;
+                _landingPreviewOriginalEditYaml = null;
+            }
             wireEditTemplateActions();
             wireEditTemplateMaximize();
             var landingBtn = document.getElementById('landing-history-btn');
