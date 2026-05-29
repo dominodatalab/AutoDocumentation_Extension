@@ -508,6 +508,17 @@ class TestGetCodeSourceInfo:
             info = get_code_source_info("proj-1")
         assert info["repo_id"] == "other-1"
 
+    def test_uses_git_repos_api_fallback_when_local_repo_has_no_id(self):
+        repos = [{"location": "/mnt/code"}]
+        browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": repos}}
+        git_repos_resp = [{"id": "primary-repo-1"}]
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "_domino_request", return_value=git_repos_resp) as mock_req:
+            info = get_code_source_info("proj-1")
+        assert info["repo_id"] == "primary-repo-1"
+        assert "/v4/projects/proj-1/gitRepositories" in mock_req.call_args[0][1]
+
     def test_unresolvable_project_raises(self):
         with patch.object(dc, "resolve_project", return_value=None):
             with pytest.raises(ValueError, match="Could not resolve"):

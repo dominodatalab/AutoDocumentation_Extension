@@ -243,6 +243,18 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
         loc = (local_repo.get("location") or "").strip()
         if loc:
             location = loc
+    if is_git and not repo_id:
+        try:
+            repos_data = _domino_request("GET", f"/v4/projects/{project_id}/gitRepositories")
+            repo_list = repos_data if isinstance(repos_data, list) else (repos_data.get("repositories") or repos_data.get("items") or [])
+            for r in repo_list:
+                if isinstance(r, dict):
+                    rid = r.get("id")
+                    if rid:
+                        repo_id = str(rid)
+                        break
+        except Exception as exc:
+            logger.warning("get_code_source_info: git repos fallback failed: %s", exc)
     return {"is_git": is_git, "repo_id": repo_id, "location": location}
 
 
