@@ -261,21 +261,24 @@ MAIN_DOM_JS = r"""
         })();
 
         // ── Advanced options modal ─────────────────────────────────────
+        var _codePathsLoaded = false;
         function _loadCodePaths() {
-            var input = document.getElementById('field-code_path');
-            var list = document.getElementById('code-path-list');
-            if (!input || !list) return;
+            if (_codePathsLoaded) return;
+            var sel = document.getElementById('field-code_path');
+            if (!sel) return;
             var pid = resolvedProjectId();
             if (!pid) return;
             fetch(_adUrl('api/code-paths') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(data) {
-                    if (!input.value) input.value = data.default || '';
-                    list.innerHTML = '';
-                    (data.paths || []).forEach(function(p) {
+                    _codePathsLoaded = true;
+                    sel.innerHTML = '';
+                    (data.paths || []).forEach(function(p, i) {
                         var opt = document.createElement('option');
                         opt.value = p;
-                        list.appendChild(opt);
+                        opt.textContent = p;
+                        if (p === data.default || i === 0) opt.selected = true;
+                        sel.appendChild(opt);
                     });
                 })
                 .catch(function() {});
@@ -286,7 +289,8 @@ MAIN_DOM_JS = r"""
             var openBtn = document.getElementById('adv-opts-open-btn');
             var closeBtn = document.getElementById('adv-opts-close-btn');
             var doneBtn = document.getElementById('adv-opts-done-btn');
-            function open() { if (overlay) overlay.classList.add('open'); _loadCodePaths(); }
+            function open() { if (overlay) overlay.classList.add('open'); }
+            _loadCodePaths();
             function close() { if (overlay) overlay.classList.remove('open'); }
             if (openBtn) openBtn.addEventListener('click', open);
             if (closeBtn) closeBtn.addEventListener('click', close);

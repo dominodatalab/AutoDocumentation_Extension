@@ -82,14 +82,11 @@ def _build_advanced_options(tier_options):
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Path to the source code to be documented."),
                     cls="label-row",
                 ),
-                Input(
+                Select(
+                    Option("Loading\u2026", value="", disabled=True, selected=True),
                     name="code_path",
                     id="field-code_path",
-                    type="text",
-                    list="code-path-list",
-                    placeholder="Loading\u2026",
                 ),
-                Datalist(id="code-path-list"),
                 cls="field",
                 id="code-path-field",
             ),
