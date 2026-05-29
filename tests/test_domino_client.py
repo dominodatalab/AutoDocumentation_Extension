@@ -530,27 +530,34 @@ class TestGetCodeSourceInfo:
 # ===================================================================
 
 class TestBrowseGbpCode:
-    def test_returns_files_and_dirs(self):
+    def test_returns_files_and_dirs_nested_response(self):
         items = [{"kind": "file", "name": "spec.yaml"}, {"kind": "dir", "name": "sub"}]
-        with patch.object(dc, "_domino_request", return_value={"items": items}) as mock_req:
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": items}}):
+            result = browse_gbp_code("proj-1", "repo-1", "")
+        assert {"fileName": "spec.yaml", "isDirectory": False} in result
+        assert {"fileName": "sub", "isDirectory": True} in result
+
+    def test_returns_files_and_dirs_flat_response(self):
+        items = [{"kind": "file", "name": "spec.yaml"}, {"kind": "dir", "name": "sub"}]
+        with patch.object(dc, "_domino_request", return_value={"items": items}):
             result = browse_gbp_code("proj-1", "repo-1", "")
         assert {"fileName": "spec.yaml", "isDirectory": False} in result
         assert {"fileName": "sub", "isDirectory": True} in result
 
     def test_empty_directory_omits_param(self):
-        with patch.object(dc, "_domino_request", return_value={"items": []}) as mock_req:
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": []}}) as mock_req:
             browse_gbp_code("proj-1", "repo-1", "")
         params = mock_req.call_args.kwargs.get("params") or mock_req.call_args[1].get("params", {})
         assert "directory" not in params
 
     def test_nonempty_directory_passes_param(self):
-        with patch.object(dc, "_domino_request", return_value={"items": []}) as mock_req:
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": []}}) as mock_req:
             browse_gbp_code("proj-1", "repo-1", "src")
         params = mock_req.call_args.kwargs.get("params") or mock_req.call_args[1].get("params", {})
         assert params.get("directory") == "src"
 
     def test_url_contains_project_and_repo(self):
-        with patch.object(dc, "_domino_request", return_value={"items": []}) as mock_req:
+        with patch.object(dc, "_domino_request", return_value={"data": {"items": []}}) as mock_req:
             browse_gbp_code("proj-abc", "repo-xyz", "")
         url = mock_req.call_args[0][1]
         assert "proj-abc" in url

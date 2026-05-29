@@ -268,7 +268,8 @@ def browse_gbp_code(project_id: str, repo_id: str, directory: str = "") -> list[
         f"/v4/projects/{project_id}/gitRepositories/{repo_id}/git/browse",
         params=params,
     )
-    items = data.get("items") or []
+    inner = data.get("data") or {}
+    items = inner.get("items") or data.get("items") or []
     result: list[dict[str, Any]] = []
     for item in items:
         if not isinstance(item, dict):
