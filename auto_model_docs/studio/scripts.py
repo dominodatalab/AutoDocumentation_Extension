@@ -223,6 +223,9 @@ MAIN_DOM_JS = r"""
         var _specCurrentDatasetPath = '';
         var _specCurrentPath = '';
         var _specBrowseAbort = null;
+        var _browseSourceType = 'dataset';
+        var _browseCodeIsGit = false;
+        var _browseCodeRepoId = '';
 
         // Always use spacious layout: drawer history + inline preview
         var _layoutMode = 'B';
@@ -341,13 +344,29 @@ MAIN_DOM_JS = r"""
                 if (overlay) overlay.remove();
             }
 
-            // SnapshotId is optional: the backend can resolve it from datasetId.
-            var payload = {
-                sourceDatasetId: _specCurrentDatasetId,
-                sourceSnapshotId: _specCurrentSnapshotId,
-                sourcePath: srcPath,
-                filename: filename,
-            };
+            var payload;
+            if (_browseSourceType === 'gbp_git') {
+                payload = {
+                    sourceType: 'gbp_git',
+                    sourceRepoId: _browseCodeRepoId,
+                    sourcePath: srcPath,
+                    filename: filename,
+                };
+            } else if (_browseSourceType === 'dfs_code') {
+                payload = {
+                    sourceType: 'dfs_code',
+                    sourcePath: srcPath,
+                    filename: filename,
+                };
+            } else {
+                payload = {
+                    sourceType: 'dataset',
+                    sourceDatasetId: _specCurrentDatasetId,
+                    sourceSnapshotId: _specCurrentSnapshotId,
+                    sourcePath: srcPath,
+                    filename: filename,
+                };
+            }
 
             fetch(_adUrl('api/add-spec-template') + (pid ? '?projectId=' + encodeURIComponent(pid) : ''), {
                 method: 'POST',
@@ -462,7 +481,7 @@ MAIN_DOM_JS = r"""
             bar.innerHTML =
                 '<span class="spec-confirm-icon material-symbols-outlined">' + icon + '</span>' +
                 '<span class="spec-confirm-name">' + filename + '</span>' +
-                '<span class="spec-confirm-source">' + (source === 'upload' ? 'Uploaded' : 'From dataset') + '</span>' +
+                '<span class="spec-confirm-source">' + (source === 'upload' ? 'Uploaded' : (_browseSourceType === 'dataset' ? 'From dataset' : 'From code')) + '</span>' +
                 '<button type="button" class="spec-confirm-remove" onclick="removeUploadedSpec()" title="Remove">' +
                 '  <span class="material-symbols-outlined" style="font-size:15px">close</span>' +
                 '</button>';
@@ -903,55 +922,72 @@ MAIN_DOM_JS = r"""
             var pid = resolvedProjectId();
             if (!pid) return;
 
-            fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
+            var codeRootPromise = fetch(_adUrl('api/code-root') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(datasets) {
-                    if (!datasets || datasets.error || !datasets.length) {
-                        browseDatasetSelect.innerHTML = '<option value="" disabled selected>No datasets found</option>';
-                        return;
-                    }
+                .catch(function() { return null; });
+            var datasetsPromise = fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .catch(function() { return []; });
 
-                    // Keep the modal aligned with the main branch:
-                    // skip the internal AutoDoc dataset from the "browse" list.
-                    var AUTODOC_DATASET_NAME = 'autodoc';
+            Promise.all([codeRootPromise, datasetsPromise]).then(function(results) {
+                var codeInfo = results[0];
+                var datasets = results[1] || [];
+                var html = '';
 
-                    var html = '';
-                    for (var i = 0; i < datasets.length; i++) {
-                        // Direct indexing preserves the exact string used by unit tests.
-                        if (datasets[i] && datasets[i].name === 'autodoc') continue;
-                        var ds = datasets[i] || {};
-                        html += '<option value="' + (ds.id || '') + '" data-name="' + (ds.name || '') + '" data-snapshot="' + (ds.rwSnapshotId || '') + '" data-path="' + (ds.datasetPath || '') + '">'
-                            + (ds.name || ds.id || '') + '</option>';
-                    }
-                    browseDatasetSelect.innerHTML = html;
+                if (codeInfo && !codeInfo.error) {
+                    var codeLabel = (codeInfo.isGit ? 'Git' : 'Code') + '- ' + (codeInfo.location || '');
+                    html += '<option value="__code__" data-type="code" data-is-git="' + (codeInfo.isGit ? 'true' : 'false') + '" data-repo-id="' + (codeInfo.repoId || '') + '">'
+                        + codeLabel + '</option>';
+                }
 
-                    // Default selection: choose first dataset in the list.
-                    if (html) {
-                        var firstOpt = browseDatasetSelect.options[0];
-                        if (firstOpt) {
-                            browseDatasetSelect.value = browseDatasetSelect.value || (firstOpt.value || '');
-                            onBrowseModalDatasetChange();
-                        }
-                    }
-                })
-                .catch(function() {});
+                for (var i = 0; i < datasets.length; i++) {
+                    if (datasets[i] && datasets[i].name === 'autodoc') continue;
+                    var ds = datasets[i] || {};
+                    html += '<option value="' + (ds.id || '') + '" data-type="dataset" data-name="' + (ds.name || '') + '" data-snapshot="' + (ds.rwSnapshotId || '') + '" data-path="' + (ds.datasetPath || '') + '">'
+                        + 'DS- ' + (ds.name || ds.id || '') + '</option>';
+                }
+
+                if (!html) {
+                    browseDatasetSelect.innerHTML = '<option value="" disabled selected>No sources found</option>';
+                    return;
+                }
+                browseDatasetSelect.innerHTML = html;
+                var firstOpt = browseDatasetSelect.options[0];
+                if (firstOpt) {
+                    browseDatasetSelect.value = firstOpt.value || '';
+                    onBrowseModalDatasetChange();
+                }
+            });
         }
 
         function onBrowseModalDatasetChange() {
             if (!browseDatasetSelect) return;
             var opt = browseDatasetSelect.options[browseDatasetSelect.selectedIndex];
             if (!opt) return;
-            var dsId = browseDatasetSelect.value || '';
-            if (!dsId) return;
+            var srcType = opt.getAttribute('data-type') || 'dataset';
 
-            // Reconstruct a dataset object from option data attributes
-            var ds = {
-                id: dsId,
-                name: opt.getAttribute('data-name') || '',
-                rwSnapshotId: opt.getAttribute('data-snapshot') || '',
-                datasetPath: opt.getAttribute('data-path') || '',
-            };
-            browseModalApplyDataset(ds);
+            if (srcType === 'code') {
+                _browseSourceType = opt.getAttribute('data-is-git') === 'true' ? 'gbp_git' : 'dfs_code';
+                _browseCodeIsGit = _browseSourceType === 'gbp_git';
+                _browseCodeRepoId = opt.getAttribute('data-repo-id') || '';
+                _specCurrentDatasetId = '';
+                _specCurrentSnapshotId = '';
+                _specCurrentPath = '';
+                browseFiles('');
+            } else {
+                _browseSourceType = 'dataset';
+                _browseCodeIsGit = false;
+                _browseCodeRepoId = '';
+                var dsId = browseDatasetSelect.value || '';
+                if (!dsId) return;
+                var ds = {
+                    id: dsId,
+                    name: opt.getAttribute('data-name') || '',
+                    rwSnapshotId: opt.getAttribute('data-snapshot') || '',
+                    datasetPath: opt.getAttribute('data-path') || '',
+                };
+                browseModalApplyDataset(ds);
+            }
         }
 
         if (browseDatasetSelect) {
@@ -971,15 +1007,32 @@ MAIN_DOM_JS = r"""
         function browseFiles(path) {
             _specCurrentPath = path;
             if (!specFileList) return Promise.resolve();
-            if (!_specCurrentDatasetId) {
-                specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">Select a dataset first</span></div>';
+
+            var isCode = _browseSourceType === 'gbp_git' || _browseSourceType === 'dfs_code';
+            if (!isCode && !_specCurrentDatasetId) {
+                specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">Select a source first</span></div>';
                 return Promise.resolve();
             }
+
             renderBreadcrumb(path);
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
             specFileList.classList.add('spec-file-list-pending');
-            return fetch(_adUrl('api/dataset-files') + queryApiDatasetFiles(path), { signal: ctrl.signal })
+
+            var fetchUrl;
+            if (isCode) {
+                var pid = resolvedProjectId();
+                var qparts = [];
+                if (pid) qparts.push('projectId=' + encodeURIComponent(pid));
+                qparts.push('isGit=' + (_browseCodeIsGit ? 'true' : 'false'));
+                if (_browseCodeRepoId) qparts.push('repoId=' + encodeURIComponent(_browseCodeRepoId));
+                if (path) qparts.push('path=' + encodeURIComponent(path));
+                fetchUrl = _adUrl('api/code-files') + '?' + qparts.join('&');
+            } else {
+                fetchUrl = _adUrl('api/dataset-files') + queryApiDatasetFiles(path);
+            }
+
+            return fetch(fetchUrl, { signal: ctrl.signal })
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(files) {
                     if (!Array.isArray(files)) {
@@ -987,13 +1040,20 @@ MAIN_DOM_JS = r"""
                             + (files && files.error ? 'Error: ' + files.error : 'Unexpected response') + '</span></div>';
                         return;
                     }
+                    if (isCode) {
+                        files = files.filter(function(f) {
+                            if (f.isDirectory) return true;
+                            var n = (f.fileName || '').toLowerCase();
+                            return n.endsWith('.yaml') || n.endsWith('.yml');
+                        });
+                    }
                     var html = '';
                     var parentPath = specParentPath(path);
                     if (parentPath !== null) {
                         html += '<div class="spec-file-item spec-file-parent" data-path="' + parentPath + '" data-dir="true" data-name=".." data-parent="true">'
                             + '<span class="spec-file-icon">\ud83d\udcc1</span>'
                             + '<span class="spec-file-name">..</span>'
-                            + '<span class="spec-file-size"></span></div>';
+                            + '</div>';
                     }
                     if (!files.length && parentPath === null) {
                         specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">No YAML files found</span></div>';
@@ -1007,12 +1067,10 @@ MAIN_DOM_JS = r"""
                     for (var i = 0; i < files.length; i++) {
                         var f = files[i];
                         var icon = f.isDirectory ? '\ud83d\udcc1' : '\ud83d\udcc4';
-                        var size = f.isDirectory ? '' : formatBytes(f.sizeInBytes || 0);
                         var fullPath = path ? path + '/' + f.fileName : f.fileName;
                         html += '<div class="spec-file-item" data-path="' + fullPath + '" data-dir="' + f.isDirectory + '" data-name="' + f.fileName + '">'
                             + '<span class="spec-file-icon">' + icon + '</span>'
                             + '<span class="spec-file-name">' + f.fileName + '</span>'
-                            + '<span class="spec-file-size">' + size + '</span>'
                             + '</div>';
                     }
                     specFileList.innerHTML = html;

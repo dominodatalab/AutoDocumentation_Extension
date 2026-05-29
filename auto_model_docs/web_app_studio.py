@@ -576,9 +576,9 @@ async def index(req: Request):
                         ),
                         Div(
                             Div(
-                                Label("Dataset", Span(" *", cls="required-star")),
+                                Label("Source", Span(" *", cls="required-star")),
                                 Select(
-                                    Option("Loading datasets...", value="", disabled=True, selected=True),
+                                    Option("Loading sources...", value="", disabled=True, selected=True),
                                     id="browse-dataset-select",
                                 ),
                                 cls="field",

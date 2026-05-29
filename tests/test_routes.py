@@ -953,3 +953,157 @@ class TestSanitizeDatasetSubpath:
 
         with pytest.raises(ValueError, match="Invalid"):
             sanitize_dataset_subpath("a/../b")
+
+
+# ===========================================================================
+# /api/code-root and /api/code-files
+# ===========================================================================
+
+class TestCodeRoutes:
+    @pytest.mark.asyncio
+    async def test_code_root_returns_info(self, _mock_studio_modules):
+        _mock_studio_modules["state"].domino_client.get_code_source_info.return_value = {
+            "is_git": True, "repo_id": "repo-abc", "location": "/mnt/code"
+        }
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/code-root"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body["isGit"] is True
+        assert body["repoId"] == "repo-abc"
+        assert body["location"] == "/mnt/code"
+
+    @pytest.mark.asyncio
+    async def test_code_root_500_on_error(self, _mock_studio_modules):
+        _mock_studio_modules["state"].domino_client.get_code_source_info.side_effect = RuntimeError("boom")
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/code-root"](req)
+        assert result.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_code_files_git(self, _mock_studio_modules):
+        _mock_studio_modules["state"].domino_client.browse_gbp_code.return_value = [
+            {"fileName": "spec.yaml", "isDirectory": False}
+        ]
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123", "isGit": "true", "repoId": "repo-1", "path": ""})
+        result = await routes["/api/code-files"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body[0]["fileName"] == "spec.yaml"
+        _mock_studio_modules["state"].domino_client.browse_gbp_code.assert_called_once_with("proj-123", "repo-1", "")
+
+    @pytest.mark.asyncio
+    async def test_code_files_git_requires_repo_id(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123", "isGit": "true", "path": ""})
+        result = await routes["/api/code-files"](req)
+        assert result.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_code_files_dfs(self, _mock_studio_modules):
+        from dataclasses import dataclass
+
+        @dataclass
+        class _FakeProj:
+            id: str = "proj-123"
+            name: str = "myproj"
+            owner_username: str = "alice"
+
+        _mock_studio_modules["state"].domino_client.resolve_project.return_value = _FakeProj()
+        _mock_studio_modules["state"].domino_client.browse_dfs_code.return_value = [
+            {"fileName": "sub", "isDirectory": True}
+        ]
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(query_params={"projectId": "proj-123", "isGit": "false", "path": ""})
+        result = await routes["/api/code-files"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body[0]["fileName"] == "sub"
+        _mock_studio_modules["state"].domino_client.browse_dfs_code.assert_called_once_with("alice", "myproj", "")
+
+
+# ===========================================================================
+# /api/add-spec-template with sourceType gbp_git and dfs_code
+# ===========================================================================
+
+class TestAddSpecTemplateCodeSources:
+    _VALID_YAML = b"slug: standard_ml\ncard_title: My Card\ncard_description: D\nsections: [a]\n"
+
+    @pytest.mark.asyncio
+    async def test_gbp_git_reads_via_read_gbp_file_raw(self, _mock_studio_modules, monkeypatch):
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-dest"}
+        _mock_studio_modules["state"].domino_client.read_gbp_file_raw.return_value = self._VALID_YAML
+
+        write_mock = MagicMock()
+        monkeypatch.setattr("dataset_manager.DatasetManager.write_file", staticmethod(write_mock))
+
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            json_body={
+                "sourceType": "gbp_git",
+                "sourceRepoId": "repo-1",
+                "sourcePath": "specs/doc.yaml",
+                "filename": "doc.yaml",
+            },
+        )
+        result = await routes["/api/add-spec-template"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body.get("ok") is True
+        _mock_studio_modules["state"].domino_client.read_gbp_file_raw.assert_called_once_with(
+            "proj-123", "repo-1", "specs/doc.yaml"
+        )
+        assert write_mock.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_gbp_git_requires_repo_id(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            json_body={
+                "sourceType": "gbp_git",
+                "sourcePath": "specs/doc.yaml",
+                "filename": "doc.yaml",
+            },
+        )
+        result = await routes["/api/add-spec-template"](req)
+        assert result.status_code == 400
+        body = json.loads(result.body)
+        assert "sourceRepoId" in body["error"]
+
+    @pytest.mark.asyncio
+    async def test_dfs_code_reads_via_download_artifact(self, _mock_studio_modules, monkeypatch):
+        _mock_studio_modules["state"].domino_datasets.ensure_dataset.return_value = {"id": "ds-dest"}
+        _mock_studio_modules["state"].domino_client.download_artifact_at_head.return_value = self._VALID_YAML
+
+        write_mock = MagicMock()
+        monkeypatch.setattr("dataset_manager.DatasetManager.write_file", staticmethod(write_mock))
+
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        req = _make_request(
+            query_params={"projectId": "proj-123"},
+            json_body={
+                "sourceType": "dfs_code",
+                "sourcePath": "specs/doc.yaml",
+                "filename": "doc.yaml",
+            },
+        )
+        result = await routes["/api/add-spec-template"](req)
+        assert result.status_code == 200
+        body = json.loads(result.body)
+        assert body.get("ok") is True
+        _mock_studio_modules["state"].domino_client.download_artifact_at_head.assert_called_once_with(
+            "proj-123", "specs/doc.yaml"
+        )
