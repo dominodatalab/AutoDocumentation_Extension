@@ -155,7 +155,7 @@ async def index(req: Request):
     project_id = _resolve_request_project_id(req)
     if not project_id:
         return (
-            Title("ModelDoc — Domino"),
+            Title("Model Docs — Domino"),
             Style(fontawesome_faces_css()),
             Script(STUDIO_FONT_BASE_PATCH_JS),
             Style(STUDIO_CSS),
@@ -283,7 +283,7 @@ async def index(req: Request):
             )
 
     return (
-        Title("ModelDoc — Domino"),
+        Title("Model Docs — Domino"),
         Style(fontawesome_faces_css()),
         Script(STUDIO_FONT_BASE_PATCH_JS),
         # Header
@@ -303,7 +303,7 @@ async def index(req: Request):
                     Div(
                         Div(
                             Div(
-                                Span("ModelDoc", cls="page-title-text"),
+                                Span("Model Docs", cls="page-title-text"),
                                 Span(
                                     project_display_name,
                                     cls="page-title-project",

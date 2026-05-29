@@ -580,7 +580,7 @@ def submit_job(
     """Submit a Domino job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
 
-    title = f"AutoDoc: {pname or pid}" + (f" ({branch})" if branch else "")
+    title = f"Model Docs: {pname or pid}" + (f" ({branch})" if branch else "")
 
     command_str = " ".join(command) if isinstance(command, list) else command
 
