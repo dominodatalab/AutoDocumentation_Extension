@@ -485,6 +485,29 @@ class TestGetCodeSourceInfo:
         assert info["location"] == "/mnt/code"
         assert info["repo_id"] is None
 
+    def test_skips_imported_repos_to_find_local(self):
+        repos = [
+            {"id": "imported-1", "location": "/mnt/imported/code/SomeRepo"},
+            {"id": "local-1", "location": "/mnt/code"},
+        ]
+        browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": repos}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp):
+            info = get_code_source_info("proj-1")
+        assert info["repo_id"] == "local-1"
+        assert info["location"] == "/mnt/code"
+
+    def test_falls_back_to_non_imported_repo_when_no_exact_match(self):
+        repos = [
+            {"id": "imported-1", "location": "/mnt/imported/code/SomeRepo"},
+            {"id": "other-1", "location": "/mnt/somewhere"},
+        ]
+        browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": repos}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp):
+            info = get_code_source_info("proj-1")
+        assert info["repo_id"] == "other-1"
+
     def test_unresolvable_project_raises(self):
         with patch.object(dc, "resolve_project", return_value=None):
             with pytest.raises(ValueError, match="Could not resolve"):

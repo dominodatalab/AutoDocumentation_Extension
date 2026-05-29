@@ -221,12 +221,26 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
     repos = ps.get("repositories") or []
     repo_id: Optional[str] = None
     location = "/mnt/code" if is_git else "/mnt"
-    if repos and isinstance(repos[0], dict):
-        repo = repos[0]
-        rid = repo.get("id")
+    target_loc = "/mnt/code" if is_git else "/mnt"
+    local_repo: Optional[dict[str, Any]] = None
+    for r in repos:
+        if not isinstance(r, dict):
+            continue
+        if (r.get("location") or "").strip() == target_loc:
+            local_repo = r
+            break
+    if local_repo is None:
+        for r in repos:
+            if not isinstance(r, dict):
+                continue
+            if not (r.get("location") or "").strip().startswith("/mnt/imported"):
+                local_repo = r
+                break
+    if local_repo is not None:
+        rid = local_repo.get("id")
         if rid:
             repo_id = str(rid)
-        loc = (repo.get("location") or "").strip()
+        loc = (local_repo.get("location") or "").strip()
         if loc:
             location = loc
     return {"is_git": is_git, "repo_id": repo_id, "location": location}
