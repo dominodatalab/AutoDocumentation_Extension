@@ -935,16 +935,15 @@ MAIN_DOM_JS = r"""
                 var html = '';
 
                 if (codeInfo && !codeInfo.error) {
-                    var codeLabel = (codeInfo.isGit ? 'Git' : 'Code') + '- ' + (codeInfo.location || '');
                     html += '<option value="__code__" data-type="code" data-is-git="' + (codeInfo.isGit ? 'true' : 'false') + '" data-repo-id="' + (codeInfo.repoId || '') + '">'
-                        + codeLabel + '</option>';
+                        + 'Source code' + '</option>';
                 }
 
                 for (var i = 0; i < datasets.length; i++) {
                     if (datasets[i] && datasets[i].name === 'autodoc') continue;
                     var ds = datasets[i] || {};
                     html += '<option value="' + (ds.id || '') + '" data-type="dataset" data-name="' + (ds.name || '') + '" data-snapshot="' + (ds.rwSnapshotId || '') + '" data-path="' + (ds.datasetPath || '') + '">'
-                        + 'DS- ' + (ds.name || ds.id || '') + '</option>';
+                        + (ds.name || ds.id || '') + '</option>';
                 }
 
                 if (!html) {
@@ -1018,6 +1017,7 @@ MAIN_DOM_JS = r"""
             if (_specBrowseAbort) _specBrowseAbort.abort();
             var ctrl = _specBrowseAbort = new AbortController();
             specFileList.classList.add('spec-file-list-pending');
+            specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">Loading…</span></div>';
 
             var fetchUrl;
             if (isCode) {
