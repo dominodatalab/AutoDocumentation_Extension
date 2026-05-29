@@ -218,32 +218,9 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
     browse = browse_code(info.owner_username, info.name)
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
-    repos = ps.get("repositories") or []
     repo_id: Optional[str] = None
     location = "/mnt/code" if is_git else "/mnt"
-    target_loc = "/mnt/code" if is_git else "/mnt"
-    local_repo: Optional[dict[str, Any]] = None
-    for r in repos:
-        if not isinstance(r, dict):
-            continue
-        if (r.get("location") or "").strip() == target_loc:
-            local_repo = r
-            break
-    if local_repo is None and not is_git:
-        for r in repos:
-            if not isinstance(r, dict):
-                continue
-            if not (r.get("location") or "").strip().startswith("/mnt/imported"):
-                local_repo = r
-                break
-    if local_repo is not None:
-        rid = local_repo.get("id")
-        if rid:
-            repo_id = str(rid)
-        loc = (local_repo.get("location") or "").strip()
-        if loc:
-            location = loc
-    if is_git and not repo_id:
+    if is_git:
         try:
             proj_data = _domino_request("GET", f"/v4/projects/{project_id}")
             main_repo = (proj_data or {}).get("mainRepository") or {}
@@ -251,7 +228,7 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
             if rid:
                 repo_id = str(rid)
         except Exception as exc:
-            logger.warning("get_code_source_info: mainRepository fallback failed: %s", exc)
+            logger.warning("get_code_source_info: mainRepository lookup failed: %s", exc)
     return {"is_git": is_git, "repo_id": repo_id, "location": location}
 
 
