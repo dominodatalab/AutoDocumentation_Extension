@@ -37,6 +37,8 @@ from domino_client import (
     browse_gbp_code,
     browse_dfs_code,
     read_gbp_file_raw,
+    git_browse,
+    get_code_paths,
 )
 
 # No skip markers needed — all functions now exist in domino_client
@@ -626,3 +628,77 @@ class TestReadGbpFileRaw:
         with patch.object(dc, "_resolve_api_host", return_value=None):
             with pytest.raises(RuntimeError, match="not configured"):
                 read_gbp_file_raw("proj-1", "repo-1", "f.yaml")
+
+
+# ===================================================================
+# git_browse() tests
+# ===================================================================
+
+class TestGitBrowse:
+    def test_calls_gitBrowse_endpoint(self):
+        resp = {"repositories": [{"location": "/mnt/imported/code/myrepo"}]}
+        with patch.object(dc, "_domino_request", return_value=resp) as mock_req:
+            result = git_browse("alice", "myproj")
+        assert result == resp
+        assert mock_req.call_args[0][1] == "/v4/code/gitBrowse"
+        assert mock_req.call_args[1]["params"]["ownerUsername"] == "alice"
+        assert mock_req.call_args[1]["params"]["projectName"] == "myproj"
+
+
+# ===================================================================
+# get_code_paths() tests
+# ===================================================================
+
+class TestGetCodePaths:
+    def _make_proj(self):
+        from domino_client import ProjectInfo
+        return ProjectInfo(id="proj-1", name="myproj", owner_username="alice")
+
+    def test_gbp_with_imported_repos(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        git_resp = {"repositories": [
+            {"location": "/mnt/imported/code/repoA"},
+            {"location": "/mnt/imported/code/repoB"},
+        ]}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", return_value=git_resp):
+            result = get_code_paths("proj-1")
+        assert result["default"] == "/mnt/code"
+        assert result["paths"][0] == "/mnt/code"
+        assert "/mnt/imported/code/repoA" in result["paths"]
+        assert "/mnt/imported/code/repoB" in result["paths"]
+
+    def test_dfs_with_imported_repos(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": False}}
+        git_resp = {"repositories": [{"location": "/repos/repoX"}]}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", return_value=git_resp):
+            result = get_code_paths("proj-1")
+        assert result["default"] == "/mnt"
+        assert result["paths"][0] == "/mnt"
+        assert "/repos/repoX" in result["paths"]
+
+    def test_gbp_no_imported_repos(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        git_resp = {"repositories": []}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", return_value=git_resp):
+            result = get_code_paths("proj-1")
+        assert result["paths"] == ["/mnt/code"]
+
+    def test_git_browse_failure_returns_default_only(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": True}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "git_browse", side_effect=Exception("timeout")):
+            result = get_code_paths("proj-1")
+        assert result["default"] == "/mnt/code"
+        assert result["paths"] == ["/mnt/code"]
+
+    def test_unresolvable_project_raises(self):
+        with patch.object(dc, "resolve_project", return_value=None):
+            with pytest.raises(ValueError, match="Could not resolve"):
+                get_code_paths("proj-bad")

@@ -78,6 +78,24 @@ def _build_advanced_options(tier_options):
     return Div(
             Div(
                 Div(
+                    Label("Code path", for_="field-code_path"),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Path to the source code to be documented."),
+                    cls="label-row",
+                ),
+                Input(
+                    name="code_path",
+                    id="field-code_path",
+                    type="text",
+                    list="code-path-list",
+                    placeholder="Loading\u2026",
+                ),
+                Datalist(id="code-path-list"),
+                cls="field",
+                id="code-path-field",
+            ),
+
+            Div(
+                Div(
                     Label("Hardware tier", for_="field-hardware_tier"),
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the Domino job."),
                     cls="label-row",

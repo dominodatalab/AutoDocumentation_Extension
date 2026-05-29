@@ -261,12 +261,32 @@ MAIN_DOM_JS = r"""
         })();
 
         // ── Advanced options modal ─────────────────────────────────────
+        function _loadCodePaths() {
+            var input = document.getElementById('field-code_path');
+            var list = document.getElementById('code-path-list');
+            if (!input || !list) return;
+            var pid = resolvedProjectId();
+            if (!pid) return;
+            fetch(_adUrl('api/code-paths') + '?projectId=' + encodeURIComponent(pid))
+                .then(_checkResp).then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!input.value) input.value = data.default || '';
+                    list.innerHTML = '';
+                    (data.paths || []).forEach(function(p) {
+                        var opt = document.createElement('option');
+                        opt.value = p;
+                        list.appendChild(opt);
+                    });
+                })
+                .catch(function() {});
+        }
+
         (function() {
             var overlay = document.getElementById('adv-opts-overlay');
             var openBtn = document.getElementById('adv-opts-open-btn');
             var closeBtn = document.getElementById('adv-opts-close-btn');
             var doneBtn = document.getElementById('adv-opts-done-btn');
-            function open() { if (overlay) overlay.classList.add('open'); }
+            function open() { if (overlay) overlay.classList.add('open'); _loadCodePaths(); }
             function close() { if (overlay) overlay.classList.remove('open'); }
             if (openBtn) openBtn.addEventListener('click', open);
             if (closeBtn) closeBtn.addEventListener('click', close);
@@ -1625,6 +1645,7 @@ MAIN_DOM_JS = r"""
                         latest_only: chk('filter-latest-only'),
                         hardware_tier: val('field-hardware_tier'),
                         provider_base_url: val('field-provider_base_url'),
+                        code_path: val('field-code_path'),
                     };
 
                     var pid = resolvedProjectId();

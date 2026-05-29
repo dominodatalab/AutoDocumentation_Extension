@@ -202,6 +202,40 @@ def browse_code(
     return _domino_request("GET", "/v4/code/browseCode", params=params)
 
 
+def git_browse(owner_username: str, project_name: str) -> dict[str, Any]:
+    """GET /v4/code/gitBrowse. Returns project git browse info including imported repos."""
+    params: dict[str, Any] = {
+        "ownerUsername": owner_username,
+        "projectName": project_name,
+    }
+    return _domino_request("GET", "/v4/code/gitBrowse", params=params)
+
+
+def get_code_paths(project_id: str) -> dict[str, Any]:
+    """Return {default, paths} for the code path selector.
+
+    default is /mnt/code (GBP) or /mnt (DFS).
+    paths includes default plus the location of each imported git repo.
+    """
+    info = resolve_project(project_id)
+    if not info:
+        raise ValueError(f"Could not resolve project {project_id}")
+    browse = browse_code(info.owner_username, info.name)
+    ps = browse.get("projectSettings") or {}
+    is_git = bool(ps.get("isGitBasedProject"))
+    default_path = "/mnt/code" if is_git else "/mnt"
+    paths: list[str] = [default_path]
+    try:
+        git_data = git_browse(info.owner_username, info.name)
+        for repo in (git_data or {}).get("repositories") or []:
+            loc = (repo or {}).get("location", "").strip()
+            if loc and loc not in paths:
+                paths.append(loc)
+    except Exception as exc:
+        logger.warning("get_code_paths: gitBrowse failed: %s", exc)
+    return {"default": default_path, "paths": paths}
+
+
 def get_project_code_root(owner_username: str, project_name: str) -> str:
     """Return the code root path for a project (/mnt/code for git-based, /mnt otherwise)."""
     browse = browse_code(owner_username, project_name, path_string="")

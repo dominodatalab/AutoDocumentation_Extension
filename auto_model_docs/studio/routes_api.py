@@ -199,6 +199,17 @@ def register_api_routes(rt):
 
     rt("/api/code-root")(api_code_root)
 
+    async def api_code_paths(req: Request):
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
+        try:
+            result = domino_client.get_code_paths(pid)
+            return Response(json.dumps(result), media_type="application/json")
+        except Exception as exc:
+            return Response(json.dumps({"error": str(exc)}), status_code=500, media_type="application/json")
+
+    rt("/api/code-paths")(api_code_paths)
+
     async def api_code_files(req: Request):
         pid = _resolve_request_project_id(req)
         require_project_write(pid)
