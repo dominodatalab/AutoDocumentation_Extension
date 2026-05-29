@@ -199,18 +199,6 @@ def register_api_routes(rt):
 
     rt("/api/code-root")(api_code_root)
 
-    async def api_debug_code_root(req: Request):
-        pid = _resolve_request_project_id(req)
-        require_project_write(pid)
-        info = domino_client.resolve_project(pid)
-        browse = domino_client.browse_code(info.owner_username, info.name)
-        ps = browse.get("projectSettings") or {}
-        git_repos_raw = domino_client._domino_request("GET", f"/v4/projects/{pid}/gitRepositories")
-        proj_raw = domino_client._domino_request("GET", f"/v4/projects/{pid}")
-        return Response(json.dumps({"projectSettings": ps, "browseKeys": list(browse.keys()), "gitRepos": git_repos_raw, "project": proj_raw}), media_type="application/json")
-
-    rt("/api/debug-code-root")(api_debug_code_root)
-
     async def api_code_files(req: Request):
         pid = _resolve_request_project_id(req)
         require_project_write(pid)

@@ -229,7 +229,7 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
         if (r.get("location") or "").strip() == target_loc:
             local_repo = r
             break
-    if local_repo is None:
+    if local_repo is None and not is_git:
         for r in repos:
             if not isinstance(r, dict):
                 continue
@@ -245,16 +245,13 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
             location = loc
     if is_git and not repo_id:
         try:
-            repos_data = _domino_request("GET", f"/v4/projects/{project_id}/gitRepositories")
-            repo_list = repos_data if isinstance(repos_data, list) else (repos_data.get("repositories") or repos_data.get("items") or [])
-            for r in repo_list:
-                if isinstance(r, dict):
-                    rid = r.get("id")
-                    if rid:
-                        repo_id = str(rid)
-                        break
+            proj_data = _domino_request("GET", f"/v4/projects/{project_id}")
+            main_repo = (proj_data or {}).get("mainRepository") or {}
+            rid = main_repo.get("id")
+            if rid:
+                repo_id = str(rid)
         except Exception as exc:
-            logger.warning("get_code_source_info: git repos fallback failed: %s", exc)
+            logger.warning("get_code_source_info: mainRepository fallback failed: %s", exc)
     return {"is_git": is_git, "repo_id": repo_id, "location": location}
 
 

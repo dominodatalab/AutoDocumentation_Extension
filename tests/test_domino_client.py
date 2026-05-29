@@ -477,13 +477,15 @@ class TestGetCodeSourceInfo:
         assert info["is_git"] is False
         assert info["repo_id"] == "repo-2"
 
-    def test_no_repos_uses_default_location(self):
+    def test_no_repos_uses_main_repository_fallback(self):
         browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": []}}
+        proj_resp = {"mainRepository": {"id": "main-repo-1"}}
         with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
-             patch.object(dc, "browse_code", return_value=browse_resp):
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "_domino_request", return_value=proj_resp):
             info = get_code_source_info("proj-1")
         assert info["location"] == "/mnt/code"
-        assert info["repo_id"] is None
+        assert info["repo_id"] == "main-repo-1"
 
     def test_skips_imported_repos_to_find_local(self):
         repos = [
@@ -497,27 +499,27 @@ class TestGetCodeSourceInfo:
         assert info["repo_id"] == "local-1"
         assert info["location"] == "/mnt/code"
 
-    def test_falls_back_to_non_imported_repo_when_no_exact_match(self):
-        repos = [
-            {"id": "imported-1", "location": "/mnt/imported/code/SomeRepo"},
-            {"id": "other-1", "location": "/mnt/somewhere"},
-        ]
+    def test_gbp_only_imported_repos_falls_back_to_main_repository(self):
+        repos = [{"id": "imported-1", "location": "/mnt/imported/code/SomeRepo"}]
         browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": repos}}
-        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
-             patch.object(dc, "browse_code", return_value=browse_resp):
-            info = get_code_source_info("proj-1")
-        assert info["repo_id"] == "other-1"
-
-    def test_uses_git_repos_api_fallback_when_local_repo_has_no_id(self):
-        repos = [{"location": "/mnt/code"}]
-        browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": repos}}
-        git_repos_resp = [{"id": "primary-repo-1"}]
+        proj_resp = {"mainRepository": {"id": "gbp-main-repo"}}
         with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
              patch.object(dc, "browse_code", return_value=browse_resp), \
-             patch.object(dc, "_domino_request", return_value=git_repos_resp) as mock_req:
+             patch.object(dc, "_domino_request", return_value=proj_resp) as mock_req:
+            info = get_code_source_info("proj-1")
+        assert info["repo_id"] == "gbp-main-repo"
+        assert "/v4/projects/proj-1" in mock_req.call_args[0][1]
+
+    def test_uses_main_repository_api_fallback_when_local_repo_has_no_id(self):
+        repos = [{"location": "/mnt/code"}]
+        browse_resp = {"projectSettings": {"isGitBasedProject": True, "repositories": repos}}
+        proj_resp = {"mainRepository": {"id": "primary-repo-1"}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp), \
+             patch.object(dc, "_domino_request", return_value=proj_resp) as mock_req:
             info = get_code_source_info("proj-1")
         assert info["repo_id"] == "primary-repo-1"
-        assert "/v4/projects/proj-1/gitRepositories" in mock_req.call_args[0][1]
+        assert "/v4/projects/proj-1" in mock_req.call_args[0][1]
 
     def test_unresolvable_project_raises(self):
         with patch.object(dc, "resolve_project", return_value=None):
