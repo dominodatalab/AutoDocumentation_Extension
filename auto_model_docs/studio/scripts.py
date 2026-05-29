@@ -262,26 +262,76 @@ MAIN_DOM_JS = r"""
 
         // ── Advanced options modal ─────────────────────────────────────
         var _codePathsLoaded = false;
+        var _codePaths = [];
+        var _comboboxWired = false;
+
+        function _renderComboboxOptions(paths) {
+            var ul = document.getElementById('code-path-dropdown');
+            if (!ul) return;
+            ul.innerHTML = '';
+            paths.forEach(function(p) {
+                var li = document.createElement('li');
+                li.textContent = p;
+                li.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    var inp = document.getElementById('field-code_path');
+                    if (inp) inp.value = p;
+                    _hideComboboxDropdown();
+                });
+                ul.appendChild(li);
+            });
+        }
+
+        function _showComboboxDropdown() {
+            var ul = document.getElementById('code-path-dropdown');
+            if (ul) ul.classList.remove('hidden');
+        }
+
+        function _hideComboboxDropdown() {
+            var ul = document.getElementById('code-path-dropdown');
+            if (ul) ul.classList.add('hidden');
+        }
+
+        function _wireCombobox() {
+            if (_comboboxWired) return;
+            _comboboxWired = true;
+            var inp = document.getElementById('field-code_path');
+            if (!inp) return;
+            inp.addEventListener('focus', function() {
+                _renderComboboxOptions(_codePaths);
+                _showComboboxDropdown();
+            });
+            inp.addEventListener('input', function() {
+                var q = inp.value.toLowerCase();
+                var filtered = q
+                    ? _codePaths.filter(function(p) { return p.toLowerCase().indexOf(q) !== -1; })
+                    : _codePaths;
+                _renderComboboxOptions(filtered);
+                _showComboboxDropdown();
+            });
+            inp.addEventListener('blur', function() {
+                setTimeout(_hideComboboxDropdown, 150);
+            });
+        }
+
         function _loadCodePaths() {
             if (_codePathsLoaded) return;
-            var sel = document.getElementById('field-code_path');
-            if (!sel) return;
+            var inp = document.getElementById('field-code_path');
+            if (!inp) return;
             var pid = resolvedProjectId();
             if (!pid) return;
             fetch(_adUrl('api/code-paths') + '?projectId=' + encodeURIComponent(pid))
                 .then(_checkResp).then(function(r) { return r.json(); })
                 .then(function(data) {
                     _codePathsLoaded = true;
-                    sel.innerHTML = '';
-                    (data.paths || []).forEach(function(p, i) {
-                        var opt = document.createElement('option');
-                        opt.value = p;
-                        opt.textContent = p;
-                        if (p === data.default || i === 0) opt.selected = true;
-                        sel.appendChild(opt);
-                    });
+                    _codePaths = data.paths || [];
+                    var def = data.default || (_codePaths[0] || '');
+                    inp.value = def;
+                    inp.placeholder = '';
+                    _renderComboboxOptions(_codePaths);
+                    _wireCombobox();
                 })
-                .catch(function() {});
+                .catch(function() { if (inp) inp.placeholder = ''; });
         }
 
         (function() {

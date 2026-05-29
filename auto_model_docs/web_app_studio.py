@@ -82,10 +82,17 @@ def _build_advanced_options(tier_options):
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Path to the source code to be documented."),
                     cls="label-row",
                 ),
-                Select(
-                    Option("Loading\u2026", value="", disabled=True, selected=True),
-                    name="code_path",
-                    id="field-code_path",
+                Div(
+                    Input(
+                        name="code_path",
+                        id="field-code_path",
+                        type="text",
+                        placeholder="Loading\u2026",
+                        autocomplete="off",
+                    ),
+                    Ul(id="code-path-dropdown", cls="combobox-dropdown hidden"),
+                    cls="combobox",
+                    id="code-path-combobox",
                 ),
                 cls="field",
                 id="code-path-field",

@@ -430,6 +430,46 @@ textarea:disabled {
     border-color: #65657b;
     cursor: not-allowed;
 }
+.combobox {
+    position: relative;
+    width: 100%;
+}
+.combobox input[type="text"] {
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2365657b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    cursor: pointer;
+}
+.combobox-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #d6d6d6;
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 200;
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.combobox-dropdown.hidden {
+    display: none;
+}
+.combobox-dropdown li {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #2e2e38;
+    font-family: var(--font-body);
+}
+.combobox-dropdown li:hover {
+    background: #f0f0f7;
+}
 input[type="checkbox"],
 input[type="radio"] {
     appearance: auto;
