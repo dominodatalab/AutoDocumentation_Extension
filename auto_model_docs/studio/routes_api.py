@@ -185,6 +185,53 @@ def register_api_routes(rt):
 
     rt("/api/dataset-files")(api_dataset_files)
 
+    async def api_code_root(req: Request):
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
+        try:
+            info = domino_client.get_code_source_info(pid)
+            return Response(
+                json.dumps({"isGit": info["is_git"], "repoId": info["repo_id"], "location": info["location"]}),
+                media_type="application/json",
+            )
+        except Exception as exc:
+            return Response(json.dumps({"error": str(exc)}), status_code=500, media_type="application/json")
+
+    rt("/api/code-root")(api_code_root)
+
+    async def api_code_paths(req: Request):
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
+        try:
+            result = domino_client.get_code_paths(pid)
+            return Response(json.dumps(result), media_type="application/json")
+        except Exception as exc:
+            return Response(json.dumps({"error": str(exc)}), status_code=500, media_type="application/json")
+
+    rt("/api/code-paths")(api_code_paths)
+
+    async def api_code_files(req: Request):
+        pid = _resolve_request_project_id(req)
+        require_project_write(pid)
+        is_git = req.query_params.get("isGit", "").lower() in ("true", "1")
+        repo_id = req.query_params.get("repoId", "").strip()
+        path = req.query_params.get("path", "").strip()
+        try:
+            if is_git:
+                if not repo_id:
+                    return Response(json.dumps({"error": "repoId required for git projects"}), status_code=400, media_type="application/json")
+                files = domino_client.browse_gbp_code(pid, repo_id, path)
+            else:
+                proj = domino_client.resolve_project(pid)
+                if not proj:
+                    return Response(json.dumps({"error": "Could not resolve project"}), status_code=500, media_type="application/json")
+                files = domino_client.browse_dfs_code(proj.owner_username, proj.name, path)
+            return Response(json.dumps(files), media_type="application/json")
+        except Exception as exc:
+            return Response(json.dumps({"error": str(exc)}), status_code=500, media_type="application/json")
+
+    rt("/api/code-files")(api_code_files)
+
     async def api_upload_spec_to_dataset(req: Request):
         """Save a spec template YAML into the project's autodoc dataset.
 
@@ -316,17 +363,20 @@ def register_api_routes(rt):
         if not isinstance(payload, dict):
             return Response(json.dumps({"error": "Invalid JSON payload"}), status_code=400, media_type="application/json")
 
+        source_type = str(payload.get("sourceType") or "dataset").strip()
         source_dataset_id = str(payload.get("sourceDatasetId") or "").strip()
         source_snapshot_id = str(payload.get("sourceSnapshotId") or "").strip()
         source_path = str(payload.get("sourcePath") or "").strip()
+        source_repo_id = str(payload.get("sourceRepoId") or "").strip()
         filename = str(payload.get("filename") or "").strip() or source_path.rsplit("/", 1)[-1]
 
-        if not source_dataset_id:
-            return Response(json.dumps({"error": "sourceDatasetId is required"}), status_code=400, media_type="application/json")
         if not source_path:
             return Response(json.dumps({"error": "sourcePath is required"}), status_code=400, media_type="application/json")
         if not filename:
             return Response(json.dumps({"error": "filename is required"}), status_code=400, media_type="application/json")
+
+        if source_type == "dataset" and not source_dataset_id:
+            return Response(json.dumps({"error": "sourceDatasetId is required"}), status_code=400, media_type="application/json")
 
         # Destination: autodoc dataset for this project.
         ensured = domino_datasets.ensure_dataset(pid)
@@ -334,17 +384,23 @@ def register_api_routes(rt):
         if not dest_dataset_id:
             return Response(json.dumps({"error": "Destination autodoc dataset has no id"}), status_code=500, media_type="application/json")
 
-        if not source_snapshot_id:
-            source_snapshot_id = domino_datasets.get_rw_snapshot_id(source_dataset_id)
-        if not source_snapshot_id:
-            return Response(
-                json.dumps({"error": "Could not resolve source snapshot for dataset"}),
-                status_code=400,
-                media_type="application/json",
-            )
-
         try:
-            raw = DatasetManager.read_file(source_snapshot_id, source_path)
+            if source_type == "gbp_git":
+                if not source_repo_id:
+                    return Response(json.dumps({"error": "sourceRepoId is required for gbp_git"}), status_code=400, media_type="application/json")
+                raw = domino_client.read_gbp_file_raw(pid, source_repo_id, source_path)
+            elif source_type == "dfs_code":
+                raw = domino_client.download_artifact_at_head(pid, source_path)
+            else:
+                if not source_snapshot_id:
+                    source_snapshot_id = domino_datasets.get_rw_snapshot_id(source_dataset_id)
+                if not source_snapshot_id:
+                    return Response(
+                        json.dumps({"error": "Could not resolve source snapshot for dataset"}),
+                        status_code=400,
+                        media_type="application/json",
+                    )
+                raw = DatasetManager.read_file(source_snapshot_id, source_path)
         except Exception as exc:
             return Response(json.dumps({"error": f"Could not read source template: {exc}"}), status_code=500, media_type="application/json")
 

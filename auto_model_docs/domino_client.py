@@ -202,12 +202,132 @@ def browse_code(
     return _domino_request("GET", "/v4/code/browseCode", params=params)
 
 
+def git_browse(owner_username: str, project_name: str) -> dict[str, Any]:
+    """GET /v4/code/gitBrowse. Returns project git browse info including imported repos."""
+    params: dict[str, Any] = {
+        "ownerUsername": owner_username,
+        "projectName": project_name,
+    }
+    return _domino_request("GET", "/v4/code/gitBrowse", params=params)
+
+
+def get_code_paths(project_id: str) -> dict[str, Any]:
+    """Return {default, paths} for the code path selector.
+
+    default is /mnt/code (GBP) or /mnt (DFS).
+    paths includes default plus the location of each imported git repo.
+    """
+    info = resolve_project(project_id)
+    if not info:
+        raise ValueError(f"Could not resolve project {project_id}")
+    browse = browse_code(info.owner_username, info.name)
+    ps = browse.get("projectSettings") or {}
+    is_git = bool(ps.get("isGitBasedProject"))
+    default_path = "/mnt/code" if is_git else "/mnt"
+    paths: list[str] = [default_path]
+    try:
+        git_data = git_browse(info.owner_username, info.name)
+        for repo in (git_data or {}).get("repositories") or []:
+            loc = (repo or {}).get("location", "").strip()
+            if loc and loc not in paths:
+                paths.append(loc)
+    except Exception as exc:
+        logger.warning("get_code_paths: gitBrowse failed: %s", exc)
+    return {"default": default_path, "paths": paths}
+
+
 def get_project_code_root(owner_username: str, project_name: str) -> str:
     """Return the code root path for a project (/mnt/code for git-based, /mnt otherwise)."""
     browse = browse_code(owner_username, project_name, path_string="")
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
     return "/mnt/code" if is_git else "/mnt"
+
+
+def get_code_source_info(project_id: str) -> dict[str, Any]:
+    """Return {is_git, repo_id, location} for the project's default code source."""
+    info = resolve_project(project_id)
+    if not info:
+        raise ValueError(f"Could not resolve project {project_id}")
+    browse = browse_code(info.owner_username, info.name)
+    ps = browse.get("projectSettings") or {}
+    is_git = bool(ps.get("isGitBasedProject"))
+    repo_id: Optional[str] = None
+    location = "/mnt/code" if is_git else "/mnt"
+    if is_git:
+        try:
+            proj_data = _domino_request("GET", f"/v4/projects/{project_id}")
+            main_repo = (proj_data or {}).get("mainRepository") or {}
+            rid = main_repo.get("id")
+            if rid:
+                repo_id = str(rid)
+        except Exception as exc:
+            logger.warning("get_code_source_info: mainRepository lookup failed: %s", exc)
+    return {"is_git": is_git, "repo_id": repo_id, "location": location}
+
+
+def browse_gbp_code(project_id: str, repo_id: str, directory: str = "") -> list[dict[str, Any]]:
+    """Browse files in a GBP git repo at the given directory path."""
+    params: dict[str, Any] = {}
+    if directory:
+        params["directory"] = directory
+    data = _domino_request(
+        "GET",
+        f"/v4/projects/{project_id}/gitRepositories/{repo_id}/git/browse",
+        params=params,
+    )
+    inner = data.get("data") or {}
+    items = inner.get("items") or data.get("items") or []
+    result: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind", "")
+        result.append({
+            "fileName": item.get("name", ""),
+            "isDirectory": kind == "dir",
+        })
+    return result
+
+
+def browse_dfs_code(owner_username: str, project_name: str, file_path: str = "") -> list[dict[str, Any]]:
+    """Browse DFS code files/directories at the given path."""
+    fp = (file_path or "").strip() or "/"
+    params: dict[str, Any] = {
+        "ownerUsername": owner_username,
+        "projectName": project_name,
+        "filePath": fp,
+    }
+    result: list[dict[str, Any]] = []
+    try:
+        dirs = _domino_request("GET", "/v4/files/browseDirectories", params=params)
+        for d in (dirs if isinstance(dirs, list) else []):
+            if isinstance(d, dict):
+                result.append({"fileName": d.get("name", ""), "isDirectory": True})
+    except Exception as exc:
+        logger.warning("browse_dfs_code directories failed: %s", exc)
+    try:
+        files = _domino_request("GET", "/v4/files/browseFiles", params=params)
+        for f in (files if isinstance(files, list) else []):
+            if isinstance(f, dict):
+                result.append({"fileName": f.get("name", ""), "isDirectory": False})
+    except Exception as exc:
+        logger.warning("browse_dfs_code files failed: %s", exc)
+    return result
+
+
+def read_gbp_file_raw(project_id: str, repo_id: str, file_path: str) -> bytes:
+    """Read raw file content from a GBP git repo."""
+    import httpx
+    base_url = _resolve_api_host()
+    if not base_url:
+        raise RuntimeError("Domino API host is not configured")
+    url = f"{base_url}/v4/projects/{project_id}/gitRepositories/{repo_id}/git/raw"
+    headers = _get_auth_headers()
+    with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
+        resp = client.get(url, params={"fileName": file_path}, headers=headers)
+        resp.raise_for_status()
+        return resp.content
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +614,7 @@ def submit_job(
     """Submit a Domino job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
 
-    title = f"AutoDoc: {pname or pid}" + (f" ({branch})" if branch else "")
+    title = f"Model Docs: {pname or pid}" + (f" ({branch})" if branch else "")
 
     command_str = " ".join(command) if isinstance(command, list) else command
 

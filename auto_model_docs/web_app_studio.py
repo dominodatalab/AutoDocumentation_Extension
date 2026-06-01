@@ -78,6 +78,28 @@ def _build_advanced_options(tier_options):
     return Div(
             Div(
                 Div(
+                    Label("Code path", for_="field-code_path"),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Path to the source code to be documented."),
+                    cls="label-row",
+                ),
+                Div(
+                    Input(
+                        name="code_path",
+                        id="field-code_path",
+                        type="text",
+                        placeholder="Loading\u2026",
+                        autocomplete="off",
+                    ),
+                    Ul(id="code-path-dropdown", cls="combobox-dropdown hidden"),
+                    cls="combobox",
+                    id="code-path-combobox",
+                ),
+                cls="field",
+                id="code-path-field",
+            ),
+
+            Div(
+                Div(
                     Label("Hardware tier", for_="field-hardware_tier"),
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the Domino job."),
                     cls="label-row",
@@ -155,7 +177,7 @@ async def index(req: Request):
     project_id = _resolve_request_project_id(req)
     if not project_id:
         return (
-            Title("ModelDoc — Domino"),
+            Title("Model Docs — Domino"),
             Style(fontawesome_faces_css()),
             Script(STUDIO_FONT_BASE_PATCH_JS),
             Style(STUDIO_CSS),
@@ -283,7 +305,7 @@ async def index(req: Request):
             )
 
     return (
-        Title("ModelDoc — Domino"),
+        Title("Model Docs — Domino"),
         Style(fontawesome_faces_css()),
         Script(STUDIO_FONT_BASE_PATCH_JS),
         # Header
@@ -303,7 +325,7 @@ async def index(req: Request):
                     Div(
                         Div(
                             Div(
-                                Span("ModelDoc", cls="page-title-text"),
+                                Span("Model Docs", cls="page-title-text"),
                                 Span(
                                     project_display_name,
                                     cls="page-title-project",
@@ -576,9 +598,9 @@ async def index(req: Request):
                         ),
                         Div(
                             Div(
-                                Label("Dataset", Span(" *", cls="required-star")),
+                                Label("Source", Span(" *", cls="required-star")),
                                 Select(
-                                    Option("Loading datasets...", value="", disabled=True, selected=True),
+                                    Option("Loading sources...", value="", disabled=True, selected=True),
                                     id="browse-dataset-select",
                                 ),
                                 cls="field",

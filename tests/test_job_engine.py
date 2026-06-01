@@ -392,6 +392,49 @@ async def test_parse_request_raises_when_no_query_project_id():
         await je._parse_request(req)
 
 
+@pytest.mark.asyncio
+async def test_parse_request_code_path_override_used_as_code_root():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20240620",
+            "code_path": "/custom/code/path",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.code_root == "/custom/code/path"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_empty_code_path_falls_back_to_auto_detect():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    mock_state = sys.modules.get("studio.state")
+    mock_state.domino_client.resolve_project.return_value = MagicMock(
+        owner_username="alice", name="myproj"
+    )
+    mock_state.domino_client.get_project_code_root.return_value = "/mnt/code"
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20240620",
+            "code_path": "",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.code_root == "/mnt/code"
+    mock_state.domino_client.get_project_code_root.assert_called()
+
+
 # ---------------------------------------------------------------------------
 # _build_job_command
 # ---------------------------------------------------------------------------

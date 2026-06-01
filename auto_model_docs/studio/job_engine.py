@@ -139,13 +139,17 @@ async def _parse_request(req: Request) -> JobRequest:
     notebook_path = _form_str(body, "notebook_path")
     notebook_from_cache = _checkbox_truthy(body.get("notebook_from_cache"))
 
-    info = domino_client.resolve_project(project_id)
-    if not info:
-        raise RuntimeError("Could not resolve project info to determine code root.")
-    try:
-        _code_root = domino_client.get_project_code_root(info.owner_username, info.name)
-    except Exception as exc:
-        raise RuntimeError(f"Could not determine code root for project: {exc}") from exc
+    _code_path = _form_str(body, "code_path").strip()
+    if _code_path:
+        _code_root = _code_path
+    else:
+        info = domino_client.resolve_project(project_id)
+        if not info:
+            raise RuntimeError("Could not resolve project info to determine code root.")
+        try:
+            _code_root = domino_client.get_project_code_root(info.owner_username, info.name)
+        except Exception as exc:
+            raise RuntimeError(f"Could not determine code root for project: {exc}") from exc
 
     return JobRequest(
         spec_path=_form_str(body, "spec_path"),

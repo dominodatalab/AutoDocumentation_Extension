@@ -120,7 +120,7 @@ def sync_builtins_to_autodoc_dataset(dataset_id: str, dest_snapshot_id: str | No
     if dest_snapshot_id is None:
         dest_snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id)
     if not dest_snapshot_id:
-        raise RuntimeError("Could not resolve destination snapshot for autodoc dataset")
+        raise RuntimeError("Could not resolve destination snapshot for model docs dataset")
 
     filenames = packaged_template_filenames()
     logger.info(
