@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -754,3 +755,87 @@ class TestCacheSpecFields:
         assert loaded_spec.hints == {"Overview": "Keep it brief"}
         assert loaded_spec.citation_style == "numeric"
         assert loaded_spec.formatting == {"font_size": 11}
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: governance wiring
+# ---------------------------------------------------------------------------
+
+
+class TestGovernancePhase2Wiring:
+    @patch("autodoc.orchestrator.compute_policy")
+    @patch("autodoc.orchestrator.get_findings")
+    @patch("autodoc.orchestrator.list_bundles")
+    @patch("autodoc.orchestrator.Orchestrator._save_results_cache")
+    @patch("autodoc.orchestrator.ArtifactScanner")
+    @patch("autodoc.orchestrator.CodeScanner")
+    @patch("autodoc.orchestrator.DocumentBuilder")
+    @patch("autodoc.orchestrator.SectionPlanner")
+    @patch("autodoc.orchestrator.ContentGenerator")
+    @patch.dict("os.environ", {"DOMINO_PROJECT_ID": "proj-123"}, clear=True)
+    @patch("autodoc.orchestrator.detect_language", return_value=(PYTHON_PROFILE, 1))
+    def test_context_governance_passed_to_generator(
+        self,
+        mock_detect,
+        mock_gen_cls,
+        mock_planner_cls,
+        mock_builder_cls,
+        mock_code_scanner_cls,
+        mock_artifact_scanner_cls,
+        mock_save_cache,
+        mock_list_bundles,
+        mock_get_findings,
+        mock_compute_policy,
+    ):
+        orch = Orchestrator(
+            llm=_make_mock_llm(),
+            sanitizer=_make_mock_sanitizer(),
+            code_root=Path("/tmp"),
+        )
+
+        orch.code_scanner.scan = AsyncMock(return_value=CodeContext())
+        orch.artifact_scanner.scan = AsyncMock(
+            return_value=ArtifactContext(
+                models=[ModelInfo(name="mymodel", version="1", stage="None", run_id="run-1")]
+            )
+        )
+
+        block = ContentBlock(
+            type=ContentType.NARRATIVE,
+            purpose="desc",
+            data_needed="code",
+            specifics={},
+            priority="required",
+        )
+        plan = SectionPlan(number="1", name="Overview", title="Overview", content_blocks=[block])
+        orch.planner.plan_section = AsyncMock(return_value=plan)
+
+        governance_policy = MagicMock()
+        mock_compute_policy.return_value = governance_policy
+        mock_get_findings.return_value = []
+        mock_list_bundles.return_value = [
+            MagicMock(
+                id="bundle-1",
+                policy_id="policy-1",
+                attachments=[
+                    MagicMock(
+                        type="ModelVersion",
+                        identifier={"name": "mymodel"},
+                    )
+                ],
+            )
+        ]
+
+        gen_called = []
+
+        async def _gen_side_effect(_block, context):
+            gen_called.append(context.governance)
+            return GeneratedContent(block_type=ContentType.NARRATIVE, content="text")
+
+        orch.generator.generate = AsyncMock(side_effect=_gen_side_effect)
+        orch.builder.build = AsyncMock(return_value=Path("/tmp/out.docx"))
+
+        asyncio.run(orch.generate(_make_spec(), on_progress=lambda *_: None))
+
+        assert gen_called, "generator.generate should be called at least once"
+        assert gen_called[0] == [governance_policy]

@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,18 @@ from autodoc.core.models import (
 from autodoc.generation import ContentGenerator, DocumentBuilder, NotebookBuilder, SectionPlanner
 from autodoc.llm import LLMClient
 from autodoc.scanning import ArtifactScanner, CodeScanner, ContentSanitizer
+from governance_client import compute_policy, get_findings, list_bundles
+from autodoc.core.models import BundleSummary, ComputedPolicy
+
+
+def _bundle_matches_models(bundle: BundleSummary, model_names: set[str]) -> bool:
+    for att in bundle.attachments:
+        if att.type != "ModelVersion":
+            continue
+        identifier_name = (att.identifier or {}).get("name", "")
+        if str(identifier_name) in model_names:
+            return True
+    return False
 
 
 # Type alias for progress callback
@@ -236,10 +249,26 @@ class Orchestrator:
             on_progress("Scanning", 1.0)
 
         # Phase 2: Plan
+        project_id = os.environ.get("DOMINO_PROJECT_ID", "").strip()
+        governance_data: List[ComputedPolicy] = []
+        if project_id:
+            scanned_model_names = {m.name for m in artifact_ctx.models or []}
+            all_bundles = list_bundles(project_id)
+            for bundle in all_bundles:
+                if not _bundle_matches_models(bundle, scanned_model_names):
+                    continue
+                cp = compute_policy(str(bundle.id), str(bundle.policy_id))
+                if cp is None:
+                    continue
+                cp.findings = get_findings(str(bundle.id))
+                governance_data.append(cp)
+
         if on_progress:
             on_progress("Planning", 0.0)
 
-        plans = await self._plan_all_sections(spec, code_ctx, artifact_ctx, on_progress)
+        plans = await self._plan_all_sections(
+            spec, code_ctx, artifact_ctx, governance_data, on_progress
+        )
 
         if on_progress:
             on_progress("Planning", 1.0)
@@ -249,7 +278,7 @@ class Orchestrator:
             on_progress("Generating", 0.0)
 
         results = await self._generate_all_content(
-            plans, code_ctx, artifact_ctx, on_progress
+            plans, code_ctx, artifact_ctx, governance_data, on_progress
         )
 
         if on_progress:
@@ -475,6 +504,7 @@ class Orchestrator:
         spec: DocumentSpec,
         code_ctx: CodeContext,
         artifact_ctx: ArtifactContext,
+        governance_data: List[ComputedPolicy],
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionPlan]:
         """Plan all sections in the document."""
@@ -493,6 +523,7 @@ class Orchestrator:
                         artifact_context=artifact_ctx,
                         section_name=section.name,
                         hint=spec.hints.get(section.name),
+                        governance=governance_data,
                     )
                     planning_tasks.append((section, context, str(section_num)))
                 else:
@@ -504,6 +535,7 @@ class Orchestrator:
                             model_name=model.name,
                             model_run_id=model.run_id,
                             hint=spec.hints.get(section.name),
+                            governance=governance_data,
                         )
                         planning_tasks.append((section, context, f"{section_num}.{j}"))
             else:
@@ -513,6 +545,7 @@ class Orchestrator:
                     artifact_context=artifact_ctx,
                     section_name=section.name,
                     hint=spec.hints.get(section.name),
+                    governance=governance_data,
                 )
                 planning_tasks.append((section, context, str(section_num)))
 
@@ -563,6 +596,7 @@ class Orchestrator:
         plans: List[SectionPlan],
         code_ctx: CodeContext,
         artifact_ctx: ArtifactContext,
+        governance_data: List[ComputedPolicy],
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionResult]:
         """Generate content for all sections in parallel."""
@@ -580,6 +614,7 @@ class Orchestrator:
                 section_name=plan.name,
                 model_name=plan.model_name,
                 model_run_id=plan.model_run_id,
+                governance=governance_data,
             )
 
             async def _gen_block(block):

@@ -137,4 +137,4 @@ DOMINO_APPS_README.md
 domino-apps-guidelines/
 
 # FastHTML session key (generated at runtime)
-auto_model_docs/.sesskey
+**/.sesskey

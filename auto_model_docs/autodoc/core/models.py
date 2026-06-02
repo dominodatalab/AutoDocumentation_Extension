@@ -447,6 +447,76 @@ class Citation:
     url: Optional[str] = None
 
 
+# =============================================================================
+# Governance / Bundle Models
+# =============================================================================
+
+
+@dataclass
+class BundleAttachment:
+    """A resource attached to a governance bundle."""
+
+    id: str
+    type: str
+    identifier: Dict[str, Any]
+
+
+@dataclass
+class BundleSummary:
+    """Metadata for a governance bundle (from GET /bundles or GET /bundles/{id})."""
+
+    id: str
+    name: str
+    project_id: str
+    policy_id: str
+    policy_name: str
+    state: str
+    evidence_restricted: bool
+    stage: Optional[str] = None
+    classification_value: Optional[str] = None
+    attachments: List[BundleAttachment] = field(default_factory=list)
+    created_at: Optional[str] = None
+
+
+@dataclass
+class GovernanceFinding:
+    """A finding on a governance bundle."""
+
+    id: str
+    bundle_id: str
+    name: str
+    severity: str
+    status: str
+    description: Optional[str] = None
+    assignee: Optional[str] = None
+    approver: Optional[str] = None
+    due_date: Optional[str] = None
+
+
+@dataclass
+class ArtifactResult:
+    """A submitted evidence answer for one artifact within a bundle."""
+
+    id: str
+    evidence_id: str
+    bundle_id: str
+    artifact_id: str
+    artifact_content: Any
+    is_latest: bool = False
+
+
+@dataclass
+class ComputedPolicy:
+    """Result of POST /rpc/compute-policy. Contains both policy definition and submitted answers."""
+
+    bundle: BundleSummary
+    policy_id: str
+    policy_name: str
+    policy_stages: List[Dict[str, Any]]
+    results: List[ArtifactResult]
+    findings: List[GovernanceFinding] = field(default_factory=list)
+
+
 
 @dataclass
 class GenerationContext:
@@ -459,6 +529,7 @@ class GenerationContext:
     model_run_id: Optional[str] = None
     hint: Optional[str] = None
     language: str = "python"
+    governance: List[ComputedPolicy] = field(default_factory=list)
 
 
 # =============================================================================
