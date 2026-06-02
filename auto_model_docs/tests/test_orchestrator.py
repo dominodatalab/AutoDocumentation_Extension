@@ -763,16 +763,12 @@ class TestCacheSpecFields:
 
 
 class TestGovernancePhase2Wiring:
-    @patch("autodoc.orchestrator.compute_policy")
-    @patch("autodoc.orchestrator.get_findings")
-    @patch("autodoc.orchestrator.list_bundles")
     @patch("autodoc.orchestrator.Orchestrator._save_results_cache")
     @patch("autodoc.orchestrator.ArtifactScanner")
     @patch("autodoc.orchestrator.CodeScanner")
     @patch("autodoc.orchestrator.DocumentBuilder")
     @patch("autodoc.orchestrator.SectionPlanner")
     @patch("autodoc.orchestrator.ContentGenerator")
-    @patch.dict("os.environ", {"DOMINO_PROJECT_ID": "proj-123"}, clear=True)
     @patch("autodoc.orchestrator.detect_language", return_value=(PYTHON_PROFILE, 1))
     def test_context_governance_passed_to_generator(
         self,
@@ -783,9 +779,6 @@ class TestGovernancePhase2Wiring:
         mock_code_scanner_cls,
         mock_artifact_scanner_cls,
         mock_save_cache,
-        mock_list_bundles,
-        mock_get_findings,
-        mock_compute_policy,
     ):
         orch = Orchestrator(
             llm=_make_mock_llm(),
@@ -811,20 +804,7 @@ class TestGovernancePhase2Wiring:
         orch.planner.plan_section = AsyncMock(return_value=plan)
 
         governance_policy = MagicMock()
-        mock_compute_policy.return_value = governance_policy
-        mock_get_findings.return_value = []
-        mock_list_bundles.return_value = [
-            MagicMock(
-                id="bundle-1",
-                policy_id="policy-1",
-                attachments=[
-                    MagicMock(
-                        type="ModelVersion",
-                        identifier={"name": "mymodel"},
-                    )
-                ],
-            )
-        ]
+        orch.bundle_scanner.scan = AsyncMock(return_value=[governance_policy])
 
         gen_called = []
 

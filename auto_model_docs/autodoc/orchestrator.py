@@ -30,19 +30,8 @@ from autodoc.core.models import (
 )
 from autodoc.generation import ContentGenerator, DocumentBuilder, NotebookBuilder, SectionPlanner
 from autodoc.llm import LLMClient
-from autodoc.scanning import ArtifactScanner, CodeScanner, ContentSanitizer
-from governance_client import compute_policy, get_findings, list_bundles
-from autodoc.core.models import BundleSummary, ComputedPolicy
-
-
-def _bundle_matches_models(bundle: BundleSummary, model_names: set[str]) -> bool:
-    for att in bundle.attachments:
-        if att.type != "ModelVersion":
-            continue
-        identifier_name = (att.identifier or {}).get("name", "")
-        if str(identifier_name) in model_names:
-            return True
-    return False
+from autodoc.scanning import ArtifactScanner, BundleScanner, CodeScanner, ContentSanitizer
+from autodoc.core.models import ComputedPolicy
 
 
 # Type alias for progress callback
@@ -156,6 +145,7 @@ class Orchestrator:
             model_names=model_names,
             latest_only=latest_only,
         )
+        self.bundle_scanner = BundleScanner()
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
         self.builder = DocumentBuilder(output_dir=output_dir)
@@ -248,20 +238,7 @@ class Orchestrator:
         if on_progress:
             on_progress("Scanning", 1.0)
 
-        # Phase 2: Plan
-        project_id = os.environ.get("DOMINO_PROJECT_ID", "").strip()
-        governance_data: List[ComputedPolicy] = []
-        if project_id:
-            scanned_model_names = {m.name for m in artifact_ctx.models or []}
-            all_bundles = list_bundles(project_id)
-            for bundle in all_bundles:
-                if not _bundle_matches_models(bundle, scanned_model_names):
-                    continue
-                cp = compute_policy(str(bundle.id), str(bundle.policy_id))
-                if cp is None:
-                    continue
-                cp.findings = get_findings(str(bundle.id))
-                governance_data.append(cp)
+        governance_data = await self.bundle_scanner.scan(artifact_ctx.models or [])
 
         if on_progress:
             on_progress("Planning", 0.0)
