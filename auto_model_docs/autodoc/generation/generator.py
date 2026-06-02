@@ -29,6 +29,8 @@ from autodoc.llm.prompts import (
     build_list_prompt,
     build_narrative_prompt,
     build_table_prompt,
+    format_governance_context,
+    system_prompt_with_governance,
 )
 from autodoc.generation.citations import (
     CITATION_MARKER_PATTERN,
@@ -136,6 +138,7 @@ class ContentGenerator:
 
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = format_governance_context(context.governance)
 
         prompt = build_narrative_prompt(
             section_name=context.section_name,
@@ -152,12 +155,15 @@ class ContentGenerator:
             artifact_data=artifact_data_str,
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         response = await self.llm.complete(
             prompt=prompt,
             temperature=0.7,
-            system=SYSTEM_NARRATIVE_WRITER,
+            system=system_prompt_with_governance(
+                SYSTEM_NARRATIVE_WRITER, context.governance
+            ),
         )
 
         text = response.content.strip()
@@ -222,6 +228,7 @@ class ContentGenerator:
 
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = format_governance_context(context.governance)
 
         prompt = build_table_prompt(
             purpose=block.purpose,
@@ -234,12 +241,15 @@ class ContentGenerator:
             artifact_data=artifact_data_str,
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         result = await self.llm.complete_json(
             prompt=prompt,
             schema=TABLE_SCHEMA,
-            system=SYSTEM_TABLE_GENERATOR,
+            system=system_prompt_with_governance(
+                SYSTEM_TABLE_GENERATOR, context.governance
+            ),
         )
 
         citations, citation_details = self._collect_citations_for_table(
@@ -345,6 +355,7 @@ class ContentGenerator:
 
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = format_governance_context(context.governance)
 
         prompt = build_chart_prompt(
             purpose=block.purpose,
@@ -356,12 +367,15 @@ class ContentGenerator:
             artifact_data=artifact_data_str,
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         data = await self.llm.complete_json(
             prompt=prompt,
             schema=CHART_SCHEMA,
-            system=SYSTEM_CHART_GENERATOR,
+            system=system_prompt_with_governance(
+                SYSTEM_CHART_GENERATOR, context.governance
+            ),
         )
 
         # Create the chart using matplotlib
@@ -681,6 +695,7 @@ class ContentGenerator:
         """Generate a bulleted or numbered list."""
         code_evidence = self._format_code_evidence(context.code_context)
         mlflow_evidence = self._format_mlflow_evidence(context)
+        governance_evidence = format_governance_context(context.governance)
 
         prompt = build_list_prompt(
             purpose=block.purpose,
@@ -690,12 +705,15 @@ class ContentGenerator:
             features=", ".join(context.code_context.features[:10]),
             code_evidence=code_evidence,
             mlflow_evidence=mlflow_evidence,
+            governance_evidence=governance_evidence,
         )
 
         result = await self.llm.complete_json(
             prompt=prompt,
             schema=LIST_SCHEMA,
-            system=SYSTEM_LIST_GENERATOR,
+            system=system_prompt_with_governance(
+                SYSTEM_LIST_GENERATOR, context.governance
+            ),
         )
 
         citations, citation_details = self._collect_citations_for_list(

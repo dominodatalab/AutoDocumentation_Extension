@@ -7,7 +7,7 @@ making it easy to review, update, and maintain them in one place.
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autodoc.core.models import LanguageProfile
+    from autodoc.core.models import ComputedPolicy, LanguageProfile
     from autodoc.scanning.file_card import FileCard
 
 
@@ -51,6 +51,13 @@ SYSTEM_LIST_GENERATOR = (
     "You are a technical documentation expert. "
     "Generate clear, informative list items. "
     "Include citation markers [@citation_id] when list items reference specific data sources."
+)
+
+GOVERNANCE_SYSTEM_SUFFIX = (
+    "When governance context is provided, incorporate relevant evidence answers and "
+    "compliance findings into the documentation. Treat Q&A answers as factual "
+    "statements about the model's compliance posture. Surface open findings as risks "
+    "or limitations where appropriate."
 )
 
 SYSTEM_FILE_RANKER = (
@@ -384,6 +391,74 @@ SECTION_PLANNING_SCHEMA: Dict[str, Any] = {
 # Content Generator Prompts
 # =============================================================================
 
+def format_artifact_answer(artifact_content: Any) -> str:
+    if artifact_content is None:
+        return ""
+    if isinstance(artifact_content, dict) and "value" in artifact_content:
+        return str(artifact_content["value"])
+    return str(artifact_content)
+
+
+def format_governance_context(governance: List["ComputedPolicy"]) -> str:
+    if not governance:
+        return ""
+
+    lines = ["## Governance & Compliance Context\n"]
+    for cp in governance:
+        b = cp.bundle
+        lines.append(f"### Bundle: {b.name}")
+        lines.append(f"- Policy: {cp.policy_name}")
+        lines.append(f"- Stage: {b.stage or 'N/A'}")
+        lines.append(f"- State: {b.state}")
+        if b.classification_value:
+            lines.append(f"- Classification: {b.classification_value}")
+        lines.append("")
+
+        for stage in cp.policy_stages or []:
+            stage_name = stage.get("name", "")
+            for evidence in stage.get("evidenceSet") or []:
+                ev_id = str(evidence.get("id", ""))
+                ev_name = evidence.get("name", "")
+                for artifact in evidence.get("artifacts") or []:
+                    if str(artifact.get("artifactType", "")).lower() != "input":
+                        continue
+                    art_id = str(artifact.get("id", ""))
+                    question = (artifact.get("details") or {}).get("text", "")
+                    if not question:
+                        continue
+                    answer = None
+                    for result in cp.results:
+                        if (
+                            str(result.evidence_id) == ev_id
+                            and str(result.artifact_id) == art_id
+                        ):
+                            answer = format_artifact_answer(result.artifact_content)
+                            break
+                    if answer:
+                        lines.append(f"**Q ({ev_name} / {stage_name})**: {question}")
+                        lines.append(f"**A**: {answer}")
+                        lines.append("")
+
+        if cp.findings:
+            lines.append("#### Findings")
+            for finding in cp.findings:
+                desc = f" - {finding.description}" if finding.description else ""
+                lines.append(
+                    f"- [{finding.severity}] {finding.name} ({finding.status}){desc}"
+                )
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def system_prompt_with_governance(
+    base_system: str, governance: List["ComputedPolicy"]
+) -> str:
+    if not governance or not format_governance_context(governance):
+        return base_system
+    return f"{base_system} {GOVERNANCE_SYSTEM_SUFFIX}"
+
+
 def build_narrative_prompt(
     section_name: str,
     purpose: str,
@@ -399,6 +474,7 @@ def build_narrative_prompt(
     artifact_data: str = "",
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating narrative content.
 
@@ -424,6 +500,7 @@ def build_narrative_prompt(
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Write professional documentation content.
 
@@ -438,7 +515,7 @@ def build_narrative_prompt(
 - Data Sources: {data_sources}{model_line}{model_info}
 
 ## Additional Context
-{insights or "No additional insights available."}{artifact_section}{code_section}{mlflow_section}
+{insights or "No additional insights available."}{artifact_section}{code_section}{mlflow_section}{governance_section}
 
 ## Instructions
 - Write 2-4 paragraphs of clear, professional prose
@@ -468,6 +545,7 @@ def build_table_prompt(
     artifact_data: str = "",
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating table content.
 
@@ -487,6 +565,7 @@ def build_table_prompt(
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Generate a data table for documentation.
 
@@ -498,7 +577,7 @@ def build_table_prompt(
 - Model Classes: {model_classes}
 - Transformations: {transformations}
 - Hyperparameters: {hyperparameters}{metrics_info}{artifact_section}
-{code_section}{mlflow_section}
+{code_section}{mlflow_section}{governance_section}
 
 CRITICAL INSTRUCTIONS:
 - ONLY include metrics and values that are explicitly provided in the "Available Context" above
@@ -543,6 +622,7 @@ def build_chart_prompt(
     artifact_data: str = "",
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating chart data.
 
@@ -561,6 +641,7 @@ def build_chart_prompt(
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Generate data for a {chart_type} chart.
 
@@ -570,7 +651,7 @@ def build_chart_prompt(
 ## Context
 - Model Type: {model_classes}
 - ML Task: {ml_task_type}
-{code_section}{mlflow_section}
+{code_section}{mlflow_section}{governance_section}
 
 ## Instructions for Chart Generation:
 1. If metrics are provided above (e.g., "roc_auc: 0.6903", "precision: 0.2399"), use them as:
@@ -621,6 +702,7 @@ def build_list_prompt(
     features: str,
     code_evidence: str = "",
     mlflow_evidence: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for generating list content.
 
@@ -634,6 +716,8 @@ def build_list_prompt(
     Returns:
         Formatted prompt string.
     """
+    governance_section = f"\n{governance_evidence}" if governance_evidence else ""
+
     return f"""Generate a list for documentation.
 
 ## Purpose: {purpose}
@@ -644,7 +728,7 @@ def build_list_prompt(
 - ML Task: {ml_task_type}
 - Features: {features}
 {code_evidence}
-{mlflow_evidence}
+{mlflow_evidence}{governance_section}
 
 CRITICAL: Only include information that is explicitly provided in the context above.
 Do NOT fabricate metrics, statistics, or claim methodologies that are not mentioned.
