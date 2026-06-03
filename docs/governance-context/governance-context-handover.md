@@ -56,7 +56,7 @@ Note : Governance API base path is `/api/governance/v1/` (NOT `/v4/`).
 
 **In scope**
 
-- A `--bundle-id` CLI flag on the autodoc Job. When present, the Job fetches bundle + latest evidence + findings itself and threads them through generation as citable facts.
+- An **optional** `--bundle-id` CLI flag on the autodoc Job. When present, the Job fetches bundle + latest evidence + findings and threads them as citable facts. When absent, the Job runs exactly as today — no governance context, no behavioral change. The flag is optional by design: the extension that launches the Job typically supplies it automatically; it is omitted when no bundle is applicable or when the caller cannot determine which bundle to use.
 - A new typed `GovernanceContext` model.
 - A governance read client (Job-side) + a Studio list endpoint (app-side) for a bundle picker.
 - Prompt + citation wiring so governance facts render with resolvable citations.
@@ -69,7 +69,7 @@ Note : Governance API base path is `/api/governance/v1/` (NOT `/v4/`).
 - Full evidence revision history (we keep latest-only by design).
 - Dedicated "Evidence" / "Findings" doc sections (surfacing is citation-woven only).
 
-**Decisions already made :**  Job fetches directly (no external Portal, no context file); citable-facts-woven-in; findings scope is spec-driven.
+**Decisions already made:** Job fetches directly (no external Portal, no context file); citable-facts-woven-in; findings scope is spec-driven; `--bundle-id` is optional (not required) — the extension drives selection in normal flow, with user override available when multiple policies compete.
 
 ---
 
@@ -575,7 +575,14 @@ Pull `governance_swagger.json` from the target Domino deployment (or the Portal 
 
 ## 9. Studio UI: bundle picker
 
-An **optional** "Governance bundle" single-select on the existing job form (follows the hardware-tier/environment select pattern in `ui_components.py`). A project can have **multiple** bundles, so the picker is built to disambiguate, not to assume one. Per the Domino design rules:
+An **optional** "Governance bundle" single-select on the existing job form (follows the hardware-tier/environment select pattern in `ui_components.py`).
+
+**Two flows — the picker only matters in the second:**
+
+- **Extension-driven (primary):** the extension that invokes the Job typically knows which bundle to use and passes `--bundle-id` automatically. In this flow the picker is not surfaced and the user does not interact with bundle selection.
+- **User-override (fallback):** when the extension cannot determine the right bundle — for example, a project has bundles under a *fair lending policy* and a *credit risk policy*, both active, both asserting a different risk level for the same model — the picker lets the user choose which policy context the document should be grounded in. Passing both contexts would produce contradictory `[@governance.risk_tier]` facts and confuse the LLM. The user picks the bundle appropriate to the document being produced.
+
+A project can have **multiple** bundles, so the picker is built to disambiguate, not to assume one. Per the Domino design rules:
 
 - Label above field (sentence case): "Governance bundle". Helper/caption: "Ground the document in this bundle's evidence and findings. Optional."
 - **Multiple bundles (including several on the *same model*):** a model legitimately has multiple bundles — across lifecycle cycles (initial approval → annual revalidation), across model versions, and across policies/frameworks. List **all** of the project's bundles, **active first, then most-recently-updated**. Each option shows enough to pick the *right* one — `"<bundle name> · <policy> · <stage> · <state>"` (and model/version when bundles are model-scoped); full detail in a tooltip on truncation.
@@ -592,6 +599,8 @@ An **optional** "Governance bundle" single-select on the existing job form (foll
 > **One doc = one bundle — this constraint is intentional, do not relax it in v1.**
 >
 > A bundle is the single verbatim source of truth for governance facts. Merging two bundles creates fact collisions (e.g. `risk_tier = High` from one, `risk_tier = Medium` from another), makes `[@evidence.*]` citations ambiguous, and breaks provenance (which bundle does this document evidence/attach back to?). The anti-fabrication guarantee only holds when there is exactly one governing record.
+>
+> The competing-policies scenario — a fair lending policy and a credit risk policy both active on the same model, each asserting a different risk level — is a prime example of why merging is wrong: the LLM would receive two contradictory `[@governance.risk_tier]` facts with no way to adjudicate. One run → one policy context → one document is the correct design. The user chooses which policy the document is for; multi-policy coverage requires multiple runs.
 >
 > Models under several frameworks → several runs → several documents, each cleanly tied to its bundle. A consolidated cross-bundle report is a deliberate v2 feature gated to consolidated doc types — not a flag on this pipeline.
 
