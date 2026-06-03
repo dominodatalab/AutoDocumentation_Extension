@@ -1,7 +1,7 @@
 # Governance Context for Auto Model Documentation — Developer Handover
 
 **Target repo:** `dominodatalab/AutoDocumentation_Extension` @ branch `ddl-bira-ignacio.governance`
-**Status:** Design handover. Self-contained — a developer can design and build from this without further questions, except the single bounded item in [§11 Open items](#11-open-items--confirm-before-coding).
+**Status:** Design handover. Self-contained — a developer can design and build from this without further questions, except the bounded open items in [§11 Open items](#11-open-items--confirm-before-coding).
 **Diagrams:** Mermaid (render in GitHub/VS Code preview).
 
 ---
@@ -159,9 +159,9 @@ sequenceDiagram
   J-->>Job: start container (DOMINO_USER_API_KEY present)
   Job->>Job: configure_auth(cli_auth)
   Job->>Gov: load_governance_context(X, findings_scope)
-  Gov->>D: GET bundles/X
-  Gov->>D: GET bundles/X/results        (evidence answers)
-  Gov->>D: GET findings?bundleId=X       (findings)
+  Gov->>D: GET bundles/X                             (bundle metadata + policyId)
+  Gov->>D: POST rpc/compute-policy {bundleId,policyId} (questions + answers)
+  Gov->>D: GET bundles/X/findings                    (findings)
   D-->>Gov: raw JSON
   Gov-->>Job: GovernanceContext (latest evidence, filtered findings)
   Job->>O: generate(spec, governance_context=...)
@@ -189,83 +189,135 @@ sequenceDiagram
 
 ### 6.1 Governance API reads (Job-side)
 
-All under `{DOMINO_API_HOST}/api/governance/v1/`, via `domino_client._domino_request("GET", path, params=...)` after `configure_auth(cli_auth)`. **Parse defensively** (multi-key fallback) — the repo convention assumes response shapes vary by deployment. Exact paths/field names are the one item to confirm (§11); the shapes below are the design target.
+All under `{DOMINO_API_HOST}/api/governance/v1/`, via `domino_client._domino_request("GET", path, params=...)` after `configure_auth(cli_auth)`. **Parse defensively** (multi-key fallback) — the repo convention assumes response shapes vary by deployment. Paths and field names below are confirmed from real API payloads; the few remaining open items are in §11.
 
-**(a) Bundle** — `GET /api/governance/v1/bundles/{bundle_id}`
-
-```jsonc
-{
-  "id": "b94e8f84-…",
-  "name": "Credit Risk v3 — MDD",
-  "projectId": "…",
-  "policyName": "Model Lifecycle",          // or nested policy.{name}
-  "stage": "Validation",                     // current stage
-  "state": "Active",                         // bundle state/status
-  "riskTier": "High",                        // optional governance facts
-  "owner": "alice.chen"
-}
-```
-
-**(b) Evidence / results** — `GET /api/governance/v1/bundles/{bundle_id}/results`
+**(a) Bundle** — `GET /api/governance/v1/bundles/{bundle_id}` *(confirm direct GET exists; §11)*
 
 ```jsonc
 {
-  "results": [
+  "id": "a1b2c3d4-...",
+  "name": "Churn Model Bundle",
+  "projectId": "proj-123",
+  "projectOwner": "alice.chen",             // maps to GovernanceContext.owner
+  "policyId": "f0e1d2c3-...",               // required — pass to compute-policy for evidence
+  "policyName": "Credit Risk Model Policy",
+  "stage": "Stage 1",
+  "state": "Active",                         // "Active" | "Archived" | "Complete"
+  "classificationValue": "High",             // risk tier — NOT "riskTier"
+  "attachments": [
     {
-      "id": "r-001",
-      "evidenceId": "q-intended-use",        // stable question id (dedup key)
-      "label": "Intended use",               // the question text
-      "value": "Retail credit underwriting decisions.",  // the answer
-      "stage": "Intake",
-      "updatedAt": "2026-05-02T11:04:00Z",   // recency → "latest"
-      "version": 3
-    }
-  ]
-}
-```
-
-**Latest-per-question rule:** group by `evidenceId` (fallback `label`), keep the entry with the greatest `updatedAt` (fallback greatest `version`, fallback last in list).
-
-**(c) Findings** — `GET /api/governance/v1/findings?bundleId={bundle_id}`
-
-```jsonc
-{
-  "findings": [
-    {
-      "id": "f-010",
-      "title": "Missing sensitivity analysis",
-      "description": "No stress test evidence for the macro scenario.",
-      "severity": "S2",                      // or High/Medium/Low
-      "status": "open"                        // open|in_progress|resolved|closed|dismissed
-    }
-  ]
-}
-```
-
-**(d) List bundles for a project (Studio picker)** — `GET /api/governance/v1/bundles?projectId={project_id}`
-
-A project can hold **multiple** bundles, so this returns a list (paginated). The picker must disambiguate, so surface enough per bundle to tell them apart.
-
-```jsonc
-{
-  "bundles": [
-    {
-      "id": "b94e8f84-…",
-      "name": "Credit Risk v3 — MDD",
-      "policyName": "Model Lifecycle",
-      "stage": "Validation",
-      "state": "Active",
-      "modelName": "credit_risk",      // if bundles are model-scoped (confirm — §11)
-      "modelVersion": "3",
-      "updatedAt": "2026-05-20T09:00:00Z"
+      "type": "ModelVersion",
+      "identifier": { "name": "churn-model", "version": 3 }  // model name + version link
     }
   ],
-  "nextPageToken": "…"                 // or offset/limit — handle pagination
+  "currentStageInfo": {
+    "status": "InProgress",
+    "openFindingsCount": 2
+  }
 }
 ```
 
-- **Pagination:** follow the deployment's convention (page token or `offset`/`limit`); fetch all pages so no bundle is hidden.
-- **Sort:** most-recently-updated first.
+**(b) Evidence / results** — `POST /api/governance/v1/rpc/compute-policy`
+
+Request body: `{"bundleId": "<id>", "policyId": "<policyId from bundle §6.1a>"}`.
+
+The response combines the full policy definition (questions) with the submitted answers (results) — questions and answers must be joined client-side.
+
+```jsonc
+// Relevant subset of the response
+{
+  "policy": {
+    "stages": [
+      {
+        "name": "Stage 1",
+        "evidenceSet": [
+          {
+            "id": "ev-uuid-1",             // evidenceSet UUID
+            "name": "Model Training Documentation",
+            "artifacts": [
+              {
+                "id": "art-uuid-1",        // artifact UUID — the question identifier
+                "artifactType": "input",   // only "input" artifacts carry question text
+                "details": {
+                  "text": "Was the model validated on a hold-out dataset?",
+                  "type": "Radio",
+                  "options": ["Yes", "No", "Partially"]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "results": [
+    {
+      "evidenceId": "ev-uuid-1",           // matches evidenceSet.id
+      "artifactId": "art-uuid-1",          // matches artifact.id
+      "artifactContent": { "value": "Yes" },  // answer — always use content["value"]
+      "isLatest": true,                    // filter on this — API flags the latest result
+      "createdAt": "2026-02-10T14:00:00Z"
+    }
+  ]
+}
+```
+
+**Question–answer join (in `governance_read.py`):**
+1. Walk `policy.stages[*].evidenceSet[*].artifacts[*]` — keep only `artifactType == "input"` entries (these carry `details.text`).
+2. For each artifact, find results where `str(result.evidenceId) == str(evidenceSet.id) AND str(result.artifactId) == str(artifact.id) AND result.isLatest == True`.
+3. Question = `artifact.details["text"]`. Answer = `result.artifactContent.get("value", str(result.artifactContent))`.
+
+**Latest-per-question rule:** use `isLatest == True` — the API already flags the latest result per artifact. No manual `updatedAt`/`version` dedup required.
+
+**(c) Findings** — `GET /api/governance/v1/bundles/{bundle_id}/findings`
+
+```jsonc
+{
+  "data": [
+    {
+      "id": "find-uuid-1",
+      "name": "Validation methodology not documented",   // finding title — field is "name", not "title"
+      "description": "The model validation process lacks documentation of the hold-out dataset characteristics.",
+      "severity": "S2",
+      "status": "To do",                     // "To do" = open/actionable (confirm full vocabulary — §11)
+      "artifactLabel": "Was the model validated on a hold-out dataset?",  // question it's attached to
+      "evidenceId": "ev-uuid-1",             // links to evidenceSet
+      "artifactId": "art-uuid-1",            // links to specific question
+      "dueDate": "2026-07-01T00:00:00Z",
+      "assignee": { "id": "usr-2", "name": "Bob Smith" }
+    }
+  ],
+  "meta": { "pagination": { "offset": 0, "limit": 25, "totalCount": 1 } }
+}
+```
+
+**(d) List bundles for a project (Studio picker)** — `GET /api/governance/v1/bundles?projectId[]={project_id}`
+
+Note the **array bracket syntax** — `projectId[]`, not `projectId`. Returns a `{"data": [...], "meta": {...}}` envelope (same as findings). A project can hold multiple bundles; surface enough fields per entry to disambiguate across policies, versions, and lifecycle cycles.
+
+```jsonc
+{
+  "data": [
+    {
+      "id": "a1b2c3d4-...",
+      "name": "Churn Model Bundle",
+      "policyName": "Credit Risk Model Policy",
+      "stage": "Stage 1",
+      "state": "Active",                      // "Active" | "Archived" | "Complete"
+      "classificationValue": "High",
+      "attachments": [
+        { "type": "ModelVersion", "identifier": { "name": "churn-model", "version": 3 } }
+      ],
+      "createdAt": "2026-01-15T10:30:00Z"
+    }
+  ],
+  "meta": { "pagination": { "offset": 0, "limit": 25, "totalCount": 1 } }
+}
+```
+
+- **Pagination:** `meta.pagination` has `offset`, `limit`, `totalCount`. Fetch all pages (increment `offset` by `limit` until exhausted) — never hide a bundle.
+- **Sort for picker:** `state == "Active"` first, then `createdAt` descending.
+- **Model version in picker:** extract from `attachments` where `type == "ModelVersion"` → `identifier.name` + `identifier.version`. Display as `"<bundle name> · <policy> · <stage> · <model>@v<version>"`.
 - The Job-side reads (a–c) take a single `bundle_id` — the **one** the user picked (or passed via `--bundle-id`).
 
 ### 6.2 Typed models — `autodoc/core/models.py`
@@ -273,19 +325,21 @@ A project can hold **multiple** bundles, so this returns a list (paginated). The
 ```python
 @dataclass
 class EvidenceItem:
-    question_id: str
-    question: str
-    answer: str
-    stage: Optional[str] = None
-    answered_at: Optional[str] = None
+    artifact_id: str               # artifact UUID (from result.artifactId) — stored for matching
+    question: str                  # artifact.details["text"]
+    answer: str                    # result.artifactContent["value"]
+    evidence_set_name: Optional[str] = None   # evidenceSet.name (grouping label)
+    stage: Optional[str] = None               # name of the stage the evidence set belongs to
+    answered_at: Optional[str] = None         # result.createdAt
 
 @dataclass
 class Finding:
     finding_id: str
-    title: str
+    title: str                     # maps from API field "name" (not "title")
     description: str = ""
     severity: Optional[str] = None
-    status: str = "open"
+    status: str = "To do"          # confirmed open value; confirm full vocabulary (§11)
+    artifact_label: Optional[str] = None      # artifactLabel — question the finding is attached to
 
 @dataclass
 class GovernanceContext:
@@ -307,7 +361,7 @@ class GovernanceContext:
 
 `load_governance_context(bundle_id, *, findings_scope)`:
 
-- `"open"` → keep findings whose `status.lower()` ∉ `{"resolved","closed","dismissed"}`. **(Confirm status vocabulary — §11.)**
+- `"open"` → keep findings where `status == "To do"` (confirmed actionable value). Until the full vocabulary is confirmed (§11), use a **whitelist**: only pass through statuses explicitly known to be open — safe default is `status == "To do"` only.
 - `"all"` → keep everything.
   Precedence: CLI `--findings-scope` (if given) overrides `DocumentSpec.governance_findings_scope`, which overrides the default `"open"`.
 
@@ -347,7 +401,7 @@ Findings (open):
 [@finding.f-010]: [S2] Missing sensitivity analysis — No stress test evidence for the macro scenario.
 ```
 
-- Citation IDs: `governance.<key>`, `evidence.<slug(question_id)>`, `finding.<finding_id>`. Slug = lowercase, non-alphanumerics → `_`.
+- Citation IDs: `governance.<key>`, `evidence.<slug(artifact.details.text)>`, `finding.<finding_id>`. Slug = lowercase, non-alphanumerics → `_`, truncated to 40 chars. The `artifact_id` UUID is stored in `EvidenceItem` for matching but is **not** used in the citation key (UUIDs are unreadable in rendered docs).
 - Omit any subsection that is empty (no evidence → drop the "Evidence" block; no findings → drop "Findings").
 - The same block is built once and passed to **every** section (§7.4). Token trimming (per-answer truncation + total cap, evidence-only) happens here per §7.4 — bundle facts and findings are never dropped.
 
@@ -553,20 +607,24 @@ flowchart LR
 
 Single bounded dependency. Resolve in Task 0; does not block parallel work on Tasks 1–5 (which target the §6 shapes via fixtures).
 
-1. **Exact governance read endpoints + field names** — confirm against the deployment's `governance_swagger.json` (or Portal's `domino_client.py`):
-   - Evidence/results path: `bundles/{id}/results` vs `results?bundleId=` — and the **dedup key** field (`evidenceId`? `definitionId`?) + recency field (`updatedAt`? `version`?).
-   - Findings path: `findings?bundleId=` vs `bundles/{id}/findings` — and the **status vocabulary** (which values mean "resolved/closed/dismissed").
-   - Bundle stage/state/risk-tier field names.
-   - **List-bundles** (§6.1d): pagination convention (page token vs `offset`/`limit`).
-2. **Bundle cardinality & scoping** — confirm against the deployment:
-   - A project can have **multiple** bundles (assumed yes).
-   - A single **model** can also have **multiple** bundles — across lifecycle cycles (annual revalidation), across model **versions**, and across **policies/frameworks**. Confirm which of these your instance actually produces, since it drives the disambiguation fields the picker must show.
-   - Are bundles **project-scoped or model-scoped**, and what field links a bundle to its registered **model + version**? Does a bundle expose a **state** (active/closed/archived/superseded)? These drive the picker's grouping, the active-first sort, the non-active warning, and the version display (§6.1d, §9).
-   - **Active-bundle uniqueness:** is at most **one** bundle active per *model*, or only per *(model, policy, version)*? (Realistically the latter — a model can have several active bundles across concurrent policies and in-flight versions.) This decides whether the picker may ever safely **pre-highlight** a single active bundle. If active is not unique per model, keep selection fully manual (the v1 default).
-   - Does **not** block v1 — the picker lists all project bundles, disambiguated, with no auto-selection. Model-aware grouping/filtering and doc-type hinting are enhancements.
-3. **Token-budget defaults** (§7.4): the ~400-char per-answer truncation and ~6,000-token total cap (`AUTODOC_GOV_CONTEXT_TOKEN_BUDGET`) are starting values. Confirm or tune once real bundle sizes are known; the alternative (LLM summarization of long answers instead of truncation) is a v2 option.
+**Resolved (confirmed from real API payloads):**
 
-If endpoints differ, only `governance_read.py`'s parsing changes — the architecture, models, prompts, and citations are unaffected.
+- **Evidence endpoint:** `POST /api/governance/v1/rpc/compute-policy` with body `{bundleId, policyId}`. Questions in `policy.stages[*].evidenceSet[*].artifacts[*]` (`artifactType == "input"`); answers in `results[*]` filtered by `isLatest == true`; join on `(evidenceId, artifactId)`.
+- **Findings endpoint:** `GET /api/governance/v1/bundles/{id}/findings`; response envelope `{"data":[...], "meta":{...}}`; finding title field is `name` (not `title`); open status is `"To do"`.
+- **List bundles endpoint:** `GET /api/governance/v1/bundles?projectId[]={id}` (array bracket syntax); same `data/meta` envelope; state values: `"Active"`, `"Archived"`, `"Complete"`; risk tier: `classificationValue`; model link: `attachments[type=="ModelVersion"].identifier.{name,version}`; pagination: `meta.pagination.{offset,limit,totalCount}`.
+- **Bundle scoping:** project-scoped; model version linked via `attachments`; multiple bundles per project (and per model) are confirmed.
+
+**Still to confirm before coding:**
+
+1. **Findings status full vocabulary** — `"To do"` is confirmed for open/actionable. Confirm the complete status value set — specifically which values mean "resolved", "dismissed", and "in progress" — to implement the `"open"` scope filter (§6.3). Until confirmed, whitelist `status == "To do"` only (§6.3).
+
+2. **Direct single-bundle GET endpoint** — the confirmed payloads show the list endpoint (`?projectId[]=`). Confirm that `GET /api/governance/v1/bundles/{bundle_id}` (no query param) exists for the Job-side single-bundle fetch. If not, the Job calls the list endpoint and filters by id client-side.
+
+3. **Active-bundle uniqueness** — confirmed that multiple active bundles can coexist in a project (across policies and versions); the picker therefore never auto-selects. No v1 change implied, but worth documenting in operational guidance.
+
+4. **Token-budget defaults** (§7.4): ~400-char per-answer truncation and ~6,000-token cap (`AUTODOC_GOV_CONTEXT_TOKEN_BUDGET`) are starting values. Tune once real bundle sizes are known. Alternative: LLM summarization of long answers (v2 option).
+
+Items 1 and 2 are the only blockers for `governance_read.py`. Items 3–4 are tuning decisions that do not block any task.
 
 ### Deferred to v2 (not in this build)
 
