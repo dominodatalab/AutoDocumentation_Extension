@@ -379,6 +379,8 @@ Governance facts must reach the LLM as a citation-tagged block, parallel to the 
 
 ### 7.1 Governance evidence block — produced by `_format_governance_evidence`
 
+**Important:** this function receives the already-extracted `GovernanceContext` (clean Python dataclasses from `governance_read.py`) — it does **not** receive raw API JSON. The noisy question-answer join from the `compute-policy` response happens entirely in `governance_read.py` (Task 2). `_format_governance_evidence` only formats.
+
 Return `""` when `governance_context is None` (keeps non-governance prompts byte-identical). Otherwise emit exactly:
 
 ```
@@ -386,24 +388,41 @@ Return `""` when `governance_context is None` (keeps non-governance prompts byte
 Use the citation IDs in [@brackets] when quoting these facts. These are the source of truth for
 risk classification, intended use, validation status, approval state, and any raised issues.
 
-[@governance.bundle]: Credit Risk v3 — MDD
-[@governance.policy]: Model Lifecycle
-[@governance.stage]: Validation
+[@governance.bundle]: Churn Model Bundle
+[@governance.policy]: Credit Risk Model Policy
+[@governance.stage]: Stage 1
 [@governance.state]: Active
 [@governance.risk_tier]: High
 [@governance.owner]: alice.chen
 
-Evidence (latest answer per policy question):
-[@evidence.intended_use]: Intended use — "Retail credit underwriting decisions."
-[@evidence.data_sources]: Data sources — "Bureau data + internal application records, 2019–2025."
+Evidence — Stage 1 / Model Training Documentation (latest answer per question):
+[@evidence.was_model_validated_hold_out_dataset]: Was the model validated on a hold-out dataset? — "Yes"
+[@evidence.describe_validation_methodology]: Describe the validation methodology. — "We used a stratified 80/20 train-test split with 5-fold CV on the training set."
 
-Findings (open):
-[@finding.f-010]: [S2] Missing sensitivity analysis — No stress test evidence for the macro scenario.
+Findings (To do):
+[@finding.find-uuid-1]: [S2] Validation methodology not documented — The model validation process lacks documentation of the hold-out dataset characteristics.
 ```
 
-- Citation IDs: `governance.<key>`, `evidence.<slug(artifact.details.text)>`, `finding.<finding_id>`. Slug = lowercase, non-alphanumerics → `_`, truncated to 40 chars. The `artifact_id` UUID is stored in `EvidenceItem` for matching but is **not** used in the citation key (UUIDs are unreadable in rendered docs).
-- Omit any subsection that is empty (no evidence → drop the "Evidence" block; no findings → drop "Findings").
-- The same block is built once and passed to **every** section (§7.4). Token trimming (per-answer truncation + total cap, evidence-only) happens here per §7.4 — bundle facts and findings are never dropped.
+#### Evidence block structure: grouped by stage + evidence set
+
+Group evidence by `EvidenceItem.stage` + `EvidenceItem.evidence_set_name`. Emit a header per group: `Evidence — <stage> / <evidence_set_name> (latest answer per question):`. This preserves the policy context the LLM needs and makes token shedding coherent (drop whole evidence-set groups oldest-first rather than individual answers).
+
+#### Citation ID slugs
+
+- Bundle/governance facts: `governance.<key>` (key = field name, e.g. `risk_tier`)
+- Evidence: `evidence.<slug(question_text)>` — strip common articles/auxiliaries, keep first ~6 content words, lowercase, non-alphanumerics → `_`. Examples:
+  - `"Was the model validated on a hold-out dataset?"` → `was_model_validated_hold_out_dataset`
+  - `"Describe the validation methodology."` → `describe_validation_methodology`
+  - Ensure uniqueness within the doc by appending `_2`, `_3` etc. on collision.
+- Findings: `finding.<finding_id>` — use the raw API `id` field (UUID). Not pretty but stable; the finding body is human-readable.
+
+The `artifact_id` UUID in `EvidenceItem` is stored for internal matching only and is **never** used as a citation key.
+
+#### Empty subsections
+
+Omit any subsection that is empty (no evidence → drop all Evidence groups; no findings → drop the Findings block).
+
+The same block is built once and passed to **every** section (§7.4). Token trimming happens here per §7.4 — bundle facts and findings are never dropped.
 
 ### 7.2 Anti-fabrication clause
 
@@ -502,10 +521,11 @@ A dedicated conflict-*detection* module (diff declared vs. detected fields, emit
 
 ### 7.6 Worked example (input → block → expected output)
 
-- **Input:** bundle `riskTier=High`, evidence `intended_use="Retail credit underwriting decisions."`, finding `f-010 S2 open`.
-- **Block:** as §7.1.
-- **Expected doc sentence (Purpose section):** *"The model is classified High risk [@governance.risk_tier] and is intended for retail credit underwriting decisions [@evidence.intended_use]."*
-- **Expected doc sentence (Limitations section):** *"An open finding notes the absence of sensitivity analysis for the macro scenario [@finding.f-010]."*
+- **Input:** bundle `classificationValue=High`, evidence set "Model Training Documentation" with two answers (`was_model_validated_hold_out_dataset = "Yes"`, `describe_validation_methodology = "We used a stratified 80/20..."`), finding `find-uuid-1 S2 "To do"`.
+- **Block:** as §7.1 (grouped format, two evidence lines, one finding).
+- **Expected doc sentence (Purpose section):** *"The model is classified High risk [@governance.risk_tier]."*
+- **Expected doc sentence (Validation section):** *"The model was validated on a hold-out dataset [@evidence.was_model_validated_hold_out_dataset] using a stratified 80/20 train-test split with 5-fold cross-validation [@evidence.describe_validation_methodology]."*
+- **Expected doc sentence (Limitations section):** *"An open finding notes that validation methodology documentation is incomplete [@finding.find-uuid-1]."*
 - Citations resolve to `Citation` objects and render in the doc's citation list, identical to code/MLflow citations.
 
 ---
