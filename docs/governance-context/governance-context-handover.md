@@ -568,50 +568,57 @@ Pull `governance_swagger.json` from the target Domino deployment (or the Portal 
 ### Task 5 — Studio bundle picker
 
 - **Files:** `domino_client.py`, `studio/routes_api.py`, `studio/state.py`, `studio/job_engine.py`, `studio/ui_components.py`.
-- `domino_client.list_governance_bundles(project_id)` via `_domino_request` — **paginate** (fetch all pages) and **sort most-recently-updated first** (§6.1d); new read-only route `GET /api/governance/bundles`; `JobRequest.bundle_id`; parse in `_parse_request`; append `--bundle-id` (+ `--findings-scope`) in `_build_job_command`; dropdown in the form (§9).
-- **Accept:** a project with several bundles lists them all, disambiguated and newest-first, with no auto-selection; picking one puts `--bundle-id <id>` in the submitted command; "None" omits the flag and reproduces today's behavior.
+- `governance_client.list_bundles(project_id)` is already implemented in the canonical repo. New read-only Studio route `GET /api/governance/bundles`; `JobRequest.bundle_id`; parse in `_parse_request`; append `--bundle-id` (+ `--findings-scope`) in `_build_job_command`; bundle selection UI per §9.
+- **Model page flow:** filter returned bundles by `attachments[type=ModelVersion].identifier.name == model_name` (model name from page context). Auto-select if 1 match; show minimal policy picker if multiple; fall back to full list if 0.
+- **Project sidebar flow:** show full project bundle picker.
+- **Accept:** model page with 1 matching bundle → `--bundle-id` passed silently, no UI shown; model page with multiple matching bundles → picker scoped to those bundles; project sidebar → full picker; API error → surface error, do not run without governance context.
 
 ---
 
-## 9. Studio UI: bundle picker
+## 9. Studio UI: bundle selection
 
-An **optional** "Governance bundle" single-select on the existing job form (follows the hardware-tier/environment select pattern in `ui_components.py`).
+The extension is launched from two contexts that have different amounts of information available. Bundle selection logic differs by launch context. Governance context is **required** — `--bundle-id` must always be passed; the only exception is a hard API failure (degrade gracefully, log warning).
 
-**Two flows — the picker only matters in the second:**
+### Flow 1: Model page launch (model name known)
 
-- **Extension-driven (primary):** the extension that invokes the Job typically knows which bundle to use and passes `--bundle-id` automatically. In this flow the picker is not surfaced and the user does not interact with bundle selection.
-- **User-override (fallback):** when the extension cannot determine the right bundle — for example, a project has bundles under a *fair lending policy* and a *credit risk policy*, both active, both asserting a different risk level for the same model — the picker lets the user choose which policy context the document should be grounded in. Passing both contexts would produce contradictory `[@governance.risk_tier]` facts and confuse the LLM. The user picks the bundle appropriate to the document being produced.
+The model name is available from the page context. Filter `list_bundles(project_id)` to bundles whose `attachments[type=ModelVersion].identifier.name == model_name`.
 
-A project can have **multiple** bundles, so the picker is built to disambiguate, not to assume one. Per the Domino design rules:
+- **Exactly 1 match → auto-select.** Pass `--bundle-id` silently. No user interaction required.
+- **Multiple matches → show a minimal picker** scoped only to those bundles (same model, different active policies — e.g. a fair lending bundle and a credit risk bundle each asserting a different risk tier). Options show `"<policy name> · <stage>"` — enough to distinguish. User picks which policy context the document is for.
+- **0 matches → fall back to Flow 2** (bundle exists but isn't model-scoped via attachments, or attachment names don't match).
 
-- Label above field (sentence case): "Governance bundle". Helper/caption: "Ground the document in this bundle's evidence and findings. Optional."
-- **Multiple bundles (including several on the *same model*):** a model legitimately has multiple bundles — across lifecycle cycles (initial approval → annual revalidation), across model versions, and across policies/frameworks. List **all** of the project's bundles, **active first, then most-recently-updated**. Each option shows enough to pick the *right* one — `"<bundle name> · <policy> · <stage> · <state>"` (and model/version when bundles are model-scoped); full detail in a tooltip on truncation.
-- **Never auto-pick.** When several bundles exist, do not pre-select one. The default selection is the explicit empty option **"None — generate without governance context"** (the actionable empty state). The user chooses deliberately; one run documents exactly one bundle.
-- **Single bundle:** still requires an explicit choice (don't silently default to it) — but it's fine to make selecting it one click.
-- **A model can have more than one *active* bundle at once** (concurrent policies/frameworks, and versions in flight). So "active-first" sort is a convenience, **not** a unique-result guarantee — never collapse the active set to a single auto-pick. Among active bundles, **policy** and **version** are the disambiguators; show them on the option. (What's typically unique is one active bundle per *(model, policy, version)* — confirm in §11.)
-- **Warn on non-active bundles.** If the user selects a bundle whose state is closed/archived/superseded, show a non-blocking inline note: "This bundle is `<state>` — the document will reflect its evidence as of `<updatedAt>`, which may not match the current model." Documenting a historical bundle is valid (e.g. regenerating last year's MDD), so warn, don't block.
-- **Match the bundle to the document (guidance, not enforcement).** The bundle's policy/purpose should fit the doc being produced (a development bundle for an MDD, a validation bundle for a VR, etc.). Surface policy/purpose in the option so the user self-selects correctly; do **not** hard-filter by doc type (that would hide valid choices and depends on a fuzzy policy→doc-type mapping). A soft hint/sort by likely-relevant policy is an acceptable enhancement.
-- **Version-mismatch awareness.** When bundles are model-version-scoped, showing the version in the option helps the user avoid documenting current code against an old-version bundle. (We don't reconcile this automatically; governance facts are cited verbatim and may legitimately differ from code — surfacing the version is the mitigation.)
-- It is a **secondary** field — the form's single primary action ("Generate documentation") is unchanged. Place it in the optional/advanced group.
-- Empty list state (no bundles in project): show "No governance bundles in this project" with a tooltip linking to how bundles are created — do not show a dead dropdown.
-- Errors fetching bundles: non-blocking inline note ("Couldn't load governance bundles — you can still generate without one"), generation stays available.
+### Flow 2: Project sidebar launch (no model context)
+
+No model name available. Show all project bundles as a required single-select. Options show `"<bundle name> · <policy> · <stage>"` plus model name/version from attachments where present.
+
+### Common rules (both flows)
+
+- **Active bundles first**, then `createdAt` descending.
+- **Warn on non-active state** (`Archived` or `Complete`): non-blocking inline note — "This bundle is `<state>` and may not reflect the current model." Documenting a historical bundle is valid; warn, don't block.
+- **Empty list** (no bundles in project): surface an error — "No governance bundles found for this project."
+- **API error** fetching bundles: surface the error; do not silently run without governance context.
+
+```mermaid
+flowchart TD
+  Launch{Launch context}
+  Launch -->|Model page| Filter[Filter bundles by model name]
+  Launch -->|Project sidebar| List[List all project bundles]
+  Filter -->|1 match| Auto[Auto-select → --bundle-id passed silently]
+  Filter -->|multiple matches| PickerSmall[Minimal picker: policy disambiguation]
+  Filter -->|0 matches| List
+  List --> PickerFull[Full project bundle picker]
+  PickerSmall --> Submit[POST /v4/jobs/start with --bundle-id]
+  PickerFull --> Submit
+  Auto --> Submit
+```
 
 > **One doc = one bundle — this constraint is intentional, do not relax it in v1.**
 >
 > A bundle is the single verbatim source of truth for governance facts. Merging two bundles creates fact collisions (e.g. `risk_tier = High` from one, `risk_tier = Medium` from another), makes `[@evidence.*]` citations ambiguous, and breaks provenance (which bundle does this document evidence/attach back to?). The anti-fabrication guarantee only holds when there is exactly one governing record.
 >
-> The competing-policies scenario — a fair lending policy and a credit risk policy both active on the same model, each asserting a different risk level — is a prime example of why merging is wrong: the LLM would receive two contradictory `[@governance.risk_tier]` facts with no way to adjudicate. One run → one policy context → one document is the correct design. The user chooses which policy the document is for; multi-policy coverage requires multiple runs.
+> The competing-policies scenario — a fair lending policy and a credit risk policy both active on the same model, each asserting a different risk level — is exactly why merging is wrong: the LLM would receive two contradictory `[@governance.risk_tier]` facts with no way to adjudicate. One run → one policy context → one document. Multi-policy coverage requires multiple runs.
 >
 > Models under several frameworks → several runs → several documents, each cleanly tied to its bundle. A consolidated cross-bundle report is a deliberate v2 feature gated to consolidated doc types — not a flag on this pipeline.
-
-```mermaid
-flowchart LR
-  F[Job form] --> Sel{Governance bundle}
-  Sel -->|None| Cmd1[command without --bundle-id]
-  Sel -->|bundle X| Cmd2[command with --bundle-id X]
-  Cmd1 --> Submit[POST /v4/jobs/start]
-  Cmd2 --> Submit
-```
 
 ---
 
@@ -626,7 +633,9 @@ flowchart LR
 | Unit        | budget-guard test                                        | over-budget bundle: per-answer truncation applied; surplus evidence shed oldest-first with the omission notice;**bundle facts + all findings retained**                                                                     |
 | Integration | CLI                                                      | `main.py --spec spec-templates/doc_spec.yaml --code-root <sample> --bundle-id <test>` against a dev Domino bundle → `.docx` contains governance-grounded, cited statements; omitting `--bundle-id` reproduces prior output |
 | Unit        | `list_governance_bundles` (paginated fixture)          | multiple bundles across pages all returned; sorted newest-first                                                                                                                                                                   |
-| Manual      | Studio (multi-bundle project)                            | project with ≥2 bundles lists all, disambiguated, no auto-selection; pick one → command includes `--bundle-id`; "None" omits it; run produces grounded doc                                                                    |
+| Manual      | Studio — model page, 1 matching bundle                   | auto-selects bundle, no picker shown, `--bundle-id` in submitted command                                                                                                                                                          |
+| Manual      | Studio — model page, multiple matching bundles           | minimal policy picker shown; selecting one puts `--bundle-id` in command                                                                                                                                                          |
+| Manual      | Studio — project sidebar                                 | full project bundle picker; selecting one puts `--bundle-id` in command; API error surfaces as error (does not silently omit flag)                                                                                                |
 
 **Fixtures to capture in Task 0:** one bundle JSON, one results JSON with a revised answer (two entries same `evidenceId`, different `updatedAt`), one findings JSON mixing `open` + `resolved`.
 
