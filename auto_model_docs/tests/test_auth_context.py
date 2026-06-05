@@ -1,17 +1,20 @@
-from auth_context import build_request_origin
+import pytest
+
+from domino_client import normalize_governance_api_host
 
 
-def test_build_request_origin_from_host_header():
-    assert build_request_origin("cluster.example.com", "https") == "https://cluster.example.com"
+def test_normalize_governance_api_host_origin():
+    assert normalize_governance_api_host("https://cluster.example.com") == "https://cluster.example.com"
 
 
-def test_build_request_origin_strips_apps_prefix():
-    assert build_request_origin("apps.cluster.example.com", "https") == "https://cluster.example.com"
+def test_normalize_governance_api_host_strips_trailing_slash():
+    assert normalize_governance_api_host("https://cluster.example.com/") == "https://cluster.example.com"
 
 
-def test_build_request_origin_preserves_port():
-    assert build_request_origin("cluster.example.com:8443", "https") == "https://cluster.example.com:8443"
+def test_normalize_governance_api_host_adds_https_scheme():
+    assert normalize_governance_api_host("cluster.example.com") == "https://cluster.example.com"
 
 
-def test_build_request_origin_empty():
-    assert build_request_origin("") is None
+def test_normalize_governance_api_host_empty_raises():
+    with pytest.raises(ValueError):
+        normalize_governance_api_host("")

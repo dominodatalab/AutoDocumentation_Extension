@@ -64,11 +64,17 @@ class TestBundleScanner:
         mock_compute.return_value = cp
         mock_findings.return_value = []
 
-        out = BundleScanner().scan_for_models({"mymodel"}, project_id="proj-1")
+        out = BundleScanner().scan_for_models(
+            {"mymodel"}, project_id="proj-1", api_host="https://cluster.example.com"
+        )
 
         assert out == [cp]
-        mock_compute.assert_called_once_with("active-1", "policy-1")
-        mock_findings.assert_called_once_with("active-1")
+        mock_compute.assert_called_once_with(
+            "active-1", "policy-1", api_host="https://cluster.example.com"
+        )
+        mock_findings.assert_called_once_with(
+            "active-1", api_host="https://cluster.example.com"
+        )
 
     @patch("autodoc.scanning.bundle_scanner.list_bundles")
     def test_empty_without_project_id(self, mock_list):
@@ -92,7 +98,9 @@ class TestBundleScanner:
         mock_list.return_value = [b]
         mock_compute.return_value = None
 
-        out = BundleScanner().scan_for_models({"mymodel"}, project_id="proj-1")
+        out = BundleScanner().scan_for_models(
+            {"mymodel"}, project_id="proj-1", api_host="https://cluster.example.com"
+        )
 
         assert out == []
         mock_findings.assert_not_called()

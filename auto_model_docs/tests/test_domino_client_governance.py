@@ -18,10 +18,11 @@ import domino_client as dc
 from domino_client import compute_policy, get_findings, list_bundles
 
 
+_API_HOST = "https://cluster.example.com"
+
+
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80")
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
 
 
@@ -167,7 +168,7 @@ class TestParseGovernanceResult:
         stale = dict(_RESULT, id="result-2", isLatest=False)
         raw = dict(_COMPUTED_POLICY, results=[_RESULT, stale])
         with patch.object(dc, "_governance_request", return_value=raw):
-            result = compute_policy("bundle-abc", "policy-xyz")
+            result = compute_policy("bundle-abc", "policy-xyz", api_host=_API_HOST)
         assert result is not None
         assert len(result.results) == 1
         assert result.results[0].id == "result-1"
@@ -176,10 +177,11 @@ class TestParseGovernanceResult:
 class TestListBundles:
     def test_returns_bundles_from_data_key(self):
         with patch.object(dc, "_governance_request", return_value={"data": [_BUNDLE]}) as m:
-            result = list_bundles("proj-123")
+            result = list_bundles("proj-123", api_host=_API_HOST)
         m.assert_called_once_with(
             "GET",
             "/api/governance/v1/bundles",
+            api_host=_API_HOST,
             params={"projectId[]": "proj-123", "offset": 0, "limit": 25},
         )
         assert len(result) == 1
@@ -187,12 +189,12 @@ class TestListBundles:
 
     def test_returns_bundles_from_list_response(self):
         with patch.object(dc, "_governance_request", return_value=[_BUNDLE]):
-            result = list_bundles("proj-123")
+            result = list_bundles("proj-123", api_host=_API_HOST)
         assert len(result) == 1
 
     def test_returns_empty_on_api_error(self):
         with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
-            result = list_bundles("proj-123")
+            result = list_bundles("proj-123", api_host=_API_HOST)
         assert result == []
 
     def test_paginates_until_exhausted(self):
@@ -205,7 +207,7 @@ class TestListBundles:
             "meta": {"pagination": {"offset": 1, "limit": 1, "totalCount": 2}},
         }
         with patch.object(dc, "_governance_request", side_effect=[page1, page2]) as m:
-            result = list_bundles("proj-123")
+            result = list_bundles("proj-123", api_host=_API_HOST)
         assert m.call_count == 2
         assert [b.id for b in result] == ["bundle-1", "bundle-2"]
         assert m.call_args_list[1].kwargs["params"]["offset"] == 1
@@ -214,10 +216,11 @@ class TestListBundles:
 class TestComputePolicy:
     def test_returns_computed_policy(self):
         with patch.object(dc, "_governance_request", return_value=_COMPUTED_POLICY) as m:
-            result = compute_policy("bundle-abc", "policy-xyz")
+            result = compute_policy("bundle-abc", "policy-xyz", api_host=_API_HOST)
         m.assert_called_once_with(
             "POST",
             "/api/governance/v1/rpc/compute-policy",
+            api_host=_API_HOST,
             json={"bundleId": "bundle-abc", "policyId": "policy-xyz"},
         )
         assert result is not None
@@ -226,44 +229,36 @@ class TestComputePolicy:
 
     def test_returns_none_on_error(self):
         with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
-            result = compute_policy("bundle-abc", "policy-xyz")
+            result = compute_policy("bundle-abc", "policy-xyz", api_host=_API_HOST)
         assert result is None
 
 
 class TestGetFindings:
     def test_returns_findings_from_list(self):
         with patch.object(dc, "_governance_request", return_value=[_FINDING]) as m:
-            result = get_findings("bundle-abc")
-        m.assert_called_once_with("GET", "/api/governance/v1/bundles/bundle-abc/findings")
+            result = get_findings("bundle-abc", api_host=_API_HOST)
+        m.assert_called_once_with(
+            "GET",
+            "/api/governance/v1/bundles/bundle-abc/findings",
+            api_host=_API_HOST,
+        )
         assert len(result) == 1
         assert result[0].name == "Missing data source documentation"
 
     def test_returns_findings_from_data_key(self):
         with patch.object(dc, "_governance_request", return_value={"data": [_FINDING]}):
-            result = get_findings("bundle-abc")
+            result = get_findings("bundle-abc", api_host=_API_HOST)
         assert len(result) == 1
 
     def test_returns_empty_on_error(self):
         with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
-            result = get_findings("bundle-abc")
+            result = get_findings("bundle-abc", api_host=_API_HOST)
         assert result == []
 
 
 class TestGovernanceHostResolution:
-    def test_uses_user_host_not_proxy(self, monkeypatch):
+    def test_uses_explicit_api_host(self, monkeypatch):
         monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
-        monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80")
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
         with patch.object(dc, "_domino_request", return_value={"data": [_BUNDLE]}) as m:
-            list_bundles("proj-123")
-        assert m.call_args.kwargs["base_url"] == "http://nucleus-frontend.domino-platform:80"
-
-    def test_uses_request_origin_when_user_host_unset(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
-        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
-        with patch("auth_context.get_request_origin", return_value="https://cluster.example.com"), patch.object(
-            dc, "_domino_request", return_value={"data": [_BUNDLE]}
-        ) as m:
-            list_bundles("proj-123")
+            list_bundles("proj-123", api_host="https://cluster.example.com")
         assert m.call_args.kwargs["base_url"] == "https://cluster.example.com"

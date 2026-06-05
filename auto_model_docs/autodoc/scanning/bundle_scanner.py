@@ -38,16 +38,18 @@ class BundleScanner:
         self,
         model_names: Set[str],
         project_id: Optional[str] = None,
+        api_host: Optional[str] = None,
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[ComputedPolicy]:
         pid = (project_id or os.environ.get("DOMINO_PROJECT_ID", "")).strip()
-        if not pid or not model_names:
+        host = (api_host or "").strip()
+        if not pid or not model_names or not host:
             if on_progress:
                 on_progress(1.0)
             return []
 
         policies: List[ComputedPolicy] = []
-        bundles = list_bundles(pid)
+        bundles = list_bundles(pid, api_host=host)
         matching = [
             b
             for b in bundles
@@ -56,9 +58,9 @@ class BundleScanner:
         total = len(matching)
 
         for idx, bundle in enumerate(matching):
-            cp = compute_policy(str(bundle.id), str(bundle.policy_id))
+            cp = compute_policy(str(bundle.id), str(bundle.policy_id), api_host=host)
             if cp is not None:
-                cp.findings = get_findings(str(bundle.id))
+                cp.findings = get_findings(str(bundle.id), api_host=host)
                 policies.append(cp)
             if on_progress and total:
                 on_progress((idx + 1) / total)

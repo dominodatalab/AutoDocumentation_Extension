@@ -747,7 +747,8 @@ MAIN_DOM_JS = r"""
                 return Promise.resolve();
             }
             var url = _adUrl('api/governance/bundles')
-                + '?projectId=' + encodeURIComponent(pid);
+                + '?projectId=' + encodeURIComponent(pid)
+                + '&apiHost=' + encodeURIComponent(window.location.origin);
             return fetch(url, { credentials: 'include' })
                 .then(_checkResp)
                 .then(function(r) { return r.json(); })
@@ -1894,6 +1895,7 @@ MAIN_DOM_JS = r"""
                     };
                     if (_selectedBundleId) {
                         jsonPayload.bundle_id = _selectedBundleId;
+                        jsonPayload.governance_api_host = window.location.origin;
                     }
 
                     var pid = resolvedProjectId();

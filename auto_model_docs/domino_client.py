@@ -68,7 +68,6 @@ _project_cache: dict[str, ProjectInfo] = {}
 # ---------------------------------------------------------------------------
 
 from domino_auth import resolve_api_host as _resolve_api_host
-from domino_auth import resolve_user_host as _resolve_user_host
 from domino_auth import current_auth as _current_auth
 
 
@@ -856,18 +855,31 @@ _GOVERNANCE_BASE = "/api/governance/v1"
 _DEFAULT_BUNDLE_PAGE_LIMIT = 25
 
 
+def normalize_governance_api_host(raw: str) -> str:
+    from urllib.parse import urlparse, urlunparse
+
+    value = (raw or "").strip().rstrip("/")
+    if not value:
+        raise ValueError("governance api host is required")
+    candidate = value if "://" in value else f"https://{value}"
+    parsed = urlparse(candidate)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(f"invalid governance api host: {raw!r}")
+    netloc = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
+    return urlunparse((parsed.scheme, netloc, "", "", "", "")).rstrip("/")
+
+
 def _governance_request(
     method: str,
     path: str,
     *,
+    api_host: str,
     json: Any = None,
     params: dict[str, Any] | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
     max_retries: int = _DEFAULT_MAX_RETRIES,
 ) -> Any:
-    base_url = _resolve_user_host()
-    if not base_url:
-        raise RuntimeError("Domino user host is not configured. Set DOMINO_USER_HOST.")
+    base_url = normalize_governance_api_host(api_host)
     return _domino_request(
         method,
         path,
@@ -966,7 +978,7 @@ def _governance_page_exhausted(data: dict[str, Any], offset: int, fetched_count:
     return offset + fetched_count >= total
 
 
-def list_bundles(project_id: str) -> "List[BundleSummary]":
+def list_bundles(project_id: str, *, api_host: str) -> "List[BundleSummary]":
     offset = 0
     limit = _DEFAULT_BUNDLE_PAGE_LIMIT
     all_bundles: list[Any] = []
@@ -975,6 +987,7 @@ def list_bundles(project_id: str) -> "List[BundleSummary]":
             data = _governance_request(
                 "GET",
                 f"{_GOVERNANCE_BASE}/bundles",
+                api_host=api_host,
                 params={"projectId[]": project_id, "offset": offset, "limit": limit},
             )
             items = _governance_bundle_items(data)
@@ -990,13 +1003,14 @@ def list_bundles(project_id: str) -> "List[BundleSummary]":
     return all_bundles
 
 
-def compute_policy(bundle_id: str, policy_id: str) -> "Optional[ComputedPolicy]":
+def compute_policy(bundle_id: str, policy_id: str, *, api_host: str) -> "Optional[ComputedPolicy]":
     from autodoc.core.models import ComputedPolicy
 
     try:
         raw = _governance_request(
             "POST",
             f"{_GOVERNANCE_BASE}/rpc/compute-policy",
+            api_host=api_host,
             json={"bundleId": bundle_id, "policyId": policy_id},
         )
         if not isinstance(raw, dict):
@@ -1030,9 +1044,13 @@ def compute_policy(bundle_id: str, policy_id: str) -> "Optional[ComputedPolicy]"
         return None
 
 
-def get_findings(bundle_id: str) -> "List[GovernanceFinding]":
+def get_findings(bundle_id: str, *, api_host: str) -> "List[GovernanceFinding]":
     try:
-        data = _governance_request("GET", f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings")
+        data = _governance_request(
+            "GET",
+            f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings",
+            api_host=api_host,
+        )
         items = data if isinstance(data, list) else (data.get("data") if isinstance(data, dict) else [])
         if not isinstance(items, list):
             return []

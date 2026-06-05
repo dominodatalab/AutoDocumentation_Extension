@@ -179,6 +179,12 @@ console = Console()
     help="Governance bundle UUID for this document run",
 )
 @click.option(
+    "--governance-api-host",
+    default=None,
+    type=str,
+    help="Domino cluster origin for governance API calls (from the browser)",
+)
+@click.option(
     "--findings-scope",
     default=None,
     type=click.Choice(["open", "all"], case_sensitive=False),
@@ -208,6 +214,7 @@ def main(
     language: str,
     output_dir: str,
     bundle_id: str | None,
+    governance_api_host: str | None,
     findings_scope: str | None,
 ) -> None:
     """Generate model documentation from ML codebases.
@@ -381,9 +388,17 @@ def main(
 
             configure_auth(cli_auth)
             scope = findings_scope or doc_spec.governance_findings_scope
+            gov_host = (governance_api_host or "").strip()
+            if not gov_host:
+                console.print(
+                    "\n[bold red]Error:[/] --governance-api-host is required when --bundle-id is set",
+                    style="red",
+                )
+                sys.exit(1)
             try:
                 governance_context = load_governance_context(
                     bundle_id,
+                    api_host=gov_host,
                     findings_scope=scope,
                 )
             except GovernanceLoadError as exc:

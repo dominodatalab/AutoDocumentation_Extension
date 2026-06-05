@@ -106,6 +106,7 @@ def _filter_findings(
 def load_governance_context(
     bundle_id: str,
     *,
+    api_host: str,
     findings_scope: str = "open",
     project_id: Optional[str] = None,
 ) -> GovernanceContext:
@@ -117,20 +118,24 @@ def load_governance_context(
     if not pid:
         raise GovernanceLoadError("DOMINO_PROJECT_ID is required to load governance context")
 
+    host = (api_host or "").strip()
+    if not host:
+        raise GovernanceLoadError("governance api host is required")
+
     logger.info("Loading governance context for bundle %s", bundle_id)
 
-    bundles = list_bundles(pid)
+    bundles = list_bundles(pid, api_host=host)
     bundle_row = next((b for b in bundles if str(b.id) == bundle_id), None)
     if bundle_row is None:
         raise GovernanceLoadError(f"Bundle {bundle_id} not found in project {pid}")
 
-    computed = compute_policy(bundle_id, str(bundle_row.policy_id))
+    computed = compute_policy(bundle_id, str(bundle_row.policy_id), api_host=host)
     if computed is None:
         raise GovernanceLoadError(
             f"compute-policy failed for bundle {bundle_id} policy {bundle_row.policy_id}"
         )
 
-    raw_findings = get_findings(bundle_id)
+    raw_findings = get_findings(bundle_id, api_host=host)
     evidence = _extract_evidence_items(computed)
     findings = _filter_findings(raw_findings, findings_scope)
 

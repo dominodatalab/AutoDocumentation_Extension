@@ -89,6 +89,8 @@ class TestMainGovernanceCli:
                     "anthropic",
                     "--bundle-id",
                     "bundle-uuid-1",
+                    "--governance-api-host",
+                    "https://cluster.example.com",
                     "--findings-scope",
                     "open",
                 ],
@@ -101,6 +103,27 @@ class TestMainGovernanceCli:
         mock_load.assert_called_once()
         passed = mock_orch.generate.await_args.kwargs.get("governance_context")
         assert passed is gov
+
+    def test_bundle_id_without_api_host_exits(self, tmp_path):
+        spec_path, code_path = _spec_file(tmp_path)
+        runner = CliRunner()
+
+        with patch("main.LLMClient"), patch("main.ContentSanitizer"):
+            result = runner.invoke(
+                main,
+                [
+                    "--spec",
+                    spec_path,
+                    "--code-root",
+                    code_path,
+                    "--provider",
+                    "anthropic",
+                    "--bundle-id",
+                    "bundle-uuid-1",
+                ],
+            )
+
+        assert result.exit_code == 1
 
     def test_bundle_load_failure_exits(self, tmp_path):
         spec_path, code_path = _spec_file(tmp_path)
@@ -123,6 +146,8 @@ class TestMainGovernanceCli:
                     "anthropic",
                     "--bundle-id",
                     "missing-bundle",
+                    "--governance-api-host",
+                    "https://cluster.example.com",
                 ],
             )
 

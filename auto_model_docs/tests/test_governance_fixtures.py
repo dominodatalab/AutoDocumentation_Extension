@@ -72,7 +72,7 @@ def test_fixture_files_exist():
 def test_list_bundles_fixture_parses():
     payload = _load("bundles-list-modeldocs-target-bgp.json")
     with patch("domino_client._governance_request", return_value=payload):
-        bundles = list_bundles(PROJECT_ID)
+        bundles = list_bundles(PROJECT_ID, api_host="https://domino.example.com")
     assert len(bundles) == 5
     assert bundles[0].id == MLFLOW3_BUNDLE_ID
     assert bundles[0].attachments[0].identifier["name"] == MLFLOW3_MODEL_ID
@@ -99,7 +99,11 @@ def test_model_id_matches_two_bundles_for_mixed_model():
 def test_compute_policy_fixture_latest_results_only():
     payload = _load("compute-policy-mlflow3-bundle.json")
     with patch("domino_client._governance_request", return_value=payload):
-        computed = compute_policy(MLFLOW3_BUNDLE_ID, "a1111111-1111-1111-1111-111111111101")
+        computed = compute_policy(
+            MLFLOW3_BUNDLE_ID,
+            "a1111111-1111-1111-1111-111111111101",
+            api_host="https://domino.example.com",
+        )
     assert computed is not None
     assert computed.bundle.name == "mlflow3-logged-and-registered1-governance-bundle"
     assert len(computed.results) == 2
@@ -110,7 +114,7 @@ def test_compute_policy_fixture_latest_results_only():
 def test_findings_fixture_open_status_api_string():
     payload = _load("findings-todo.json")
     with patch("domino_client._governance_request", return_value=payload):
-        findings = get_findings(MLFLOW3_BUNDLE_ID)
+        findings = get_findings(MLFLOW3_BUNDLE_ID, api_host="https://domino.example.com")
     assert len(findings) == 2
     statuses = {f.status for f in findings}
     assert OPEN_FINDING_STATUS in statuses

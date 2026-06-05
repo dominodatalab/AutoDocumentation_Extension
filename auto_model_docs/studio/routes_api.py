@@ -147,15 +147,30 @@ def register_api_routes(rt):
 
     async def api_governance_bundles(req: Request):
         pid = (_resolve_request_project_id(req) or "").strip()
+        api_host = (req.query_params.get("apiHost") or "").strip()
         if not pid:
             return Response(
                 json.dumps({"error": "projectId required", "bundles": []}),
                 status_code=400,
                 media_type="application/json",
             )
+        if not api_host:
+            return Response(
+                json.dumps({"error": "apiHost required", "bundles": []}),
+                status_code=400,
+                media_type="application/json",
+            )
+        try:
+            api_host = domino_client.normalize_governance_api_host(api_host)
+        except ValueError as exc:
+            return Response(
+                json.dumps({"error": str(exc), "bundles": []}),
+                status_code=400,
+                media_type="application/json",
+            )
         try:
             require_project_write(pid)
-            bundles = domino_client.list_bundles(pid)
+            bundles = domino_client.list_bundles(pid, api_host=api_host)
             payload = {"bundles": [_governance_bundle_json(b) for b in bundles]}
             return Response(json.dumps(payload), media_type="application/json")
         except Exception as exc:

@@ -796,14 +796,10 @@ async def capture_auth_context(request, call_next):
 
     forwarded = request.headers.get("authorization")
     _auth_context.set_request_auth_header(forwarded)
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-    scheme = request.headers.get("x-forwarded-proto", "https")
-    _auth_context.set_request_origin(_auth_context.build_request_origin(host, scheme))
     try:
         response = await call_next(request)
     finally:
         _auth_context.set_request_auth_header(None)
-        _auth_context.set_request_origin(None)
     return response
 
 

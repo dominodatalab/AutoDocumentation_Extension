@@ -101,7 +101,9 @@ class TestLoadGovernanceContext:
         with patch("autodoc.governance_read.list_bundles", return_value=[_bundle_summary()]), patch(
             "autodoc.governance_read.compute_policy", return_value=_computed_policy()
         ), patch("autodoc.governance_read.get_findings", return_value=_findings_raw()):
-            ctx = load_governance_context(BUNDLE_ID, findings_scope="open")
+            ctx = load_governance_context(
+                BUNDLE_ID, api_host="https://domino.example.com", findings_scope="open"
+            )
 
         assert ctx.bundle_id == BUNDLE_ID
         assert ctx.risk_tier == "Medium"
@@ -114,17 +116,19 @@ class TestLoadGovernanceContext:
         with patch("autodoc.governance_read.list_bundles", return_value=[_bundle_summary()]), patch(
             "autodoc.governance_read.compute_policy", return_value=_computed_policy()
         ), patch("autodoc.governance_read.get_findings", return_value=_findings_raw()):
-            ctx = load_governance_context(BUNDLE_ID, findings_scope="all")
+            ctx = load_governance_context(
+                BUNDLE_ID, api_host="https://domino.example.com", findings_scope="all"
+            )
         assert len(ctx.findings) == 2
 
     def test_missing_bundle_raises(self):
         with patch("autodoc.governance_read.list_bundles", return_value=[]):
             with pytest.raises(GovernanceLoadError):
-                load_governance_context(BUNDLE_ID)
+                load_governance_context(BUNDLE_ID, api_host="https://domino.example.com")
 
     def test_compute_policy_failure_raises(self):
         with patch("autodoc.governance_read.list_bundles", return_value=[_bundle_summary()]), patch(
             "autodoc.governance_read.compute_policy", return_value=None
         ):
             with pytest.raises(GovernanceLoadError):
-                load_governance_context(BUNDLE_ID)
+                load_governance_context(BUNDLE_ID, api_host="https://domino.example.com")

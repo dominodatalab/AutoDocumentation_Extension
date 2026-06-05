@@ -177,6 +177,7 @@ async def _parse_request(req: Request) -> JobRequest:
         backoff_jitter=_form_float(body, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
         notebook_from_cache=notebook_from_cache,
         bundle_id=_form_str(body, "bundle_id"),
+        governance_api_host=_form_str(body, "governance_api_host"),
     )
 
 
@@ -241,6 +242,9 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
     bundle_id = (req.bundle_id or "").strip()
     if bundle_id:
         command += ["--bundle-id", bundle_id]
+        governance_api_host = (req.governance_api_host or "").strip()
+        if governance_api_host:
+            command += ["--governance-api-host", governance_api_host]
     return command
 
 
