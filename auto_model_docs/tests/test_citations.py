@@ -7,10 +7,14 @@ from autodoc.generation.citations import (
     CitationRegistry,
     _sanitize_name,
     build_code_citation_id,
+    build_evidence_citation_id,
+    build_finding_citation_id,
+    build_governance_citation_id,
     build_mlflow_artifact_citation_id,
     build_mlflow_run_citation_id,
     extract_citation_ids,
     parse_citation_id,
+    slugify_evidence_question,
 )
 
 
@@ -397,3 +401,46 @@ class TestCitationRegistry:
         _, entry = entries[0]
         assert "http://mlflow:5000" in entry.run_url
         assert "r123" in entry.run_url
+
+
+class TestGovernanceCitationIds:
+    def test_slugify_evidence_question(self):
+        slug = slugify_evidence_question("Was the model validated on a hold-out dataset?")
+        assert slug == "model_validated_hold_out_dataset"
+
+    def test_build_and_parse_governance(self):
+        cid = build_governance_citation_id("risk_tier")
+        assert cid == "governance.risk_tier"
+        parsed = parse_citation_id(cid)
+        assert parsed["type"] == "governance"
+        assert parsed["source_key"] == "risk_tier"
+
+    def test_build_and_parse_evidence(self):
+        cid = build_evidence_citation_id("Describe the validation methodology.")
+        assert cid.startswith("evidence.")
+        parsed = parse_citation_id(cid)
+        assert parsed["type"] == "evidence"
+
+    def test_build_and_parse_finding(self):
+        cid = build_finding_citation_id("find-uuid-1")
+        assert cid == "finding.find-uuid-1"
+        parsed = parse_citation_id(cid)
+        assert parsed["type"] == "finding"
+        assert parsed["source_key"] == "find-uuid-1"
+
+    def test_extract_citation_ids_includes_governance_prefixes(self):
+        text = (
+            "[@governance.risk_tier] validated [@evidence.was_model_validated] "
+            "[@finding.find-1]"
+        )
+        ids = extract_citation_ids(text)
+        assert "governance.risk_tier" in ids
+        assert "evidence.was_model_validated" in ids
+        assert "finding.find-1" in ids
+
+    def test_evidence_slug_collision_suffix(self):
+        used = set()
+        a = build_evidence_citation_id("Was the model validated?", used)
+        b = build_evidence_citation_id("Was the model validated?", used)
+        assert a != b
+        assert b.endswith("_2")

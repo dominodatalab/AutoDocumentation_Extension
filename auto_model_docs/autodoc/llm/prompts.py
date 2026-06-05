@@ -53,12 +53,26 @@ SYSTEM_LIST_GENERATOR = (
     "Include citation markers [@citation_id] when list items reference specific data sources."
 )
 
-GOVERNANCE_SYSTEM_SUFFIX = (
-    "When governance context is provided, incorporate relevant evidence answers and "
-    "compliance findings into the documentation. Treat Q&A answers as factual "
-    "statements about the model's compliance posture. Surface open findings as risks "
-    "or limitations where appropriate."
+GOVERNANCE_SYSTEM_NOTE = (
+    "Treat the Governance Evidence block as the authoritative source for governance facts "
+    "(risk tier, intended use, validation status, approval state, findings); never override "
+    "it with inferences."
 )
+
+GOVERNANCE_ANTI_FABRICATION = """
+- Any model risk classification, validation status, regulatory mapping, approval state, or
+  intended-use claim must come VERBATIM from the Governance Evidence block above. Do not infer
+  these from code or MLflow. Cite them with [@governance.*]/[@evidence.*].
+- When you state or rely on an open finding, cite it with [@finding.*]. Do not invent findings.
+- Do not fabricate evidence answers; if a fact is not in the Governance Evidence block, omit it.
+- Do not use one source to override or "correct" another. If code and governance evidence
+  describe the same attribute differently (e.g. model type, feature count), present BOTH
+  with their citations and note the discrepancy explicitly:
+  "The code implements XGBoost [@code.x], while the governance record states logistic
+  regression [@evidence.model_type]. This discrepancy should be reviewed."
+- Do not fabricate a reconciliation. Do not silently choose one source.
+- Discrepancies of this kind are significant governance observations, not editorial problems.
+""".strip()
 
 SYSTEM_FILE_RANKER = (
     "You are an expert at analyzing ML codebases. "
@@ -279,6 +293,7 @@ def build_section_planning_prompt(
     data_sources: str,
     metrics_info: str = "",
     artifacts_info: str = "",
+    governance_evidence: str = "",
 ) -> str:
     """Build prompt for planning section content.
 
@@ -299,6 +314,7 @@ def build_section_planning_prompt(
         Formatted prompt string.
     """
     model_line = f"\n## Specific Model: {model_name}" if model_name else ""
+    governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
 
     return f"""Plan content for a model documentation section.
 
@@ -311,7 +327,7 @@ def build_section_planning_prompt(
 - Features: {features_preview}
 - Target Variable: {target_variable}
 - Registered Models: {registered_models}{metrics_info}{artifacts_info}
-- Data Sources: {data_sources}
+- Data Sources: {data_sources}{governance_section}
 
 ## Task
 Determine what content blocks this section should contain to create useful documentation.
@@ -391,72 +407,16 @@ SECTION_PLANNING_SCHEMA: Dict[str, Any] = {
 # Content Generator Prompts
 # =============================================================================
 
-def format_artifact_answer(artifact_content: Any) -> str:
-    if artifact_content is None:
+def _governance_instructions(governance_evidence: str) -> str:
+    if not governance_evidence:
         return ""
-    if isinstance(artifact_content, dict) and "value" in artifact_content:
-        return str(artifact_content["value"])
-    return str(artifact_content)
+    return f"\n{GOVERNANCE_ANTI_FABRICATION}\n"
 
 
-def format_governance_context(governance: List["ComputedPolicy"]) -> str:
-    if not governance:
-        return ""
-
-    lines = ["## Governance & Compliance Context\n"]
-    for cp in governance:
-        b = cp.bundle
-        lines.append(f"### Bundle: {b.name}")
-        lines.append(f"- Policy: {cp.policy_name}")
-        lines.append(f"- Stage: {b.stage or 'N/A'}")
-        lines.append(f"- State: {b.state}")
-        if b.classification_value:
-            lines.append(f"- Classification: {b.classification_value}")
-        lines.append("")
-
-        for stage in cp.policy_stages or []:
-            stage_name = stage.get("name", "")
-            for evidence in stage.get("evidenceSet") or []:
-                ev_id = str(evidence.get("id", ""))
-                ev_name = evidence.get("name", "")
-                for artifact in evidence.get("artifacts") or []:
-                    if str(artifact.get("artifactType", "")).lower() != "input":
-                        continue
-                    art_id = str(artifact.get("id", ""))
-                    question = (artifact.get("details") or {}).get("text", "")
-                    if not question:
-                        continue
-                    answer = None
-                    for result in cp.results:
-                        if (
-                            str(result.evidence_id) == ev_id
-                            and str(result.artifact_id) == art_id
-                        ):
-                            answer = format_artifact_answer(result.artifact_content)
-                            break
-                    if answer:
-                        lines.append(f"**Q ({ev_name} / {stage_name})**: {question}")
-                        lines.append(f"**A**: {answer}")
-                        lines.append("")
-
-        if cp.findings:
-            lines.append("#### Findings")
-            for finding in cp.findings:
-                desc = f" - {finding.description}" if finding.description else ""
-                lines.append(
-                    f"- [{finding.severity}] {finding.name} ({finding.status}){desc}"
-                )
-            lines.append("")
-
-    return "\n".join(lines)
-
-
-def system_prompt_with_governance(
-    base_system: str, governance: List["ComputedPolicy"]
-) -> str:
-    if not governance or not format_governance_context(governance):
-        return base_system
-    return f"{base_system} {GOVERNANCE_SYSTEM_SUFFIX}"
+def narrative_system_prompt(governance_evidence: str = "") -> str:
+    if not governance_evidence:
+        return SYSTEM_NARRATIVE_WRITER
+    return f"{SYSTEM_NARRATIVE_WRITER} {GOVERNANCE_SYSTEM_NOTE}"
 
 
 def build_narrative_prompt(
@@ -526,7 +486,7 @@ def build_narrative_prompt(
 - Do NOT include a title or heading
 - Just write the paragraph content directly
 - When you reference specific metrics, code, or MLflow data, include a citation using the format [@citation_id] where the citation_id comes from the evidence sections above
-- Only cite when making specific factual claims from the evidence - do not over-cite
+- Only cite when making specific factual claims from the evidence - do not over-cite{_governance_instructions(governance_evidence)}
 
 CRITICAL: Only describe metrics, results, and methodologies that are explicitly mentioned in the context above.
 If cross-validation or other specific techniques are not mentioned in the context, do NOT claim they were performed.
@@ -585,7 +545,7 @@ CRITICAL INSTRUCTIONS:
 - Do NOT generate cross-validation metrics unless CV results are explicitly provided above
 - If specific data is not available, either omit that row/column or mark it as "Not Available"
 - Use the exact metric values provided - do not round, estimate, or modify them
-- Include a citation marker [@citation_id] in the table caption referencing the data source from the evidence sections above
+- Include a citation marker [@citation_id] in the table caption referencing the data source from the evidence sections above{_governance_instructions(governance_evidence)}
 
 Generate a useful table with 3-10 rows using ONLY the data provided above."""
 
@@ -670,7 +630,7 @@ Do NOT fabricate or estimate any values. If NO metrics are provided above, retur
 - values: []
 
 Provide labels and values for the chart using ONLY the data provided above.
-Include a citation marker [@citation_id] in the chart title referencing the data source from the evidence sections above."""
+Include a citation marker [@citation_id] in the chart title referencing the data source from the evidence sections above.{_governance_instructions(governance_evidence)}"""
 
 
 CHART_SCHEMA: Dict[str, Any] = {
@@ -736,7 +696,7 @@ If specific data is not available, focus on what IS known from the context.
 
 Generate a descriptive title for this list (e.g., "Key Limitations", "Recommended Actions", "Implementation Steps")
 and 5-10 concise, informative items using ONLY the data provided above.
-When list items reference specific data from the evidence sections, include citation markers using [@citation_id] format."""
+When list items reference specific data from the evidence sections, include citation markers using [@citation_id] format.{_governance_instructions(governance_evidence)}"""
 
 
 LIST_SCHEMA: Dict[str, Any] = {

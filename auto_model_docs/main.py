@@ -172,6 +172,18 @@ console = Console()
     default="/mnt/artifacts",
     help="Root artifacts directory where docs and cache are stored (default: /mnt/artifacts)",
 )
+@click.option(
+    "--bundle-id",
+    default=None,
+    type=str,
+    help="Governance bundle UUID for this document run",
+)
+@click.option(
+    "--findings-scope",
+    default=None,
+    type=click.Choice(["open", "all"], case_sensitive=False),
+    help="Findings filter: open (To do only) or all",
+)
 def main(
     spec: str,
     code_root: str,
@@ -195,6 +207,8 @@ def main(
     latest_only: bool,
     language: str,
     output_dir: str,
+    bundle_id: str | None,
+    findings_scope: str | None,
 ) -> None:
     """Generate model documentation from ML codebases.
 
@@ -360,6 +374,24 @@ def main(
             language=language,
         )
 
+        governance_context = None
+        if bundle_id:
+            from domino_auth import cli_auth, configure_auth
+            from autodoc.governance_read import GovernanceLoadError, load_governance_context
+
+            configure_auth(cli_auth())
+            scope = findings_scope or doc_spec.governance_findings_scope
+            try:
+                governance_context = load_governance_context(
+                    bundle_id,
+                    findings_scope=scope,
+                )
+            except GovernanceLoadError as exc:
+                console.print(f"\n[bold red]Error:[/] {exc}", style="red")
+                sys.exit(1)
+            if verbose:
+                console.print(f"[dim]Governance bundle:[/] {bundle_id}")
+
         # Run generation with progress
         console.print("\n[bold blue]Starting document generation...[/]\n")
 
@@ -378,7 +410,13 @@ def main(
                 progress.update(task_id, completed=completed, description=f"{phase}...")
 
             # Run async generation
-            output_path = asyncio.run(orchestrator.generate(doc_spec, on_progress))
+            output_path = asyncio.run(
+                orchestrator.generate(
+                    doc_spec,
+                    on_progress,
+                    governance_context=governance_context,
+                )
+            )
 
         # Success!
         console.print(f"\n[bold green]Success![/] Document generated:")

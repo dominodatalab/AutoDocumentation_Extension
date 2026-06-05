@@ -90,6 +90,49 @@ def build_mlflow_summary_citation_id(run_id: str) -> str:
     return build_mlflow_citation_id(run_id, "summary", "all")
 
 
+_EVIDENCE_SLUG_STOPWORDS = frozenset({
+    "a", "an", "the", "is", "was", "were", "be", "been", "being",
+    "do", "does", "did", "have", "has", "had", "will", "would", "could",
+    "should", "may", "might", "must", "shall", "can", "need", "to", "of",
+    "in", "on", "at", "by", "for", "with", "about", "into", "from", "as",
+    "it", "this", "that", "these", "those", "any", "what", "which", "who",
+    "whom", "whose", "how", "when", "where", "why",
+})
+
+
+def slugify_evidence_question(question: str) -> str:
+    words = re.findall(r"[a-z0-9]+", (question or "").lower())
+    filtered = [w for w in words if w not in _EVIDENCE_SLUG_STOPWORDS]
+    content = filtered[:6] if filtered else words[:6]
+    slug = "_".join(content) if content else "evidence"
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    return slug or "evidence"
+
+
+def build_governance_citation_id(key: str) -> str:
+    return f"governance.{key}"
+
+
+def build_evidence_citation_id(
+    question: str,
+    used_slugs: Optional[set[str]] = None,
+) -> str:
+    base = slugify_evidence_question(question)
+    if used_slugs is None:
+        return f"evidence.{base}"
+    candidate = base
+    suffix = 2
+    while candidate in used_slugs:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    used_slugs.add(candidate)
+    return f"evidence.{candidate}"
+
+
+def build_finding_citation_id(finding_id: str) -> str:
+    return f"finding.{finding_id}"
+
+
 def _parse_code_citation(raw: str) -> dict:
     """Parse the raw portion of a Code: citation, handling line number suffix."""
     start_line = None
@@ -123,6 +166,13 @@ def parse_citation_id(citation_id: str) -> dict:
     # Legacy format: code:path#symbol
     if citation_id.startswith("code:"):
         return _parse_code_citation(citation_id[len("code:"):])
+
+    if citation_id.startswith("governance."):
+        return {"type": "governance", "source_key": citation_id[len("governance."):]}
+    if citation_id.startswith("evidence."):
+        return {"type": "evidence", "source_key": citation_id[len("evidence."):]}
+    if citation_id.startswith("finding."):
+        return {"type": "finding", "source_key": citation_id[len("finding."):]}
 
     # Legacy format: mlflow:run/{run_id}/{kind}/{key}
     if citation_id.startswith("mlflow:run/"):

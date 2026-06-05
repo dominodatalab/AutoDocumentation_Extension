@@ -851,14 +851,14 @@ Normalize `artifactContent` in `governance_read` (prefer `value` key; fallbacks 
 
 - [x] A0 fixtures + modelId check
 - [x] A1 domino_client governance HTTP
-- [ ] A2 GovernanceContext + citation IDs
-- [ ] A3 governance_read
-- [ ] B1 format block + token budget
-- [ ] B2 prompts
-- [ ] B3 generator + citations
-- [ ] B4 planner
-- [ ] B5 orchestrator (drop BundleScanner)
-- [ ] B6 CLI `--bundle-id`
+- [x] A2 GovernanceContext + citation IDs
+- [x] A3 governance_read
+- [x] B1 format block + token budget
+- [x] B2 prompts
+- [x] B3 generator + citations
+- [x] B4 planner
+- [x] B5 orchestrator (drop BundleScanner)
+- [x] B6 CLI `--bundle-id`
 - [ ] C1 Studio list API + modelId parse
 - [ ] C2 job command
 - [ ] C3 picker UI

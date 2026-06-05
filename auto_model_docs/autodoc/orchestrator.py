@@ -30,8 +30,8 @@ from autodoc.core.models import (
 )
 from autodoc.generation import ContentGenerator, DocumentBuilder, NotebookBuilder, SectionPlanner
 from autodoc.llm import LLMClient
-from autodoc.scanning import ArtifactScanner, BundleScanner, CodeScanner, ContentSanitizer
-from autodoc.core.models import ComputedPolicy
+from autodoc.scanning import ArtifactScanner, CodeScanner, ContentSanitizer
+from autodoc.core.models import GovernanceContext
 
 
 # Type alias for progress callback
@@ -145,7 +145,6 @@ class Orchestrator:
             model_names=model_names,
             latest_only=latest_only,
         )
-        self.bundle_scanner = BundleScanner()
         self.planner = SectionPlanner(llm=llm, sanitizer=sanitizer)
         self.generator = ContentGenerator(llm=llm)
         self.builder = DocumentBuilder(output_dir=output_dir)
@@ -164,6 +163,7 @@ class Orchestrator:
         spec: DocumentSpec,
         on_progress: Optional[ProgressCallback] = None,
         on_status: Optional[StatusCallback] = None,
+        governance_context: Optional[GovernanceContext] = None,
     ) -> Path:
         """Execute the full document generation pipeline.
 
@@ -238,13 +238,20 @@ class Orchestrator:
         if on_progress:
             on_progress("Scanning", 1.0)
 
-        governance_data = await self.bundle_scanner.scan(artifact_ctx.models or [])
+        governance_evidence = self.generator._format_governance_evidence(
+            governance_context
+        )
 
         if on_progress:
             on_progress("Planning", 0.0)
 
         plans = await self._plan_all_sections(
-            spec, code_ctx, artifact_ctx, governance_data, on_progress
+            spec,
+            code_ctx,
+            artifact_ctx,
+            governance_context,
+            governance_evidence,
+            on_progress,
         )
 
         if on_progress:
@@ -255,7 +262,12 @@ class Orchestrator:
             on_progress("Generating", 0.0)
 
         results = await self._generate_all_content(
-            plans, code_ctx, artifact_ctx, governance_data, on_progress
+            plans,
+            code_ctx,
+            artifact_ctx,
+            governance_context,
+            governance_evidence,
+            on_progress,
         )
 
         if on_progress:
@@ -481,7 +493,8 @@ class Orchestrator:
         spec: DocumentSpec,
         code_ctx: CodeContext,
         artifact_ctx: ArtifactContext,
-        governance_data: List[ComputedPolicy],
+        governance_context: Optional[GovernanceContext],
+        governance_evidence: str,
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionPlan]:
         """Plan all sections in the document."""
@@ -500,7 +513,8 @@ class Orchestrator:
                         artifact_context=artifact_ctx,
                         section_name=section.name,
                         hint=spec.hints.get(section.name),
-                        governance=governance_data,
+                        governance_context=governance_context,
+                        governance_evidence=governance_evidence,
                     )
                     planning_tasks.append((section, context, str(section_num)))
                 else:
@@ -512,7 +526,8 @@ class Orchestrator:
                             model_name=model.name,
                             model_run_id=model.run_id,
                             hint=spec.hints.get(section.name),
-                            governance=governance_data,
+                            governance_context=governance_context,
+                            governance_evidence=governance_evidence,
                         )
                         planning_tasks.append((section, context, f"{section_num}.{j}"))
             else:
@@ -522,7 +537,8 @@ class Orchestrator:
                     artifact_context=artifact_ctx,
                     section_name=section.name,
                     hint=spec.hints.get(section.name),
-                    governance=governance_data,
+                    governance_context=governance_context,
+                    governance_evidence=governance_evidence,
                 )
                 planning_tasks.append((section, context, str(section_num)))
 
@@ -573,7 +589,8 @@ class Orchestrator:
         plans: List[SectionPlan],
         code_ctx: CodeContext,
         artifact_ctx: ArtifactContext,
-        governance_data: List[ComputedPolicy],
+        governance_context: Optional[GovernanceContext],
+        governance_evidence: str,
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionResult]:
         """Generate content for all sections in parallel."""
@@ -591,7 +608,8 @@ class Orchestrator:
                 section_name=plan.name,
                 model_name=plan.model_name,
                 model_run_id=plan.model_run_id,
-                governance=governance_data,
+                governance_context=governance_context,
+                governance_evidence=governance_evidence,
             )
 
             async def _gen_block(block):

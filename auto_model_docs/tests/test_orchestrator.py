@@ -758,11 +758,11 @@ class TestCacheSpecFields:
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: governance wiring
+# Governance context wiring (B5)
 # ---------------------------------------------------------------------------
 
 
-class TestGovernancePhase2Wiring:
+class TestGovernanceContextWiring:
     @patch("autodoc.orchestrator.Orchestrator._save_results_cache")
     @patch("autodoc.orchestrator.ArtifactScanner")
     @patch("autodoc.orchestrator.CodeScanner")
@@ -780,6 +780,8 @@ class TestGovernancePhase2Wiring:
         mock_artifact_scanner_cls,
         mock_save_cache,
     ):
+        from autodoc.core.models import GovernanceContext
+
         orch = Orchestrator(
             llm=_make_mock_llm(),
             sanitizer=_make_mock_sanitizer(),
@@ -787,11 +789,7 @@ class TestGovernancePhase2Wiring:
         )
 
         orch.code_scanner.scan = AsyncMock(return_value=CodeContext())
-        orch.artifact_scanner.scan = AsyncMock(
-            return_value=ArtifactContext(
-                models=[ModelInfo(name="mymodel", version="1", stage="None", run_id="run-1")]
-            )
-        )
+        orch.artifact_scanner.scan = AsyncMock(return_value=ArtifactContext())
 
         block = ContentBlock(
             type=ContentType.NARRATIVE,
@@ -803,19 +801,37 @@ class TestGovernancePhase2Wiring:
         plan = SectionPlan(number="1", name="Overview", title="Overview", content_blocks=[block])
         orch.planner.plan_section = AsyncMock(return_value=plan)
 
-        governance_policy = MagicMock()
-        orch.bundle_scanner.scan = AsyncMock(return_value=[governance_policy])
+        governance_ctx = GovernanceContext(
+            bundle_id="bundle-1",
+            bundle_name="Test Bundle",
+            risk_tier="High",
+        )
+        orch.generator._format_governance_evidence = MagicMock(return_value="[@governance.bundle]: Test")
 
         gen_called = []
 
         async def _gen_side_effect(_block, context):
-            gen_called.append(context.governance)
+            gen_called.append(
+                (
+                    context.governance_context,
+                    context.governance_evidence,
+                )
+            )
             return GeneratedContent(block_type=ContentType.NARRATIVE, content="text")
 
         orch.generator.generate = AsyncMock(side_effect=_gen_side_effect)
         orch.builder.build = AsyncMock(return_value=Path("/tmp/out.docx"))
 
-        asyncio.run(orch.generate(_make_spec(), on_progress=lambda *_: None))
+        asyncio.run(
+            orch.generate(
+                _make_spec(),
+                on_progress=lambda *_: None,
+                governance_context=governance_ctx,
+            )
+        )
 
         assert gen_called, "generator.generate should be called at least once"
-        assert gen_called[0] == [governance_policy]
+        ctx, block_text = gen_called[0]
+        assert ctx is governance_ctx
+        assert "[@governance.bundle]" in block_text
+        orch.generator._format_governance_evidence.assert_called_once_with(governance_ctx)
