@@ -809,9 +809,14 @@ async def capture_auth_context(request, call_next):
 
 @app.on_event("startup")
 async def _on_startup():
+    import logging
+
+    from env_diag import log_process_environment
+
     import studio.state as _state
     from artifact_layout import init_layout
 
+    log_process_environment(logging.getLogger("studio.env_diag"), "studio")
     ensure_database()
     init_layout()
     _state._STARTUP_WARNINGS = _validate_environment()

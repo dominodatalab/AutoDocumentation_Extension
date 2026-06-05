@@ -247,7 +247,11 @@ def main(
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[logging.StreamHandler()]
         )
-        
+
+        from env_diag import log_process_environment
+
+        log_process_environment(logging.getLogger("job.env_diag"), "job", force=True)
+
         # Load settings from .env and environment
         settings = Settings()
 
