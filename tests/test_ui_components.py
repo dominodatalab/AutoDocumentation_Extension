@@ -490,5 +490,17 @@ class TestGovernanceBundlePickerOptgroups:
         assert "_renderGovernanceBundleSelectOptions" in scripts_src
         assert "_bundleLeafLabel" in scripts_src
         assert "<optgroup label=" in scripts_src
-        assert "_renderGovernanceBundleSelectOptions(visible)" in scripts_src
+        assert "_renderGovernanceBundleSelectOptions(visible, _selectedBundleId)" in scripts_src
         assert "_bundleAutoLabel" in scripts_src
+        assert "_filterModelNamePatterns" in scripts_src
+        assert "_bundleMatchesModelNameFilters" in scripts_src
+        assert "_firstVisibleBundle" in scripts_src
+        assert "filter-model-names" in scripts_src
+        assert "applyGovernanceBundleSelection" in scripts_src
+
+    def test_filters_accordion_open_by_default(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        idx = web.index("filters-body")
+        section = web[max(0, idx - 200) : idx + 200]
+        assert "open=True" in section

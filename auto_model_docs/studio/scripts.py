@@ -628,8 +628,50 @@ MAIN_DOM_JS = r"""
             return names;
         }
 
+        function _filterModelNamePatterns() {
+            var el = document.getElementById('filter-model-names');
+            var raw = el ? String(el.value || '').trim() : '';
+            if (!raw) return [];
+            return raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        }
+
+        function _globPatternToRegExp(pattern) {
+            var out = '^';
+            for (var i = 0; i < pattern.length; i++) {
+                var c = pattern[i];
+                if (c === '*') out += '.*';
+                else if (c === '?') out += '.';
+                else if (/[\\\\^$+.|()\\[\\]{}]/.test(c)) out += '\\\\' + c;
+                else out += c;
+            }
+            return new RegExp(out + '$');
+        }
+
+        function _nameMatchesFilterPattern(name, pattern) {
+            if (!pattern) return false;
+            if (pattern.indexOf('*') >= 0 || pattern.indexOf('?') >= 0) {
+                return _globPatternToRegExp(pattern).test(name);
+            }
+            return name === pattern;
+        }
+
+        function _bundleMatchesModelNameFilters(bundle, patterns) {
+            if (!patterns.length) return true;
+            var names = _bundleModelNames(bundle);
+            for (var i = 0; i < names.length; i++) {
+                for (var j = 0; j < patterns.length; j++) {
+                    if (_nameMatchesFilterPattern(names[i], patterns[j])) return true;
+                }
+            }
+            return false;
+        }
+
         function _bundlesForContext(bundles) {
             var all = bundles || [];
+            var patterns = _filterModelNamePatterns();
+            if (patterns.length) {
+                all = all.filter(function(b) { return _bundleMatchesModelNameFilters(b, patterns); });
+            }
             var mid = resolvedModelId();
             if (!mid) return all;
             var matched = [];
@@ -675,9 +717,27 @@ MAIN_DOM_JS = r"""
             return { order: order, groups: groups };
         }
 
-        function _renderGovernanceBundleSelectOptions(bundles) {
+        function _sortedVisibleBundles(bundles) {
             var grouped = _groupBundlesByModel(bundles);
-            var html = '<option value="" selected disabled>Select a bundle\u2026</option>';
+            var sorted = [];
+            for (var g = 0; g < grouped.order.length; g++) {
+                var items = grouped.groups[grouped.order[g]].slice();
+                items.sort(function(a, b) {
+                    return String(a.policyName || '').localeCompare(String(b.policyName || ''));
+                });
+                for (var j = 0; j < items.length; j++) sorted.push(items[j]);
+            }
+            return sorted;
+        }
+
+        function _firstVisibleBundle(bundles) {
+            var sorted = _sortedVisibleBundles(bundles);
+            return sorted.length ? sorted[0] : null;
+        }
+
+        function _renderGovernanceBundleSelectOptions(bundles, selectedId) {
+            var grouped = _groupBundlesByModel(bundles);
+            var html = '<option value="" disabled>Select a bundle\u2026</option>';
             for (var g = 0; g < grouped.order.length; g++) {
                 var model = grouped.order[g];
                 var items = grouped.groups[model];
@@ -687,7 +747,8 @@ MAIN_DOM_JS = r"""
                 html += '<optgroup label="' + _esc(model) + '">';
                 for (var j = 0; j < items.length; j++) {
                     var b = items[j];
-                    html += '<option value="' + _esc(b.id) + '">' + _esc(_bundleLeafLabel(b)) + '</option>';
+                    var sel = selectedId && b.id === selectedId ? ' selected' : '';
+                    html += '<option value="' + _esc(b.id) + '"' + sel + '>' + _esc(_bundleLeafLabel(b)) + '</option>';
                 }
                 html += '</optgroup>';
             }
@@ -731,8 +792,10 @@ MAIN_DOM_JS = r"""
 
             if (field) field.style.display = '';
 
+            var defaultBundle = _firstVisibleBundle(visible);
+            _selectedBundleId = defaultBundle ? defaultBundle.id : '';
+
             if (visible.length === 1) {
-                _selectedBundleId = visible[0].id;
                 if (select) {
                     select.style.display = 'none';
                     select.disabled = true;
@@ -747,14 +810,10 @@ MAIN_DOM_JS = r"""
                 if (select) {
                     select.style.display = '';
                     select.disabled = false;
-                    select.innerHTML = _renderGovernanceBundleSelectOptions(visible);
-                    _selectedBundleId = select.value || '';
+                    select.innerHTML = _renderGovernanceBundleSelectOptions(visible, _selectedBundleId);
+                    if (_selectedBundleId) select.value = _selectedBundleId;
                 }
-                if (!_selectedBundleId) {
-                    _setGovernanceHint('Select a governance bundle to generate documentation.');
-                } else {
-                    _setGovernanceHint('');
-                }
+                _setGovernanceHint('');
             }
             updateGenerateButton();
         }
@@ -813,6 +872,11 @@ MAIN_DOM_JS = r"""
                     if (_selectedBundleId) _setGovernanceHint('');
                     updateGenerateButton();
                 });
+            }
+            var modelFilter = document.getElementById('filter-model-names');
+            if (modelFilter) {
+                modelFilter.addEventListener('input', applyGovernanceBundleSelection);
+                modelFilter.addEventListener('change', applyGovernanceBundleSelection);
             }
         })();
 

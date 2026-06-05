@@ -461,6 +461,7 @@ async def index(req: Request):
                                     cls="adv-opts-accordion-body filters-body",
                                 ),
                                 cls="adv-opts-accordion",
+                                open=True,
                             ),
 
                             cls="wizard-col-gallery",
