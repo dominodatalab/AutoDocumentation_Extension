@@ -91,6 +91,9 @@ def _finding_from_api(raw: GovernanceFinding, artifact_label: Optional[str] = No
 
 
 def _bundle_owner(bundle_row) -> Optional[str]:
+    display = getattr(bundle_row, "owner_display_name", None) or None
+    if display:
+        return str(display)
     owner = getattr(bundle_row, "owner_username", None) or None
     if owner:
         return str(owner)

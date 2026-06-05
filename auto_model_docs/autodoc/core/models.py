@@ -481,6 +481,7 @@ class BundleSummary:
     stage: Optional[str] = None
     classification_value: Optional[str] = None
     owner_username: Optional[str] = None
+    owner_display_name: Optional[str] = None
     project_owner: Optional[str] = None
     attachments: List[BundleAttachment] = field(default_factory=list)
     created_at: Optional[str] = None

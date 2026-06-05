@@ -25,6 +25,7 @@ from autodoc.generation.citations import (
     CitationRegistry,
     build_mlflow_summary_citation_id,
     citation_details_meta_comment,
+    format_code_reference_text,
     is_governance_source_type,
     parse_citation_id,
     replace_markers_with_numbers,
@@ -850,30 +851,13 @@ ax.set_xticklabels(chart_data["labels"])'''
                 parts.append(display_id)
                 parts.append("Model Run")
             elif entry.type == "code_file":
-                # Format code reference - strip __init__ and similar dunder methods
-                code_path = entry.code_path or ""
-                code_symbol = entry.code_symbol or ""
-
-                clean_symbol = code_symbol
-                clean_symbol = clean_symbol.replace(".__init__", "")
-                clean_symbol = clean_symbol.replace(".__call__", "")
-                clean_symbol = clean_symbol.replace(".__new__", "")
-
-                if code_path and clean_symbol:
-                    parts.append(f"Code: {code_path}#{clean_symbol}")
-                elif code_path:
-                    parts.append(f"Code: {code_path}")
-                else:
-                    # Fallback: clean up display_id
-                    clean_display = display_id
-                    clean_display = re.sub(r',\s*@?Code:', ', ', clean_display)
-                    clean_display = re.sub(r';\s*@?Code:', '; ', clean_display)
-                    clean_display = clean_display.replace(".__init__", "")
-                    parts.append(clean_display)
+                parts.append(
+                    entry.text
+                    or format_code_reference_text(entry.code_path, entry.code_symbol)
+                    or display_id
+                )
             elif is_governance_source_type(entry.type):
-                parts.append(display_id)
-                if entry.text:
-                    parts.append(entry.text)
+                parts.append(entry.text or entry.display_label or display_id)
             else:
                 clean_display = display_id
                 clean_display = re.sub(r',\s*@?Code:', ', ', clean_display)

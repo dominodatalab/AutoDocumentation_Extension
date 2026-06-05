@@ -1195,6 +1195,7 @@ class ContentGenerator:
                 "finding_description": finding.description,
                 "finding_severity": finding.severity,
                 "finding_status": finding.status,
+                "finding_artifact_label": finding.artifact_label,
             }
 
         return details

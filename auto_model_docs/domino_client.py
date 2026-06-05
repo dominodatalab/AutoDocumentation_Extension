@@ -911,8 +911,14 @@ def _parse_governance_bundle(raw: dict[str, Any]) -> "BundleSummary":
     ]
     created_by = raw.get("createdBy") or {}
     owner_username = None
+    owner_display_name = None
     if isinstance(created_by, dict):
         owner_username = created_by.get("userName") or created_by.get("username")
+        first = (created_by.get("firstName") or "").strip()
+        last = (created_by.get("lastName") or "").strip()
+        full = f"{first} {last}".strip()
+        if full:
+            owner_display_name = full
     project_owner = raw.get("projectOwner") or None
 
     return BundleSummary(
@@ -926,6 +932,7 @@ def _parse_governance_bundle(raw: dict[str, Any]) -> "BundleSummary":
         stage=raw.get("stage") or None,
         classification_value=raw.get("classificationValue") or None,
         owner_username=str(owner_username) if owner_username else None,
+        owner_display_name=str(owner_display_name) if owner_display_name else None,
         project_owner=str(project_owner) if project_owner else None,
         attachments=attachments,
         created_at=raw.get("createdAt") or None,

@@ -174,20 +174,63 @@ def _governance_field_label(source_key: str) -> str:
     )
 
 
-def format_governance_bundle_prefix(
-    bundle_name: Optional[str],
-    bundle_id: Optional[str],
-) -> str:
-    name = (bundle_name or "").strip() or "Governance bundle"
-    bid = (bundle_id or "").strip()
-    if bid:
-        return f"{name} ({bid})"
-    return name
-
-
 def _governance_bundle_short_name(bundle_name: Optional[str]) -> str:
     name = (bundle_name or "").strip()
     return name or "Governance bundle"
+
+
+def _short_bundle_id(bundle_id: Optional[str]) -> str:
+    bid = (bundle_id or "").strip()
+    if len(bid) >= 8:
+        return bid[:8]
+    return bid
+
+
+def _bundle_name_with_short_id(bundle_name: Optional[str], bundle_id: Optional[str]) -> str:
+    name = _governance_bundle_short_name(bundle_name)
+    short_id = _short_bundle_id(bundle_id)
+    if short_id:
+        return f"{name} ({short_id})"
+    return name
+
+
+def _bundle_context_tail(details: dict[str, Any], *, include_short_id: bool = False) -> str:
+    bundle_name = details.get("bundle_name")
+    bundle_id = details.get("bundle_id") if include_short_id else None
+    policy_name = (details.get("policy_name") or "").strip()
+    bundle_part = (
+        _bundle_name_with_short_id(bundle_name, bundle_id)
+        if include_short_id
+        else _governance_bundle_short_name(bundle_name)
+    )
+    parts = [bundle_part]
+    if policy_name:
+        parts.append(policy_name)
+    return " · ".join(parts)
+
+
+def _truncate_label(text: str, limit: int = 72) -> str:
+    cleaned = (text or "").strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def humanize_code_symbol(symbol: str) -> str:
+    clean = (symbol or "").strip()
+    clean = clean.replace(".__init__", "").replace(".__call__", "").replace(".__new__", "")
+    if clean.startswith("_"):
+        clean = clean[1:]
+    clean = clean.replace("_", " ").strip()
+    return clean
+
+
+def format_code_reference_text(code_path: str, code_symbol: str = "") -> str:
+    path = (code_path or "").strip() or "unknown"
+    symbol = humanize_code_symbol(code_symbol)
+    if symbol:
+        return f"{path} · {symbol}"
+    return path
 
 
 def format_governance_display_label(citation_id: str, details: dict[str, Any]) -> str:
@@ -197,48 +240,58 @@ def format_governance_display_label(citation_id: str, details: dict[str, Any]) -
 
     if entry_type == "governance":
         source_key = details.get("source_key") or parsed.get("source_key") or ""
-        return f"{bundle_name} · {_governance_field_label(str(source_key))}"
+        value = (details.get("evidence_text") or "").strip()
+        label = _governance_field_label(str(source_key))
+        if value and source_key != "bundle":
+            return f"{label}: {value}"
+        return label
     if entry_type == "evidence":
-        return f"{bundle_name} · Evidence"
+        question = (details.get("question") or "").strip()
+        if question:
+            return _truncate_label(question, 64)
+        return "Evidence"
     if entry_type == "finding":
         title = (details.get("finding_title") or "").strip()
         if title:
-            return f"{bundle_name} · {title}"
-        return f"{bundle_name} · Finding"
+            return _truncate_label(title, 64)
+        return "Finding"
     return citation_id
 
 
 def format_governance_reference_text(citation_id: str, details: dict[str, Any]) -> str:
     entry_type = details.get("type", "")
     parsed = parse_citation_id(citation_id)
-    prefix = format_governance_bundle_prefix(
-        details.get("bundle_name"),
-        details.get("bundle_id"),
-    )
-    parts: list[str] = [prefix]
-
-    policy_name = (details.get("policy_name") or "").strip()
-    if policy_name:
-        parts.append(policy_name)
+    tail = _bundle_context_tail(details)
 
     if entry_type == "governance":
         source_key = str(details.get("source_key") or parsed.get("source_key") or "")
         value = (details.get("evidence_text") or "").strip()
         label = _governance_field_label(source_key)
-        parts.append(f"{label}: {value}" if value else label)
-    elif entry_type == "evidence":
+        if source_key == "bundle":
+            return f"Governance bundle: {_bundle_name_with_short_id(details.get('bundle_name'), details.get('bundle_id'))}"
+        lead = f"{label}: {value}" if value else label
+        return f"{lead} · {tail}"
+
+    if entry_type == "evidence":
+        question = (details.get("question") or "").strip()
+        answer = (details.get("answer") or "").strip()
         stage = (details.get("evidence_stage") or "").strip()
         evset = (details.get("evidence_set_name") or "").strip()
+        lead_parts: list[str] = []
+        if question:
+            lead_parts.append(f"{question} — \"{answer}\"" if answer else question)
+        elif (details.get("evidence_text") or "").strip():
+            lead_parts.append(str(details["evidence_text"]).strip())
         if stage or evset:
-            parts.append(" / ".join(p for p in (stage, evset) if p))
-        evidence_text = (details.get("evidence_text") or "").strip()
-        if evidence_text:
-            parts.append(evidence_text)
-    elif entry_type == "finding":
-        severity = (details.get("finding_severity") or "").strip()
-        status = (details.get("finding_status") or "").strip()
+            lead_parts.append(" / ".join(p for p in (stage, evset) if p))
+        lead = " · ".join(lead_parts) if lead_parts else "Evidence"
+        return f"{lead} · {tail}"
+
+    if entry_type == "finding":
         title = (details.get("finding_title") or "").strip()
         description = (details.get("finding_description") or "").strip()
+        severity = (details.get("finding_severity") or "").strip()
+        status = (details.get("finding_status") or "").strip()
         body = title
         if description:
             body = f"{title} — {description}" if title else description
@@ -247,14 +300,13 @@ def format_governance_reference_text(citation_id: str, details: dict[str, Any]) 
             tags.append(f"[{severity}]")
         if status and status != "To do":
             tags.append(f"[{status.upper()}]")
-        lead = " ".join(tags)
-        parts.append(f"{lead} {body}".strip() if lead else body)
-    else:
-        evidence_text = (details.get("evidence_text") or "").strip()
-        if evidence_text:
-            parts.append(evidence_text)
+        lead = f"{' '.join(tags)} {body}".strip() if tags else body
+        return f"{lead} · {tail}"
 
-    return " | ".join(p for p in parts if p)
+    evidence_text = (details.get("evidence_text") or "").strip()
+    if evidence_text:
+        return f"{evidence_text} · {tail}"
+    return tail
 
 
 def format_governance_traceability_label(citation_id: str, details: dict[str, Any]) -> str:
@@ -462,9 +514,8 @@ class CitationRegistry:
         governance_meta: dict[str, Any] = {}
 
         if entry_type == "code_file":
-            location = code_path or "unknown"
-            symbol_part = f", Symbol: {code_symbol}()" if code_symbol else ""
-            text = f"Source Code\n    File: {location}{symbol_part}"
+            text = format_code_reference_text(code_path, code_symbol)
+            display_label = text
 
         elif entry_type == "mlflow_artifact":
             filename = os.path.basename(artifact_path) if artifact_path else "unknown"

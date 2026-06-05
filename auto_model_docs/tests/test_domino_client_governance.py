@@ -48,6 +48,8 @@ _BUNDLE = {
     "createdBy": {
         "id": "user-1",
         "userName": "alice.chen",
+        "firstName": "Alice",
+        "lastName": "Chen",
     },
     "projectOwner": "project-owner",
 }
@@ -135,6 +137,7 @@ class TestParseGovernanceBundle:
         assert b.stage == "Stage 1"
         assert b.classification_value == "High"
         assert b.owner_username == "alice.chen"
+        assert b.owner_display_name == "Alice Chen"
         assert b.project_owner == "project-owner"
         assert b.created_at == "2026-01-01T00:00:00Z"
         assert len(b.attachments) == 1

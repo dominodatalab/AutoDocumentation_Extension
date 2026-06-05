@@ -26,6 +26,7 @@ from autodoc.generation.citations import (
     CITATION_MARKER_PATTERN,
     CitationRegistry,
     build_mlflow_summary_citation_id,
+    format_code_reference_text,
     format_governance_traceability_label,
     is_governance_source_type,
     parse_citation_id,
@@ -780,34 +781,13 @@ class DocumentBuilder:
                 parts.append(display_id)
                 parts.append("Model Run")
             elif entry.type == "code_file":
-                # Format code reference - strip __init__ and similar dunder methods
-                code_path = entry.code_path or ""
-                code_symbol = entry.code_symbol or ""
-
-                # Clean up symbol - remove __init__, __call__, etc.
-                clean_symbol = code_symbol
-                clean_symbol = clean_symbol.replace(".__init__", "")
-                clean_symbol = clean_symbol.replace(".__call__", "")
-                clean_symbol = clean_symbol.replace(".__new__", "")
-
-                if code_path and clean_symbol:
-                    parts.append(f"Code: {code_path}#{clean_symbol}")
-                elif code_path:
-                    parts.append(f"Code: {code_path}")
-                else:
-                    # Fallback: clean up display_id if it contains the info
-                    clean_display = display_id
-                    # Remove redundant "Code:" prefixes if multiple
-                    clean_display = re.sub(r',\s*@?Code:', ', ', clean_display)
-                    clean_display = re.sub(r';\s*@?Code:', '; ', clean_display)
-                    clean_display = clean_display.replace(".__init__", "")
-                    clean_display = clean_display.replace(".__call__", "")
-                    clean_display = clean_display.replace(".__new__", "")
-                    parts.append(clean_display)
+                parts.append(
+                    entry.text
+                    or format_code_reference_text(entry.code_path, entry.code_symbol)
+                    or display_id
+                )
             elif is_governance_source_type(entry.type):
-                parts.append(display_id)
-                if entry.text:
-                    parts.append(entry.text)
+                parts.append(entry.text or entry.display_label or display_id)
             else:
                 # For unknown types, clean up the display_id
                 clean_display = display_id
@@ -861,7 +841,7 @@ class DocumentBuilder:
                         line_info = f" (lines {start}-{end})"
                     elif start:
                         line_info = f" (line {start})"
-                    label = f"{path}#{symbol}" if symbol else path
+                    label = format_code_reference_text(path, symbol)
                     doc.add_paragraph(f"{label}{line_info}", style="List Bullet")
                 elif ctype == "mlflow_artifact":
                     artifact = parsed.get("artifact_path", "")

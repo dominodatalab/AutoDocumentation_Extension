@@ -352,9 +352,8 @@ class TestCitationRegistry:
         )
         entries = reg.list_entries()
         _, entry = entries[0]
-        assert "Source Code" in entry.text
-        assert "model.py" in entry.text
-        assert "train" in entry.text
+        assert entry.text == "model.py · train"
+        assert entry.display_label == "model.py · train"
 
     def test_entry_text_for_mlflow_artifact(self):
         reg = CitationRegistry()
