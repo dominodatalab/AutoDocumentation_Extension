@@ -20,6 +20,7 @@ from domino_client import compute_policy, get_findings, list_bundles
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
+    monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80")
     monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
 
@@ -165,7 +166,7 @@ class TestParseGovernanceResult:
     def test_filters_non_latest_in_compute_policy(self):
         stale = dict(_RESULT, id="result-2", isLatest=False)
         raw = dict(_COMPUTED_POLICY, results=[_RESULT, stale])
-        with patch.object(dc, "_domino_request", return_value=raw):
+        with patch.object(dc, "_governance_request", return_value=raw):
             result = compute_policy("bundle-abc", "policy-xyz")
         assert result is not None
         assert len(result.results) == 1
@@ -174,7 +175,7 @@ class TestParseGovernanceResult:
 
 class TestListBundles:
     def test_returns_bundles_from_data_key(self):
-        with patch.object(dc, "_domino_request", return_value={"data": [_BUNDLE]}) as m:
+        with patch.object(dc, "_governance_request", return_value={"data": [_BUNDLE]}) as m:
             result = list_bundles("proj-123")
         m.assert_called_once_with(
             "GET",
@@ -185,12 +186,12 @@ class TestListBundles:
         assert result[0].id == "bundle-abc"
 
     def test_returns_bundles_from_list_response(self):
-        with patch.object(dc, "_domino_request", return_value=[_BUNDLE]):
+        with patch.object(dc, "_governance_request", return_value=[_BUNDLE]):
             result = list_bundles("proj-123")
         assert len(result) == 1
 
     def test_returns_empty_on_api_error(self):
-        with patch.object(dc, "_domino_request", side_effect=RuntimeError("boom")):
+        with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
             result = list_bundles("proj-123")
         assert result == []
 
@@ -203,7 +204,7 @@ class TestListBundles:
             "data": [dict(_BUNDLE, id="bundle-2")],
             "meta": {"pagination": {"offset": 1, "limit": 1, "totalCount": 2}},
         }
-        with patch.object(dc, "_domino_request", side_effect=[page1, page2]) as m:
+        with patch.object(dc, "_governance_request", side_effect=[page1, page2]) as m:
             result = list_bundles("proj-123")
         assert m.call_count == 2
         assert [b.id for b in result] == ["bundle-1", "bundle-2"]
@@ -212,7 +213,7 @@ class TestListBundles:
 
 class TestComputePolicy:
     def test_returns_computed_policy(self):
-        with patch.object(dc, "_domino_request", return_value=_COMPUTED_POLICY) as m:
+        with patch.object(dc, "_governance_request", return_value=_COMPUTED_POLICY) as m:
             result = compute_policy("bundle-abc", "policy-xyz")
         m.assert_called_once_with(
             "POST",
@@ -224,25 +225,35 @@ class TestComputePolicy:
         assert result.bundle.id == "bundle-abc"
 
     def test_returns_none_on_error(self):
-        with patch.object(dc, "_domino_request", side_effect=RuntimeError("boom")):
+        with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
             result = compute_policy("bundle-abc", "policy-xyz")
         assert result is None
 
 
 class TestGetFindings:
     def test_returns_findings_from_list(self):
-        with patch.object(dc, "_domino_request", return_value=[_FINDING]) as m:
+        with patch.object(dc, "_governance_request", return_value=[_FINDING]) as m:
             result = get_findings("bundle-abc")
         m.assert_called_once_with("GET", "/api/governance/v1/bundles/bundle-abc/findings")
         assert len(result) == 1
         assert result[0].name == "Missing data source documentation"
 
     def test_returns_findings_from_data_key(self):
-        with patch.object(dc, "_domino_request", return_value={"data": [_FINDING]}):
+        with patch.object(dc, "_governance_request", return_value={"data": [_FINDING]}):
             result = get_findings("bundle-abc")
         assert len(result) == 1
 
     def test_returns_empty_on_error(self):
-        with patch.object(dc, "_domino_request", side_effect=RuntimeError("boom")):
+        with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
             result = get_findings("bundle-abc")
         assert result == []
+
+
+class TestGovernanceHostResolution:
+    def test_uses_user_host_not_proxy(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80")
+        monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
+        with patch.object(dc, "_domino_request", return_value={"data": [_BUNDLE]}) as m:
+            list_bundles("proj-123")
+        assert m.call_args.kwargs["base_url"] == "http://nucleus-frontend.domino-platform:80"

@@ -248,10 +248,6 @@ def main(
             handlers=[logging.StreamHandler()]
         )
 
-        from env_diag import log_process_environment
-
-        log_process_environment(logging.getLogger("job.env_diag"), "job", force=True)
-
         # Load settings from .env and environment
         settings = Settings()
 

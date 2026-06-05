@@ -111,3 +111,12 @@ def resolve_api_host() -> str:
     """
     host = os.environ.get("DOMINO_API_PROXY") or os.environ.get("DOMINO_API_HOST") or ""
     return host.rstrip("/")
+
+
+def resolve_user_host() -> str:
+    """Return the Domino user-facing API host for governance calls.
+
+    Priority: ``DOMINO_USER_HOST`` > ``DOMINO_API_HOST``.
+    """
+    host = os.environ.get("DOMINO_USER_HOST") or os.environ.get("DOMINO_API_HOST") or ""
+    return host.rstrip("/")

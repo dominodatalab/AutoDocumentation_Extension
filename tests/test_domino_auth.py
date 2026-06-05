@@ -25,6 +25,7 @@ from domino_auth import (
     get_user_token,
     reset_auth,
     resolve_api_host,
+    resolve_user_host,
     user_auth,
 )
 
@@ -71,6 +72,27 @@ class TestResolveApiHost:
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
         assert resolve_api_host() == "https://nucleus:80"
+
+
+class TestResolveUserHost:
+    def test_prefers_user_host(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80")
+        monkeypatch.setenv("DOMINO_API_HOST", "https://other.example.com")
+        assert resolve_user_host() == "http://nucleus-frontend.domino-platform:80"
+
+    def test_falls_back_to_api_host(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
+        assert resolve_user_host() == "https://nucleus:80"
+
+    def test_ignores_proxy(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80")
+        assert resolve_user_host() == "http://nucleus-frontend.domino-platform:80"
+
+    def test_strips_trailing_slash(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://nucleus-frontend.domino-platform:80/")
+        assert resolve_user_host() == "http://nucleus-frontend.domino-platform:80"
 
 
 class TestGetUserToken:

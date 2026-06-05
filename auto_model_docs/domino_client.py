@@ -68,6 +68,7 @@ _project_cache: dict[str, ProjectInfo] = {}
 # ---------------------------------------------------------------------------
 
 from domino_auth import resolve_api_host as _resolve_api_host
+from domino_auth import resolve_user_host as _resolve_user_host
 from domino_auth import current_auth as _current_auth
 
 
@@ -87,15 +88,16 @@ def _domino_request(
     params: dict[str, Any] | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
     max_retries: int = _DEFAULT_MAX_RETRIES,
+    base_url: str | None = None,
 ) -> Any:
     """Send a synchronous HTTP request to the Domino API with retry logic."""
     import httpx
 
-    base_url = _resolve_api_host()
-    if not base_url:
+    resolved_base = (base_url if base_url is not None else _resolve_api_host()).rstrip("/")
+    if not resolved_base:
         raise RuntimeError("Domino API host is not configured. Set DOMINO_API_HOST.")
 
-    url = f"{base_url}{path}"
+    url = f"{resolved_base}{path}"
     last_exc: Exception | None = None
 
     for attempt in range(max_retries + 1):
@@ -854,6 +856,29 @@ _GOVERNANCE_BASE = "/api/governance/v1"
 _DEFAULT_BUNDLE_PAGE_LIMIT = 25
 
 
+def _governance_request(
+    method: str,
+    path: str,
+    *,
+    json: Any = None,
+    params: dict[str, Any] | None = None,
+    timeout: float = _DEFAULT_TIMEOUT,
+    max_retries: int = _DEFAULT_MAX_RETRIES,
+) -> Any:
+    base_url = _resolve_user_host()
+    if not base_url:
+        raise RuntimeError("Domino user host is not configured. Set DOMINO_USER_HOST.")
+    return _domino_request(
+        method,
+        path,
+        json=json,
+        params=params,
+        timeout=timeout,
+        max_retries=max_retries,
+        base_url=base_url,
+    )
+
+
 def _parse_governance_attachment(raw: dict[str, Any]) -> "BundleAttachment":
     from autodoc.core.models import BundleAttachment
 
@@ -947,7 +972,7 @@ def list_bundles(project_id: str) -> "List[BundleSummary]":
     all_bundles: list[Any] = []
     try:
         while True:
-            data = _domino_request(
+            data = _governance_request(
                 "GET",
                 f"{_GOVERNANCE_BASE}/bundles",
                 params={"projectId[]": project_id, "offset": offset, "limit": limit},
@@ -969,7 +994,7 @@ def compute_policy(bundle_id: str, policy_id: str) -> "Optional[ComputedPolicy]"
     from autodoc.core.models import ComputedPolicy
 
     try:
-        raw = _domino_request(
+        raw = _governance_request(
             "POST",
             f"{_GOVERNANCE_BASE}/rpc/compute-policy",
             json={"bundleId": bundle_id, "policyId": policy_id},
@@ -1007,7 +1032,7 @@ def compute_policy(bundle_id: str, policy_id: str) -> "Optional[ComputedPolicy]"
 
 def get_findings(bundle_id: str) -> "List[GovernanceFinding]":
     try:
-        data = _domino_request("GET", f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings")
+        data = _governance_request("GET", f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings")
         items = data if isinstance(data, list) else (data.get("data") if isinstance(data, dict) else [])
         if not isinstance(items, list):
             return []
