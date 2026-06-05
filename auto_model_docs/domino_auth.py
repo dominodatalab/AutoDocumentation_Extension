@@ -116,7 +116,16 @@ def resolve_api_host() -> str:
 def resolve_user_host() -> str:
     """Return the Domino user-facing API host for governance calls.
 
-    Priority: ``DOMINO_USER_HOST`` > ``DOMINO_API_HOST``.
+    Priority: ``DOMINO_USER_HOST`` > request origin (Studio UI) > ``DOMINO_API_HOST``.
     """
-    host = os.environ.get("DOMINO_USER_HOST") or os.environ.get("DOMINO_API_HOST") or ""
-    return host.rstrip("/")
+    host = os.environ.get("DOMINO_USER_HOST") or ""
+    if host:
+        return host.rstrip("/")
+
+    from auth_context import get_request_origin
+
+    origin = get_request_origin()
+    if origin:
+        return origin.rstrip("/")
+
+    return (os.environ.get("DOMINO_API_HOST") or "").rstrip("/")

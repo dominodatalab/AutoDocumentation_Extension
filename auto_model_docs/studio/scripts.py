@@ -746,13 +746,13 @@ MAIN_DOM_JS = r"""
                 applyGovernanceBundleSelection();
                 return Promise.resolve();
             }
-            var url = '/api/governance/v1/bundles?projectId%5B%5D='
-                + encodeURIComponent(pid) + '&limit=50';
+            var url = _adUrl('api/governance/bundles')
+                + '?projectId=' + encodeURIComponent(pid);
             return fetch(url, { credentials: 'include' })
                 .then(_checkResp)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    var rows = (data && data.data) ? data.data : [];
+                    var rows = (data && data.bundles) ? data.bundles : [];
                     _governanceBundles = rows.map(_normalizeGovernanceBundle).filter(Boolean);
                     _governanceBundlesLoaded = true;
                     applyGovernanceBundleSelection();

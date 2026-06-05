@@ -257,3 +257,13 @@ class TestGovernanceHostResolution:
         with patch.object(dc, "_domino_request", return_value={"data": [_BUNDLE]}) as m:
             list_bundles("proj-123")
         assert m.call_args.kwargs["base_url"] == "http://nucleus-frontend.domino-platform:80"
+
+    def test_uses_request_origin_when_user_host_unset(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
+        with patch("auth_context.get_request_origin", return_value="https://cluster.example.com"), patch.object(
+            dc, "_domino_request", return_value={"data": [_BUNDLE]}
+        ) as m:
+            list_bundles("proj-123")
+        assert m.call_args.kwargs["base_url"] == "https://cluster.example.com"

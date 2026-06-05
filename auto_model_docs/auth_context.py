@@ -16,6 +16,9 @@ from typing import Optional
 _auth_header_var: ContextVar[Optional[str]] = ContextVar(
     "forwarded_authorization_header", default=None
 )
+_request_origin_var: ContextVar[Optional[str]] = ContextVar(
+    "request_origin", default=None
+)
 
 
 def set_request_auth_header(value: Optional[str]) -> None:
@@ -24,6 +27,38 @@ def set_request_auth_header(value: Optional[str]) -> None:
 
 def get_request_auth_header() -> Optional[str]:
     return _auth_header_var.get()
+
+
+def set_request_origin(value: Optional[str]) -> None:
+    _request_origin_var.set(value)
+
+
+def get_request_origin() -> Optional[str]:
+    return _request_origin_var.get()
+
+
+def build_request_origin(host_header: str, scheme: str = "https") -> Optional[str]:
+    from urllib.parse import urlparse, urlunparse
+
+    raw = (host_header or "").strip()
+    if not raw:
+        return None
+
+    if "://" not in raw:
+        raw = f"{scheme}://{raw.split(',')[0].strip()}"
+
+    parsed = urlparse(raw)
+    hostname = (parsed.hostname or "").strip()
+    if not hostname:
+        return None
+
+    if hostname.startswith("apps."):
+        hostname = hostname[len("apps.") :]
+    if not hostname:
+        return None
+
+    netloc = f"{hostname}:{parsed.port}" if parsed.port else hostname
+    return urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
 
 
 def get_user_auth_headers() -> dict[str, str]:
