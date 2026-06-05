@@ -8,7 +8,7 @@ import os
 from typing import Callable, List, Optional, Set
 
 from autodoc.core.models import BundleSummary, ComputedPolicy, ModelInfo
-from governance_client import compute_policy, get_findings, list_bundles
+from domino_client import compute_policy, get_findings, list_bundles
 
 ProgressCallback = Callable[[float], None]
 
@@ -30,7 +30,7 @@ def bundle_matches_models(bundle: BundleSummary, model_names: Set[str]) -> bool:
 class BundleScanner:
     """Fetches governance compliance data for Active bundles tied to scanned models.
 
-    Runs synchronously against the governance API via governance_client (httpx).
+    Runs synchronously against the governance API via domino_client.
     Intended to be invoked from the orchestrator scan phase after MLflow scan.
     """
 

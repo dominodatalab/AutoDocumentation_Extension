@@ -11,7 +11,15 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, List, Optional
+
+from autodoc.core.models import (
+    ArtifactResult,
+    BundleAttachment,
+    BundleSummary,
+    ComputedPolicy,
+    GovernanceFinding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -839,3 +847,160 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
     except Exception:
         logger.exception("download_artifact_at_head failed for %s %s", project_id, artifact_path)
         return None
+
+
+_GOVERNANCE_BASE = "/api/governance/v1"
+_DEFAULT_BUNDLE_PAGE_LIMIT = 25
+
+
+def _parse_governance_attachment(raw: dict[str, Any]) -> BundleAttachment:
+    return BundleAttachment(
+        id=str(raw.get("id", "")),
+        type=str(raw.get("type", "")),
+        identifier=raw.get("identifier") or {},
+    )
+
+
+def _parse_governance_bundle(raw: dict[str, Any]) -> BundleSummary:
+    attachments = [
+        _parse_governance_attachment(a)
+        for a in (raw.get("attachments") or [])
+        if isinstance(a, dict)
+    ]
+    return BundleSummary(
+        id=str(raw.get("id", "")),
+        name=str(raw.get("name", "")),
+        project_id=str(raw.get("projectId", "")),
+        policy_id=str(raw.get("policyId", "")),
+        policy_name=str(raw.get("policyName", "")),
+        state=str(raw.get("state", "")),
+        evidence_restricted=bool(raw.get("evidenceRestricted", False)),
+        stage=raw.get("stage") or None,
+        classification_value=raw.get("classificationValue") or None,
+        attachments=attachments,
+        created_at=raw.get("createdAt") or None,
+    )
+
+
+def _parse_governance_finding(raw: dict[str, Any]) -> GovernanceFinding:
+    assignee_obj = raw.get("assignee") or {}
+    approver_obj = raw.get("approver") or {}
+    return GovernanceFinding(
+        id=str(raw.get("id", "")),
+        bundle_id=str(raw.get("bundleId", "")),
+        name=str(raw.get("name", "")),
+        severity=str(raw.get("severity", "")),
+        status=str(raw.get("status", "")),
+        description=raw.get("description") or None,
+        assignee=assignee_obj.get("name") if isinstance(assignee_obj, dict) else None,
+        approver=approver_obj.get("name") if isinstance(approver_obj, dict) else None,
+        due_date=raw.get("dueDate") or None,
+    )
+
+
+def _parse_governance_result(raw: dict[str, Any]) -> ArtifactResult:
+    return ArtifactResult(
+        id=str(raw.get("id", "")),
+        evidence_id=str(raw.get("evidenceId", "")),
+        bundle_id=str(raw.get("bundleId", "")),
+        artifact_id=str(raw.get("artifactId", "")),
+        artifact_content=raw.get("artifactContent"),
+        is_latest=bool(raw.get("isLatest", False)),
+    )
+
+
+def _governance_bundle_items(data: Any) -> list[dict[str, Any]]:
+    items = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return []
+    return [b for b in items if isinstance(b, dict)]
+
+
+def _governance_page_exhausted(data: dict[str, Any], offset: int, fetched_count: int) -> bool:
+    if fetched_count == 0:
+        return True
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        return True
+    pagination = meta.get("pagination")
+    if not isinstance(pagination, dict):
+        return True
+    total = pagination.get("totalCount")
+    limit = pagination.get("limit") or _DEFAULT_BUNDLE_PAGE_LIMIT
+    if total is None:
+        return fetched_count < limit
+    return offset + fetched_count >= total
+
+
+def list_bundles(project_id: str) -> List[BundleSummary]:
+    offset = 0
+    limit = _DEFAULT_BUNDLE_PAGE_LIMIT
+    all_bundles: list[BundleSummary] = []
+    try:
+        while True:
+            data = _domino_request(
+                "GET",
+                f"{_GOVERNANCE_BASE}/bundles",
+                params={"projectId[]": project_id, "offset": offset, "limit": limit},
+            )
+            items = _governance_bundle_items(data)
+            all_bundles.extend(_parse_governance_bundle(b) for b in items)
+            if not isinstance(data, dict) or _governance_page_exhausted(data, offset, len(items)):
+                break
+            pagination = (data.get("meta") or {}).get("pagination") or {}
+            page_limit = pagination.get("limit") or limit
+            offset += page_limit
+    except Exception:
+        logger.exception("list_bundles failed for project %s", project_id)
+        return []
+    return all_bundles
+
+
+def compute_policy(bundle_id: str, policy_id: str) -> Optional[ComputedPolicy]:
+    try:
+        raw = _domino_request(
+            "POST",
+            f"{_GOVERNANCE_BASE}/rpc/compute-policy",
+            json={"bundleId": bundle_id, "policyId": policy_id},
+        )
+        if not isinstance(raw, dict):
+            return None
+
+        bundle_raw = raw.get("bundle") or {}
+        policy_raw = raw.get("policy") or {}
+        bundle = _parse_governance_bundle(bundle_raw)
+
+        stages: list[dict[str, Any]] = []
+        for stage in (policy_raw.get("stages") or []):
+            if isinstance(stage, dict):
+                stages.append(stage)
+
+        results = [
+            _parse_governance_result(r)
+            for r in (raw.get("results") or [])
+            if isinstance(r, dict)
+        ]
+        results = [r for r in results if r.is_latest]
+
+        return ComputedPolicy(
+            bundle=bundle,
+            policy_id=str(policy_raw.get("id", "")),
+            policy_name=str(policy_raw.get("name", "")),
+            policy_stages=stages,
+            results=results,
+        )
+    except Exception:
+        logger.exception("compute_policy failed for bundle %s policy %s", bundle_id, policy_id)
+        return None
+
+
+def get_findings(bundle_id: str) -> List[GovernanceFinding]:
+    try:
+        data = _domino_request("GET", f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings")
+        items = data if isinstance(data, list) else (data.get("data") if isinstance(data, dict) else [])
+        if not isinstance(items, list):
+            return []
+        return [_parse_governance_finding(f) for f in items if isinstance(f, dict)]
+    except Exception:
+        logger.exception("get_findings failed for bundle %s", bundle_id)
+        return []
