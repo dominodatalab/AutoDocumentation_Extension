@@ -15,6 +15,14 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Governance v1 (rai-guardrails-service), same host as other Domino API calls:
+#   GET  /api/governance/v1/bundles?projectId[]=<projectId>
+#   POST /api/governance/v1/rpc/compute-policy  body: bundleId, policyId
+#   GET  /api/governance/v1/bundles/<bundleId>/findings
+# v1 does not call GET /api/governance/v1/bundles/<bundleId> (list + compute-policy only).
+# Model page modelId query param = MLflow registered model name; match attachments where
+# type ModelVersion and identifier.name equals modelId.
+
 # ---------------------------------------------------------------------------
 # Domino status → local status mapping
 # ---------------------------------------------------------------------------

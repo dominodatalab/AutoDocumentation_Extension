@@ -1,0 +1,147 @@
+{
+  "bundle": {
+    "id": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+    "name": "mlflow3-logged-and-registered1-governance-bundle",
+    "createdAt": "2026-05-01T12:00:00Z",
+    "policyId": "a1111111-1111-1111-1111-111111111101",
+    "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+    "policyName": "autodoc-ml-governance-policy",
+    "projectId": "6a21c81b3bff9f0d3ae561b1",
+    "stage": "Stage 1",
+    "state": "Active",
+    "evidenceRestricted": false,
+    "classificationValue": "Medium",
+    "attachments": [
+      {
+        "id": "att-mlflow3-1",
+        "type": "ModelVersion",
+        "identifier": { "name": "mlflow3-logged-and-registered1", "version": 1 },
+        "source": "DFS"
+      }
+    ]
+  },
+  "policy": {
+    "id": "a1111111-1111-1111-1111-111111111101",
+    "name": "autodoc-ml-governance-policy",
+    "description": "Seed policy for modeldocs-target-bgp",
+    "archived": false,
+    "status": "Active",
+    "enforceSequentialOrder": true,
+    "allowProjectApprovers": false,
+    "stages": [
+      {
+        "id": "stage-seed-1",
+        "policyEntityId": "a1111111-1111-1111-1111-111111111101",
+        "name": "Stage 1",
+        "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+        "notifyOnTransition": true,
+        "evidenceSet": [
+          {
+            "id": "ev-seed-1",
+            "externalId": "ev-ext-seed-1",
+            "name": "Model validation",
+            "description": "Validation evidence",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "scope": "Bundle",
+            "policyId": "a1111111-1111-1111-1111-111111111101",
+            "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+            "artifacts": [
+              {
+                "id": "art-seed-1",
+                "policyEntityId": "ev-seed-1",
+                "required": true,
+                "artifactType": "input",
+                "details": {
+                  "text": "Was the model validated on a hold-out dataset?",
+                  "type": "Radio",
+                  "options": ["Yes", "No", "Partially"]
+                }
+              },
+              {
+                "id": "art-seed-2",
+                "policyEntityId": "ev-seed-1",
+                "required": false,
+                "artifactType": "input",
+                "details": {
+                  "text": "Describe the validation methodology.",
+                  "type": "Text"
+                }
+              },
+              {
+                "id": "art-seed-label",
+                "policyEntityId": "ev-seed-1",
+                "required": false,
+                "artifactType": "label",
+                "details": { "text": "Section header only" }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "result-seed-1",
+      "evidenceId": "ev-seed-1",
+      "bundleId": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+      "artifactId": "art-seed-1",
+      "artifactContent": { "value": "Yes" },
+      "createdAt": "2026-05-10T14:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "isLatest": true
+    },
+    {
+      "id": "result-seed-2",
+      "evidenceId": "ev-seed-1",
+      "bundleId": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+      "artifactId": "art-seed-2",
+      "artifactContent": {
+        "value": "Stratified 80/20 split with 5-fold CV on the training set."
+      },
+      "createdAt": "2026-05-10T14:02:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "isLatest": true
+    },
+    {
+      "id": "result-seed-stale",
+      "evidenceId": "ev-seed-1",
+      "bundleId": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+      "artifactId": "art-seed-1",
+      "artifactContent": { "value": "No" },
+      "createdAt": "2026-05-09T10:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "isLatest": false
+    }
+  ],
+  "drafts": [],
+  "commentsInfo": {
+    "bundleCommentsCount": 0,
+    "artifactCommentsCountMap": {},
+    "approvalCommentsCountMap": {}
+  },
+  "findingsInfo": {
+    "bundleFindingsCount": 2,
+    "artifactFindingsCountMap": {},
+    "approvalFindingsCountMap": {},
+    "approvalFindingsMap": {}
+  },
+  "approvals": [],
+  "bundleStages": [],
+  "isUserApprover": false
+}

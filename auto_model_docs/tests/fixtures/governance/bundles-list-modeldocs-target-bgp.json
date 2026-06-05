@@ -1,0 +1,186 @@
+{
+  "data": [
+    {
+      "id": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+      "name": "mlflow3-logged-and-registered1-governance-bundle",
+      "createdAt": "2026-05-01T12:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "policyId": "a1111111-1111-1111-1111-111111111101",
+      "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+      "policyVersion": "1.0",
+      "policyName": "autodoc-ml-governance-policy",
+      "projectId": "6a21c81b3bff9f0d3ae561b1",
+      "projectName": "modeldocs-target-bgp",
+      "projectOwner": "integration-test",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "Medium",
+      "attachments": [
+        {
+          "id": "att-mlflow3-1",
+          "type": "ModelVersion",
+          "identifier": { "name": "mlflow3-logged-and-registered1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-01T12:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 2,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "b2222222-2222-2222-2222-222222222201",
+      "name": "mlflow3-mixed-autodoc-ml-governance-bundle",
+      "createdAt": "2026-05-02T10:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "policyId": "a1111111-1111-1111-1111-111111111101",
+      "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+      "policyVersion": "1.0",
+      "policyName": "autodoc-ml-governance-policy",
+      "projectId": "6a21c81b3bff9f0d3ae561b1",
+      "projectName": "modeldocs-target-bgp",
+      "projectOwner": "integration-test",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "High",
+      "attachments": [
+        {
+          "id": "att-mixed-1",
+          "type": "ModelVersion",
+          "identifier": { "name": "mlflow3-mixed-logged-and-registered1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-02T10:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 2,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "b2222222-2222-2222-2222-222222222202",
+      "name": "mlflow3-mixed-autodoc-agentic-ai-bundle",
+      "createdAt": "2026-05-02T11:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "policyId": "b3333333-3333-3333-3333-333333333301",
+      "policyVersionId": "b3333333-3333-3333-3333-333333333302",
+      "policyVersion": "1.0",
+      "policyName": "autodoc-agentic-ai-policy",
+      "projectId": "6a21c81b3bff9f0d3ae561b1",
+      "projectName": "modeldocs-target-bgp",
+      "projectOwner": "integration-test",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "High",
+      "attachments": [
+        {
+          "id": "att-mixed-2",
+          "type": "ModelVersion",
+          "identifier": { "name": "mlflow3-mixed-logged-and-registered1", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-02T11:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 2,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "ccc102fc-9781-411e-a5b0-e9cf6277e9f3",
+      "name": "internalqwen-governance-bundle",
+      "createdAt": "2026-05-03T09:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "policyId": "b3333333-3333-3333-3333-333333333301",
+      "policyVersionId": "b3333333-3333-3333-3333-333333333302",
+      "policyVersion": "1.0",
+      "policyName": "autodoc-agentic-ai-policy",
+      "projectId": "6a21c81b3bff9f0d3ae561b1",
+      "projectName": "modeldocs-target-bgp",
+      "projectOwner": "integration-test",
+      "stage": "Stage 1",
+      "state": "Active",
+      "evidenceRestricted": false,
+      "classificationValue": "Low",
+      "attachments": [
+        {
+          "id": "att-qwen-1",
+          "type": "ModelVersion",
+          "identifier": { "name": "internalqwen", "version": 1 },
+          "source": "DFS",
+          "createdAt": "2026-05-03T09:00:00Z",
+          "createdBy": { "id": "usr-seed" }
+        }
+      ],
+      "currentStageInfo": {
+        "status": "InProgress",
+        "openFindingsCount": 0,
+        "pendingApprovalsCount": 0
+      }
+    },
+    {
+      "id": "d4444444-4444-4444-4444-444444444401",
+      "name": "legacy-archived-bundle",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "createdBy": {
+        "id": "usr-seed",
+        "firstName": "Integration",
+        "lastName": "Test",
+        "userName": "integration-test"
+      },
+      "policyId": "a1111111-1111-1111-1111-111111111101",
+      "policyVersionId": "a1111111-1111-1111-1111-111111111102",
+      "policyVersion": "1.0",
+      "policyName": "autodoc-ml-governance-policy",
+      "projectId": "6a21c81b3bff9f0d3ae561b1",
+      "projectName": "modeldocs-target-bgp",
+      "projectOwner": "integration-test",
+      "stage": "Stage 2",
+      "state": "Archived",
+      "evidenceRestricted": false,
+      "classificationValue": null,
+      "attachments": [],
+      "currentStageInfo": {
+        "status": "Complete",
+        "openFindingsCount": 0,
+        "pendingApprovalsCount": 0
+      }
+    }
+  ],
+  "meta": {
+    "filters": [],
+    "search": null,
+    "pagination": { "offset": 0, "limit": 25, "totalCount": 5 },
+    "sort": []
+  }
+}
