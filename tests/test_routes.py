@@ -332,6 +332,40 @@ class TestApiRoutes:
         assert body[0]["isDefault"] is True
 
     @pytest.mark.asyncio
+    async def test_governance_bundles_returns_json(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        attachment = MagicMock()
+        attachment.type = "ModelVersion"
+        attachment.identifier = {"name": "my-model", "version": 1}
+        bundle = MagicMock()
+        bundle.id = "bundle-1"
+        bundle.name = "Test Bundle"
+        bundle.policy_name = "ML Policy"
+        bundle.stage = "Stage 1"
+        bundle.state = "Active"
+        bundle.attachments = [attachment]
+        client.list_bundles.return_value = [bundle]
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/governance/bundles"](req)
+        client.list_bundles.assert_called_once_with("proj-123")
+        body = json.loads(result.body)
+        assert len(body["bundles"]) == 1
+        assert body["bundles"][0]["id"] == "bundle-1"
+        assert body["bundles"][0]["policyName"] == "ML Policy"
+        assert body["bundles"][0]["attachments"][0]["identifier"]["name"] == "my-model"
+
+    @pytest.mark.asyncio
+    async def test_governance_bundles_requires_project_id(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        _mock_studio_modules["state"]._resolve_request_project_id.return_value = None
+        req = _make_request(query_params={})
+        result = await routes["/api/governance/bundles"](req)
+        assert result.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_environment_revisions_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")

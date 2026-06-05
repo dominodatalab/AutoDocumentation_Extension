@@ -51,6 +51,7 @@ class JobRequest:
     max_backoff: float
     backoff_jitter: float
     notebook_from_cache: bool
+    bundle_id: str = ""
 
 
 _JR_DEFAULTS = {
@@ -78,6 +79,7 @@ _JR_DEFAULTS = {
     "max_backoff": 120.0,
     "backoff_jitter": 0.2,
     "notebook_from_cache": False,
+    "bundle_id": "",
 }
 
 
@@ -393,6 +395,25 @@ async def test_parse_request_raises_when_no_query_project_id():
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_parse_request_bundle_id_from_body():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+            "bundle_id": "bundle-uuid-1",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.bundle_id == "bundle-uuid-1"
+
+
+@pytest.mark.asyncio
 async def test_parse_request_code_path_override_used_as_code_root():
     je = _import_job_engine()
     from unittest.mock import MagicMock
@@ -541,6 +562,31 @@ class TestBuildJobCommand:
         assert "--filtered-experiments" in cmd
         assert "--filtered-models" in cmd
         assert "--latest-only" in cmd
+
+    def test_bundle_id_appended_when_set(self):
+        je = _import_job_engine()
+        req = _jr(
+            provider="anthropic",
+            code_root="/mnt/code",
+            notebook=False,
+            verbose=False,
+            bundle_id="7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
+        )
+        cmd = je._build_job_command(req, "/spec.yaml")
+        assert "--bundle-id" in cmd
+        assert "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0" in cmd
+
+    def test_omits_bundle_id_when_empty(self):
+        je = _import_job_engine()
+        req = _jr(
+            provider="anthropic",
+            code_root="/mnt/code",
+            notebook=False,
+            verbose=False,
+            bundle_id="",
+        )
+        cmd = je._build_job_command(req, "/spec.yaml")
+        assert "--bundle-id" not in cmd
 
     def test_omits_filtered_flags_when_empty_or_whitespace(self):
         je = _import_job_engine()

@@ -129,6 +129,45 @@ def register_api_routes(rt):
 
     rt("/api/environment-revisions")(api_environment_revisions)
 
+    def _governance_bundle_json(bundle) -> dict:
+        return {
+            "id": str(bundle.id),
+            "name": bundle.name or "",
+            "policyName": bundle.policy_name or "",
+            "stage": bundle.stage or "",
+            "state": bundle.state or "",
+            "attachments": [
+                {
+                    "type": att.type,
+                    "identifier": att.identifier if isinstance(att.identifier, dict) else {},
+                }
+                for att in (bundle.attachments or [])
+            ],
+        }
+
+    async def api_governance_bundles(req: Request):
+        pid = (_resolve_request_project_id(req) or "").strip()
+        if not pid:
+            return Response(
+                json.dumps({"error": "projectId required", "bundles": []}),
+                status_code=400,
+                media_type="application/json",
+            )
+        try:
+            require_project_write(pid)
+            bundles = domino_client.list_bundles(pid)
+            payload = {"bundles": [_governance_bundle_json(b) for b in bundles]}
+            return Response(json.dumps(payload), media_type="application/json")
+        except Exception as exc:
+            logger.exception("api_governance_bundles failed")
+            return Response(
+                json.dumps({"error": str(exc), "bundles": []}),
+                status_code=500,
+                media_type="application/json",
+            )
+
+    rt("/api/governance/bundles")(api_governance_bundles)
+
     async def api_datasets(req: Request):
         """List writable datasets for the project.
 

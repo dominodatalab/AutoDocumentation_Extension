@@ -131,6 +131,28 @@ MAIN_DOM_JS = r"""
             return params.get('projectId') || params.get('project_id') || '';
         }
 
+        function resolvedModelId() {
+            function fromSearch(search) {
+                if (!search) return '';
+                var p = new URLSearchParams(search.charAt(0) === '?' ? search.substring(1) : search);
+                return p.get('modelId') || p.get('model_id') || '';
+            }
+            var mid = fromSearch(window.location.search);
+            if (!mid && window.location.hash) {
+                mid = fromSearch(window.location.hash.substring(1));
+            }
+            if (!mid && window.parent !== window) {
+                try {
+                    var pLoc = window.parent.location;
+                    mid = fromSearch(pLoc.search);
+                    if (!mid && pLoc.hash) {
+                        mid = fromSearch(pLoc.hash.substring(1));
+                    }
+                } catch (e) {}
+            }
+            return mid || '';
+        }
+
 
         // ── Provider / model toggles ───────────────────────────────────
         var providerSelect = document.getElementById('field-provider');
@@ -586,6 +608,154 @@ MAIN_DOM_JS = r"""
             });
         }
 
+        function _esc(s) {
+            return String(s || '')
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // ── Governance bundle picker ───────────────────────────────────
+        var _governanceBundles = [];
+        var _selectedBundleId = '';
+        var _governanceBundlesLoaded = false;
+
+        function _bundleModelNames(bundle) {
+            var names = [];
+            var atts = bundle && bundle.attachments ? bundle.attachments : [];
+            for (var i = 0; i < atts.length; i++) {
+                var idf = atts[i] && atts[i].identifier;
+                if (idf && idf.name) names.push(String(idf.name));
+            }
+            return names;
+        }
+
+        function _bundlesForContext(bundles) {
+            var all = bundles || [];
+            var mid = resolvedModelId();
+            if (!mid) return all;
+            var matched = [];
+            for (var i = 0; i < all.length; i++) {
+                var names = _bundleModelNames(all[i]);
+                for (var j = 0; j < names.length; j++) {
+                    if (names[j] === mid) { matched.push(all[i]); break; }
+                }
+            }
+            return matched.length ? matched : all;
+        }
+
+        function _bundleOptionLabel(bundle) {
+            var parts = [bundle.name || bundle.id];
+            if (bundle.policyName) parts.push(bundle.policyName);
+            if (bundle.stage) parts.push(bundle.stage);
+            if (bundle.state) parts.push(bundle.state);
+            return parts.join(' \u00b7 ');
+        }
+
+        function _setGovernanceHint(msg, isError) {
+            var hint = document.getElementById('governance-bundle-hint');
+            if (!hint) return;
+            hint.textContent = msg || '';
+            hint.classList.toggle('governance-bundle-hint-error', !!isError);
+        }
+
+        function applyGovernanceBundleSelection() {
+            var field = document.getElementById('governance-bundle-field');
+            var select = document.getElementById('governance-bundle-select');
+            var autoEl = document.getElementById('governance-bundle-auto');
+            var visible = _bundlesForContext(_governanceBundles);
+            _selectedBundleId = '';
+
+            if (!_governanceBundlesLoaded) {
+                if (field) field.style.display = '';
+                if (select) {
+                    select.innerHTML = '<option value="" selected disabled>Loading bundles\u2026</option>';
+                    select.disabled = true;
+                }
+                if (autoEl) autoEl.style.display = 'none';
+                _setGovernanceHint('');
+                updateGenerateButton();
+                return;
+            }
+
+            if (!visible.length) {
+                if (field) field.style.display = 'none';
+                if (select) select.innerHTML = '<option value="" selected>No bundles</option>';
+                if (autoEl) autoEl.style.display = 'none';
+                _setGovernanceHint('');
+                updateGenerateButton();
+                return;
+            }
+
+            if (field) field.style.display = '';
+
+            if (visible.length === 1) {
+                _selectedBundleId = visible[0].id;
+                if (select) {
+                    select.style.display = 'none';
+                    select.disabled = true;
+                }
+                if (autoEl) {
+                    autoEl.textContent = 'Using: ' + _bundleOptionLabel(visible[0]);
+                    autoEl.style.display = '';
+                }
+                _setGovernanceHint('');
+            } else {
+                if (autoEl) autoEl.style.display = 'none';
+                if (select) {
+                    select.style.display = '';
+                    select.disabled = false;
+                    var html = '<option value="" selected disabled>Select a bundle\u2026</option>';
+                    for (var i = 0; i < visible.length; i++) {
+                        var b = visible[i];
+                        html += '<option value="' + _esc(b.id) + '">' + _esc(_bundleOptionLabel(b)) + '</option>';
+                    }
+                    select.innerHTML = html;
+                    _selectedBundleId = select.value || '';
+                }
+                if (!_selectedBundleId) {
+                    _setGovernanceHint('Select a governance bundle to generate documentation.');
+                } else {
+                    _setGovernanceHint('');
+                }
+            }
+            updateGenerateButton();
+        }
+
+        function loadGovernanceBundles() {
+            var pid = resolvedProjectId();
+            if (!pid) {
+                _governanceBundlesLoaded = true;
+                _governanceBundles = [];
+                applyGovernanceBundleSelection();
+                return Promise.resolve();
+            }
+            var url = _adUrl('api/governance/bundles') + '?projectId=' + encodeURIComponent(pid);
+            return fetch(url)
+                .then(_checkResp)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    _governanceBundles = (data && data.bundles) ? data.bundles : [];
+                    _governanceBundlesLoaded = true;
+                    applyGovernanceBundleSelection();
+                })
+                .catch(function(err) {
+                    _governanceBundles = [];
+                    _governanceBundlesLoaded = true;
+                    applyGovernanceBundleSelection();
+                    _setGovernanceHint(err.message || 'Could not load governance bundles.', true);
+                });
+        }
+
+        (function() {
+            var select = document.getElementById('governance-bundle-select');
+            if (select) {
+                select.addEventListener('change', function() {
+                    _selectedBundleId = select.value || '';
+                    if (_selectedBundleId) _setGovernanceHint('');
+                    updateGenerateButton();
+                });
+            }
+        })();
+
         // ── Generate button state ──────────────────────────────────────
         function updateGenerateButton() {
             var btn = document.getElementById('generate-btn');
@@ -593,6 +763,12 @@ MAIN_DOM_JS = r"""
             var hasTemplate = !!_selectedTemplateUid;
             var hasCustomSpec = _customSpecSelected;
             var canGenerate = hasTemplate || hasCustomSpec;
+            if (_governanceBundlesLoaded) {
+                var visible = _bundlesForContext(_governanceBundles);
+                if (visible.length > 0 && !_selectedBundleId) {
+                    canGenerate = false;
+                }
+            }
             btn.disabled = !canGenerate;
 
         }
@@ -626,11 +802,6 @@ MAIN_DOM_JS = r"""
                             + '</div>';
                     }
                 });
-        }
-
-        function _esc(s) {
-            return String(s || '')
-                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
         var _previewEmptyDefaultHtml = null;
@@ -1701,6 +1872,9 @@ MAIN_DOM_JS = r"""
                         provider_base_url: val('field-provider_base_url'),
                         code_path: val('field-code_path'),
                     };
+                    if (_selectedBundleId) {
+                        jsonPayload.bundle_id = _selectedBundleId;
+                    }
 
                     var pid = resolvedProjectId();
                     showStep2();
@@ -1782,6 +1956,7 @@ MAIN_DOM_JS = r"""
         // ── Init ───────────────────────────────────────────────────────
         _rememberPreviewDefaultHtml();
         loadBuiltinTemplates();
+        loadGovernanceBundles();
         updateGenerateButton();
 
     }); // end DOMContentLoaded

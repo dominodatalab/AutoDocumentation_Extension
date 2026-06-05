@@ -859,10 +859,10 @@ Normalize `artifactContent` in `governance_read` (prefer `value` key; fallbacks 
 - [x] B4 planner
 - [x] B5 orchestrator (drop BundleScanner)
 - [x] B6 CLI `--bundle-id`
-- [ ] C1 Studio list API + modelId parse
-- [ ] C2 job command
-- [ ] C3 picker UI
-- [ ] C4 submit gate
+- [x] C1 Studio list API + modelId parse
+- [x] C2 job command
+- [x] C3 picker UI
+- [x] C4 submit gate
 - [ ] D1 E2E validation
 
 ---

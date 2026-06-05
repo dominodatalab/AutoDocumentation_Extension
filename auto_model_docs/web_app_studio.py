@@ -431,6 +431,33 @@ async def index(req: Request):
                                         "Latest version only",
                                         cls="filter-checkbox-label",
                                     ),
+                                    Div(
+                                        Label(
+                                            "Governance bundle",
+                                            Span(
+                                                "info",
+                                                cls="material-symbols-outlined filter-info-icon",
+                                                title="Bundle whose evidence and findings ground the document. Required when this project has governance bundles.",
+                                            ),
+                                            cls="filter-label",
+                                        ),
+                                        Select(
+                                            Option("Loading bundles...", value="", disabled=True, selected=True),
+                                            id="governance-bundle-select",
+                                            cls="filter-input",
+                                        ),
+                                        Div(
+                                            id="governance-bundle-auto",
+                                            cls="governance-bundle-auto",
+                                            style="display:none",
+                                        ),
+                                        Div(
+                                            id="governance-bundle-hint",
+                                            cls="governance-bundle-hint",
+                                        ),
+                                        cls="filter-field",
+                                        id="governance-bundle-field",
+                                    ),
                                     cls="adv-opts-accordion-body filters-body",
                                 ),
                                 cls="adv-opts-accordion",

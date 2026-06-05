@@ -2204,6 +2204,20 @@ select.hw-tier-select option {
 .adv-opts-accordion-summary:hover {
     background: var(--surface-container);
 }
+.governance-bundle-auto {
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #5c6370);
+    margin-top: 0.35rem;
+}
+.governance-bundle-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #5c6370);
+    margin-top: 0.35rem;
+}
+.governance-bundle-hint-error {
+    color: #b42318;
+}
+
 .adv-opts-accordion-body {
     border-top: 1px solid var(--outline-variant);
     padding: 1rem;

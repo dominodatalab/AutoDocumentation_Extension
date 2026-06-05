@@ -176,6 +176,7 @@ async def _parse_request(req: Request) -> JobRequest:
         max_backoff=_form_float(body, "max_backoff", DEFAULT_LLM_MAX_BACKOFF),
         backoff_jitter=_form_float(body, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
         notebook_from_cache=notebook_from_cache,
+        bundle_id=_form_str(body, "bundle_id"),
     )
 
 
@@ -237,6 +238,9 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         command += ["--notebook-from-cache"]
     if req.verbose:
         command += ["--verbose"]
+    bundle_id = (req.bundle_id or "").strip()
+    if bundle_id:
+        command += ["--bundle-id", bundle_id]
     return command
 
 

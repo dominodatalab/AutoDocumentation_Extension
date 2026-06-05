@@ -100,6 +100,7 @@ class JobRequest:
     max_backoff: float
     backoff_jitter: float
     notebook_from_cache: bool
+    bundle_id: str = ""
 
 
 @dataclass
