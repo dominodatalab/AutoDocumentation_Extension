@@ -72,7 +72,7 @@ class TestMainGovernanceCli:
             "main.LLMClient"
         ), patch("main.ContentSanitizer"), patch(
             "autodoc.governance_read.load_governance_context", return_value=gov
-        ) as mock_load, patch("domino_auth.configure_auth"), patch("domino_auth.cli_auth"):
+        ) as mock_load, patch("domino_auth.configure_auth") as mock_configure_auth:
             mock_orch = MagicMock()
             mock_orch.generate = AsyncMock(return_value=tmp_path / "out.docx")
             mock_orch.run_dir = "docs/test"
@@ -95,6 +95,9 @@ class TestMainGovernanceCli:
             )
 
         assert result.exit_code == 0
+        from domino_auth import cli_auth
+
+        mock_configure_auth.assert_called_once_with(cli_auth)
         mock_load.assert_called_once()
         passed = mock_orch.generate.await_args.kwargs.get("governance_context")
         assert passed is gov

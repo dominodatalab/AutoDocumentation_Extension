@@ -379,7 +379,7 @@ def main(
             from domino_auth import cli_auth, configure_auth
             from autodoc.governance_read import GovernanceLoadError, load_governance_context
 
-            configure_auth(cli_auth())
+            configure_auth(cli_auth)
             scope = findings_scope or doc_spec.governance_findings_scope
             try:
                 governance_context = load_governance_context(
