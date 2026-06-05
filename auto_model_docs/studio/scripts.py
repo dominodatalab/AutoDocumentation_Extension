@@ -642,12 +642,56 @@ MAIN_DOM_JS = r"""
             return matched.length ? matched : all;
         }
 
-        function _bundleOptionLabel(bundle) {
-            var parts = [bundle.name || bundle.id];
+        function _bundlePrimaryModelName(bundle) {
+            var names = _bundleModelNames(bundle);
+            return names.length ? names[0] : 'Other';
+        }
+
+        function _bundleLeafLabel(bundle) {
+            var parts = [];
             if (bundle.policyName) parts.push(bundle.policyName);
             if (bundle.stage) parts.push(bundle.stage);
             if (bundle.state) parts.push(bundle.state);
-            return parts.join(' \u00b7 ');
+            return parts.length ? parts.join(' \u00b7 ') : (bundle.name || bundle.id);
+        }
+
+        function _bundleAutoLabel(bundle) {
+            return _bundlePrimaryModelName(bundle) + ' \u00b7 ' + _bundleLeafLabel(bundle);
+        }
+
+        function _groupBundlesByModel(bundles) {
+            var groups = {};
+            var order = [];
+            for (var i = 0; i < bundles.length; i++) {
+                var b = bundles[i];
+                var model = _bundlePrimaryModelName(b);
+                if (!groups[model]) {
+                    groups[model] = [];
+                    order.push(model);
+                }
+                groups[model].push(b);
+            }
+            order.sort();
+            return { order: order, groups: groups };
+        }
+
+        function _renderGovernanceBundleSelectOptions(bundles) {
+            var grouped = _groupBundlesByModel(bundles);
+            var html = '<option value="" selected disabled>Select a bundle\u2026</option>';
+            for (var g = 0; g < grouped.order.length; g++) {
+                var model = grouped.order[g];
+                var items = grouped.groups[model];
+                items.sort(function(a, b) {
+                    return String(a.policyName || '').localeCompare(String(b.policyName || ''));
+                });
+                html += '<optgroup label="' + _esc(model) + '">';
+                for (var j = 0; j < items.length; j++) {
+                    var b = items[j];
+                    html += '<option value="' + _esc(b.id) + '">' + _esc(_bundleLeafLabel(b)) + '</option>';
+                }
+                html += '</optgroup>';
+            }
+            return html;
         }
 
         function _setGovernanceHint(msg, isError) {
@@ -694,7 +738,7 @@ MAIN_DOM_JS = r"""
                     select.disabled = true;
                 }
                 if (autoEl) {
-                    autoEl.textContent = 'Using: ' + _bundleOptionLabel(visible[0]);
+                    autoEl.textContent = 'Using: ' + _bundleAutoLabel(visible[0]);
                     autoEl.style.display = '';
                 }
                 _setGovernanceHint('');
@@ -703,12 +747,7 @@ MAIN_DOM_JS = r"""
                 if (select) {
                     select.style.display = '';
                     select.disabled = false;
-                    var html = '<option value="" selected disabled>Select a bundle\u2026</option>';
-                    for (var i = 0; i < visible.length; i++) {
-                        var b = visible[i];
-                        html += '<option value="' + _esc(b.id) + '">' + _esc(_bundleOptionLabel(b)) + '</option>';
-                    }
-                    select.innerHTML = html;
+                    select.innerHTML = _renderGovernanceBundleSelectOptions(visible);
                     _selectedBundleId = select.value || '';
                 }
                 if (!_selectedBundleId) {

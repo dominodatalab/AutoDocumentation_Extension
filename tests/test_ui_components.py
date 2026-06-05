@@ -480,3 +480,15 @@ class TestLandingDocPreviewRestoresEditYaml:
         assert "edit-template-yaml" in scripts_src
         assert "_landingPreviewOriginalEditYaml = null" in scripts_src
         assert "editArea.value = _landingPreviewOriginalEditYaml" in scripts_src
+
+
+class TestGovernanceBundlePickerOptgroups:
+    def test_bundle_select_groups_by_model_with_optgroup(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_groupBundlesByModel" in scripts_src
+        assert "_renderGovernanceBundleSelectOptions" in scripts_src
+        assert "_bundleLeafLabel" in scripts_src
+        assert "<optgroup label=" in scripts_src
+        assert "_renderGovernanceBundleSelectOptions(visible)" in scripts_src
+        assert "_bundleAutoLabel" in scripts_src
