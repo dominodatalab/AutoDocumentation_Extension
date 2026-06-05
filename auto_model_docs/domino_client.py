@@ -11,15 +11,16 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
-from autodoc.core.models import (
-    ArtifactResult,
-    BundleAttachment,
-    BundleSummary,
-    ComputedPolicy,
-    GovernanceFinding,
-)
+if TYPE_CHECKING:
+    from autodoc.core.models import (
+        ArtifactResult,
+        BundleAttachment,
+        BundleSummary,
+        ComputedPolicy,
+        GovernanceFinding,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -853,7 +854,9 @@ _GOVERNANCE_BASE = "/api/governance/v1"
 _DEFAULT_BUNDLE_PAGE_LIMIT = 25
 
 
-def _parse_governance_attachment(raw: dict[str, Any]) -> BundleAttachment:
+def _parse_governance_attachment(raw: dict[str, Any]) -> "BundleAttachment":
+    from autodoc.core.models import BundleAttachment
+
     return BundleAttachment(
         id=str(raw.get("id", "")),
         type=str(raw.get("type", "")),
@@ -861,7 +864,9 @@ def _parse_governance_attachment(raw: dict[str, Any]) -> BundleAttachment:
     )
 
 
-def _parse_governance_bundle(raw: dict[str, Any]) -> BundleSummary:
+def _parse_governance_bundle(raw: dict[str, Any]) -> "BundleSummary":
+    from autodoc.core.models import BundleSummary
+
     attachments = [
         _parse_governance_attachment(a)
         for a in (raw.get("attachments") or [])
@@ -882,7 +887,9 @@ def _parse_governance_bundle(raw: dict[str, Any]) -> BundleSummary:
     )
 
 
-def _parse_governance_finding(raw: dict[str, Any]) -> GovernanceFinding:
+def _parse_governance_finding(raw: dict[str, Any]) -> "GovernanceFinding":
+    from autodoc.core.models import GovernanceFinding
+
     assignee_obj = raw.get("assignee") or {}
     approver_obj = raw.get("approver") or {}
     return GovernanceFinding(
@@ -898,7 +905,9 @@ def _parse_governance_finding(raw: dict[str, Any]) -> GovernanceFinding:
     )
 
 
-def _parse_governance_result(raw: dict[str, Any]) -> ArtifactResult:
+def _parse_governance_result(raw: dict[str, Any]) -> "ArtifactResult":
+    from autodoc.core.models import ArtifactResult
+
     return ArtifactResult(
         id=str(raw.get("id", "")),
         evidence_id=str(raw.get("evidenceId", "")),
@@ -932,10 +941,10 @@ def _governance_page_exhausted(data: dict[str, Any], offset: int, fetched_count:
     return offset + fetched_count >= total
 
 
-def list_bundles(project_id: str) -> List[BundleSummary]:
+def list_bundles(project_id: str) -> "List[BundleSummary]":
     offset = 0
     limit = _DEFAULT_BUNDLE_PAGE_LIMIT
-    all_bundles: list[BundleSummary] = []
+    all_bundles: list[Any] = []
     try:
         while True:
             data = _domino_request(
@@ -956,7 +965,9 @@ def list_bundles(project_id: str) -> List[BundleSummary]:
     return all_bundles
 
 
-def compute_policy(bundle_id: str, policy_id: str) -> Optional[ComputedPolicy]:
+def compute_policy(bundle_id: str, policy_id: str) -> "Optional[ComputedPolicy]":
+    from autodoc.core.models import ComputedPolicy
+
     try:
         raw = _domino_request(
             "POST",
@@ -994,7 +1005,7 @@ def compute_policy(bundle_id: str, policy_id: str) -> Optional[ComputedPolicy]:
         return None
 
 
-def get_findings(bundle_id: str) -> List[GovernanceFinding]:
+def get_findings(bundle_id: str) -> "List[GovernanceFinding]":
     try:
         data = _domino_request("GET", f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings")
         items = data if isinstance(data, list) else (data.get("data") if isinstance(data, dict) else [])
