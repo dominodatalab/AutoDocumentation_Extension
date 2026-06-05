@@ -720,6 +720,24 @@ MAIN_DOM_JS = r"""
             updateGenerateButton();
         }
 
+        function _normalizeGovernanceBundle(raw) {
+            if (!raw || !raw.id) return null;
+            var atts = raw.attachments || [];
+            return {
+                id: String(raw.id),
+                name: raw.name || '',
+                policyName: raw.policyName || '',
+                stage: raw.stage || '',
+                state: raw.state || '',
+                attachments: atts.map(function(a) {
+                    return {
+                        type: a && a.type ? a.type : '',
+                        identifier: (a && a.identifier) ? a.identifier : {},
+                    };
+                }),
+            };
+        }
+
         function loadGovernanceBundles() {
             var pid = resolvedProjectId();
             if (!pid) {
@@ -728,12 +746,14 @@ MAIN_DOM_JS = r"""
                 applyGovernanceBundleSelection();
                 return Promise.resolve();
             }
-            var url = _adUrl('api/governance/bundles') + '?projectId=' + encodeURIComponent(pid);
-            return fetch(url)
+            var url = '/api/governance/v1/bundles?projectId%5B%5D='
+                + encodeURIComponent(pid) + '&limit=50';
+            return fetch(url, { credentials: 'include' })
                 .then(_checkResp)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    _governanceBundles = (data && data.bundles) ? data.bundles : [];
+                    var rows = (data && data.data) ? data.data : [];
+                    _governanceBundles = rows.map(_normalizeGovernanceBundle).filter(Boolean);
                     _governanceBundlesLoaded = true;
                     applyGovernanceBundleSelection();
                 })
