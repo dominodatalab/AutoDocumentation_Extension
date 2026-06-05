@@ -21,7 +21,11 @@ from autodoc.core.models import (
     SectionSpec,
 )
 from autodoc.generation.builder import DocumentBuilder
-from autodoc.generation.citations import CITATION_MARKER_PATTERN
+from autodoc.generation.citations import (
+    CITATION_MARKER_PATTERN,
+    is_governance_source_type,
+    parse_citation_details_meta_comment,
+)
 
 
 class NotebookExporter:
@@ -298,17 +302,28 @@ class NotebookExporter:
         """Parse references cell to recover citation details."""
         details: Dict[str, Dict[str, Any]] = {}
         for line in text.splitlines():
-            match = re.search(r"@cite:([^\\s]+)", line)
+            match = re.search(r"@cite:([^\s]+)", line)
             if not match:
                 continue
             citation_id = match.group(1)
-            run_url_match = re.search(r"/#/experiments/(\\d+)/runs/([A-Fa-f0-9]+)", line)
+            entry_details: Dict[str, Any] = {}
+
+            run_url_match = re.search(r"/#/experiments/(\d+)/runs/([A-Fa-f0-9]+)", line)
             if run_url_match:
                 experiment_id, run_id = run_url_match.groups()
-                details[citation_id] = {
+                entry_details = {
                     "experiment_id": experiment_id,
                     "run_id": run_id,
                 }
+
+            governance_meta = parse_citation_details_meta_comment(line)
+            if governance_meta and is_governance_source_type(
+                str(governance_meta.get("type", ""))
+            ):
+                entry_details = {**entry_details, **governance_meta}
+
+            if entry_details:
+                details[citation_id] = entry_details
         return details
 
     def _parse_chart_cell(self, cell: nbformat.NotebookNode) -> GeneratedContent:

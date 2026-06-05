@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 CITATION_MARKER_PATTERN = re.compile(r"\[@([^\]]+)\]")
@@ -133,6 +134,161 @@ def build_finding_citation_id(finding_id: str) -> str:
     return f"finding.{finding_id}"
 
 
+GOVERNANCE_SOURCE_TYPES = frozenset({"governance", "evidence", "finding"})
+
+GOVERNANCE_FIELD_LABELS = {
+    "bundle": "Bundle",
+    "policy": "Policy",
+    "stage": "Stage",
+    "state": "State",
+    "risk_tier": "Risk tier",
+    "owner": "Owner",
+}
+
+CITATION_META_FIELDS = (
+    "type",
+    "source_key",
+    "bundle_id",
+    "bundle_name",
+    "policy_name",
+    "evidence_text",
+    "evidence_stage",
+    "evidence_set_name",
+    "question",
+    "answer",
+    "finding_title",
+    "finding_description",
+    "finding_severity",
+    "finding_status",
+)
+
+
+def is_governance_source_type(entry_type: str) -> bool:
+    return entry_type in GOVERNANCE_SOURCE_TYPES
+
+
+def _governance_field_label(source_key: str) -> str:
+    return GOVERNANCE_FIELD_LABELS.get(
+        source_key,
+        source_key.replace("_", " ").title() if source_key else "Governance",
+    )
+
+
+def format_governance_bundle_prefix(
+    bundle_name: Optional[str],
+    bundle_id: Optional[str],
+) -> str:
+    name = (bundle_name or "").strip() or "Governance bundle"
+    bid = (bundle_id or "").strip()
+    if bid:
+        return f"{name} ({bid})"
+    return name
+
+
+def _governance_bundle_short_name(bundle_name: Optional[str]) -> str:
+    name = (bundle_name or "").strip()
+    return name or "Governance bundle"
+
+
+def format_governance_display_label(citation_id: str, details: dict[str, Any]) -> str:
+    bundle_name = _governance_bundle_short_name(details.get("bundle_name"))
+    entry_type = details.get("type", "")
+    parsed = parse_citation_id(citation_id)
+
+    if entry_type == "governance":
+        source_key = details.get("source_key") or parsed.get("source_key") or ""
+        return f"{bundle_name} · {_governance_field_label(str(source_key))}"
+    if entry_type == "evidence":
+        return f"{bundle_name} · Evidence"
+    if entry_type == "finding":
+        title = (details.get("finding_title") or "").strip()
+        if title:
+            return f"{bundle_name} · {title}"
+        return f"{bundle_name} · Finding"
+    return citation_id
+
+
+def format_governance_reference_text(citation_id: str, details: dict[str, Any]) -> str:
+    entry_type = details.get("type", "")
+    parsed = parse_citation_id(citation_id)
+    prefix = format_governance_bundle_prefix(
+        details.get("bundle_name"),
+        details.get("bundle_id"),
+    )
+    parts: list[str] = [prefix]
+
+    policy_name = (details.get("policy_name") or "").strip()
+    if policy_name:
+        parts.append(policy_name)
+
+    if entry_type == "governance":
+        source_key = str(details.get("source_key") or parsed.get("source_key") or "")
+        value = (details.get("evidence_text") or "").strip()
+        label = _governance_field_label(source_key)
+        parts.append(f"{label}: {value}" if value else label)
+    elif entry_type == "evidence":
+        stage = (details.get("evidence_stage") or "").strip()
+        evset = (details.get("evidence_set_name") or "").strip()
+        if stage or evset:
+            parts.append(" / ".join(p for p in (stage, evset) if p))
+        evidence_text = (details.get("evidence_text") or "").strip()
+        if evidence_text:
+            parts.append(evidence_text)
+    elif entry_type == "finding":
+        severity = (details.get("finding_severity") or "").strip()
+        status = (details.get("finding_status") or "").strip()
+        title = (details.get("finding_title") or "").strip()
+        description = (details.get("finding_description") or "").strip()
+        body = title
+        if description:
+            body = f"{title} — {description}" if title else description
+        tags = []
+        if severity:
+            tags.append(f"[{severity}]")
+        if status and status != "To do":
+            tags.append(f"[{status.upper()}]")
+        lead = " ".join(tags)
+        parts.append(f"{lead} {body}".strip() if lead else body)
+    else:
+        evidence_text = (details.get("evidence_text") or "").strip()
+        if evidence_text:
+            parts.append(evidence_text)
+
+    return " | ".join(p for p in parts if p)
+
+
+def format_governance_traceability_label(citation_id: str, details: dict[str, Any]) -> str:
+    return format_governance_reference_text(citation_id, details)
+
+
+def citation_details_meta_payload(details: dict[str, Any]) -> dict[str, Any]:
+    if not is_governance_source_type(details.get("type", "")):
+        return {}
+    return {
+        key: details[key]
+        for key in CITATION_META_FIELDS
+        if details.get(key) not in (None, "")
+    }
+
+
+def citation_details_meta_comment(details: dict[str, Any]) -> str:
+    payload = citation_details_meta_payload(details)
+    if not payload:
+        return ""
+    return f" @meta:{json.dumps(payload, separators=(',', ':'))}"
+
+
+def parse_citation_details_meta_comment(line: str) -> dict[str, Any]:
+    match = re.search(r"@meta:(\{.*\})", line)
+    if not match:
+        return {}
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _parse_code_citation(raw: str) -> dict:
     """Parse the raw portion of a Code: citation, handling line number suffix."""
     start_line = None
@@ -227,6 +383,8 @@ class CitationEntry:
     id: str
     type: str
     text: str
+    display_label: str = ""
+    governance_meta: dict[str, Any] = field(default_factory=dict)
     run_url: str = ""
     # Additional metadata for rich references
     experiment_name: str = ""
@@ -300,7 +458,9 @@ class CitationRegistry:
         if run_id:
             run_url = build_run_url(self.tracking_uri, experiment_id, run_id)
 
-        # Build the reference text based on type
+        display_label = citation_id
+        governance_meta: dict[str, Any] = {}
+
         if entry_type == "code_file":
             location = code_path or "unknown"
             symbol_part = f", Symbol: {code_symbol}()" if code_symbol else ""
@@ -325,6 +485,11 @@ class CitationRegistry:
             if run_id:
                 text += f"\n    Run ID: {run_id}"
 
+        elif is_governance_source_type(entry_type):
+            text = format_governance_reference_text(citation_id, details)
+            display_label = format_governance_display_label(citation_id, details)
+            governance_meta = citation_details_meta_payload(details)
+
         else:
             text = f"Reference: {citation_id}"
 
@@ -332,6 +497,8 @@ class CitationRegistry:
             id=citation_id,
             type=entry_type,
             text=text,
+            display_label=display_label,
+            governance_meta=governance_meta,
             run_url=run_url,
             experiment_name=experiment_name,
             run_name=run_name,
@@ -346,6 +513,15 @@ class CitationRegistry:
         if citation_id not in self._entries:
             return None
         return citation_id
+
+    def get_display_label(self, citation_id: str) -> Optional[str]:
+        entry = self._entries.get(citation_id)
+        if entry is None:
+            return None
+        return entry.display_label or citation_id
+
+    def get_entry(self, citation_id: str) -> Optional[CitationEntry]:
+        return self._entries.get(citation_id)
 
     # Legacy method for backward compatibility
     def get_number(self, citation_id: str) -> Optional[int]:
@@ -407,9 +583,10 @@ def replace_markers_with_ids(
         citation_id = match.group(1)
         display_id = registry.register(citation_id, details_map.get(citation_id))
         used_ids.append(display_id)
+        label = registry.get_display_label(display_id) or display_id
         if markdown:
-            return f"[{display_id}](#ref-{display_id})<!-- @cite:{citation_id} -->"
-        return f"[{display_id}]"
+            return f"[{label}](#ref-{display_id})<!-- @cite:{citation_id} -->"
+        return f"[{label}]"
 
     replaced = CITATION_MARKER_PATTERN.sub(_replace, text or "")
 
@@ -419,10 +596,11 @@ def replace_markers_with_ids(
                 continue
             display_id = registry.register(citation_id, details_map.get(citation_id))
             used_ids.append(display_id)
+            label = registry.get_display_label(display_id) or display_id
             marker = (
-                f"[{display_id}](#ref-{display_id})<!-- @cite:{citation_id} -->"
+                f"[{label}](#ref-{display_id})<!-- @cite:{citation_id} -->"
                 if markdown
-                else f"[{display_id}]"
+                else f"[{label}]"
             )
             replaced = f"{replaced} {marker}".rstrip()
 

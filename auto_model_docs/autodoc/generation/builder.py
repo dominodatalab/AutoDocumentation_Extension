@@ -26,6 +26,8 @@ from autodoc.generation.citations import (
     CITATION_MARKER_PATTERN,
     CitationRegistry,
     build_mlflow_summary_citation_id,
+    format_governance_traceability_label,
+    is_governance_source_type,
     parse_citation_id,
 )
 
@@ -802,6 +804,10 @@ class DocumentBuilder:
                     clean_display = clean_display.replace(".__call__", "")
                     clean_display = clean_display.replace(".__new__", "")
                     parts.append(clean_display)
+            elif is_governance_source_type(entry.type):
+                parts.append(display_id)
+                if entry.text:
+                    parts.append(entry.text)
             else:
                 # For unknown types, clean up the display_id
                 clean_display = display_id
@@ -870,6 +876,13 @@ class DocumentBuilder:
                     run = parsed.get("run_name", "")
                     run_id = parsed.get("run_id", "")
                     label = f"MLflow Run: {exp}/{run}" if exp else f"MLflow Run: {run_id}"
+                    doc.add_paragraph(label, style="List Bullet")
+                elif is_governance_source_type(ctype):
+                    entry = registry.get_entry(cid)
+                    if entry and entry.text:
+                        label = entry.text
+                    else:
+                        label = format_governance_traceability_label(cid, {})
                     doc.add_paragraph(label, style="List Bullet")
                 else:
                     doc.add_paragraph(cid, style="List Bullet")

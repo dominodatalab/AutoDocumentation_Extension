@@ -90,6 +90,16 @@ def _finding_from_api(raw: GovernanceFinding, artifact_label: Optional[str] = No
     )
 
 
+def _bundle_owner(bundle_row) -> Optional[str]:
+    owner = getattr(bundle_row, "owner_username", None) or None
+    if owner:
+        return str(owner)
+    project_owner = getattr(bundle_row, "project_owner", None) or None
+    if project_owner:
+        return str(project_owner)
+    return None
+
+
 def _filter_findings(
     findings: list[GovernanceFinding],
     findings_scope: str,
@@ -147,7 +157,7 @@ def load_governance_context(
         stage=bundle.stage or bundle_row.stage,
         state=bundle.state or bundle_row.state,
         risk_tier=bundle.classification_value or bundle_row.classification_value,
-        owner=None,
+        owner=_bundle_owner(bundle_row),
         evidence=evidence,
         findings=findings,
     )

@@ -909,6 +909,12 @@ def _parse_governance_bundle(raw: dict[str, Any]) -> "BundleSummary":
         for a in (raw.get("attachments") or [])
         if isinstance(a, dict)
     ]
+    created_by = raw.get("createdBy") or {}
+    owner_username = None
+    if isinstance(created_by, dict):
+        owner_username = created_by.get("userName") or created_by.get("username")
+    project_owner = raw.get("projectOwner") or None
+
     return BundleSummary(
         id=str(raw.get("id", "")),
         name=str(raw.get("name", "")),
@@ -919,6 +925,8 @@ def _parse_governance_bundle(raw: dict[str, Any]) -> "BundleSummary":
         evidence_restricted=bool(raw.get("evidenceRestricted", False)),
         stage=raw.get("stage") or None,
         classification_value=raw.get("classificationValue") or None,
+        owner_username=str(owner_username) if owner_username else None,
+        project_owner=str(project_owner) if project_owner else None,
         attachments=attachments,
         created_at=raw.get("createdAt") or None,
     )

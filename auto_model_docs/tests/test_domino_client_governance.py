@@ -45,6 +45,11 @@ _BUNDLE = {
     "classificationValue": "High",
     "attachments": [_ATTACHMENT],
     "createdAt": "2026-01-01T00:00:00Z",
+    "createdBy": {
+        "id": "user-1",
+        "userName": "alice.chen",
+    },
+    "projectOwner": "project-owner",
 }
 
 _FINDING = {
@@ -129,6 +134,8 @@ class TestParseGovernanceBundle:
         assert b.evidence_restricted is False
         assert b.stage == "Stage 1"
         assert b.classification_value == "High"
+        assert b.owner_username == "alice.chen"
+        assert b.project_owner == "project-owner"
         assert b.created_at == "2026-01-01T00:00:00Z"
         assert len(b.attachments) == 1
         assert b.attachments[0].type == "ModelVersion"

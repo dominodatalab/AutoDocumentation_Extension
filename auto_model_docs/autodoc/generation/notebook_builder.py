@@ -24,6 +24,8 @@ from autodoc.generation.citations import (
     CITATION_MARKER_PATTERN,
     CitationRegistry,
     build_mlflow_summary_citation_id,
+    citation_details_meta_comment,
+    is_governance_source_type,
     parse_citation_id,
     replace_markers_with_numbers,
 )
@@ -868,8 +870,11 @@ ax.set_xticklabels(chart_data["labels"])'''
                     clean_display = re.sub(r';\s*@?Code:', '; ', clean_display)
                     clean_display = clean_display.replace(".__init__", "")
                     parts.append(clean_display)
+            elif is_governance_source_type(entry.type):
+                parts.append(display_id)
+                if entry.text:
+                    parts.append(entry.text)
             else:
-                # Clean up the display_id for unknown types
                 clean_display = display_id
                 clean_display = re.sub(r',\s*@?Code:', ', ', clean_display)
                 clean_display = re.sub(r';\s*@?Code:', '; ', clean_display)
@@ -882,7 +887,11 @@ ax.set_xticklabels(chart_data["labels"])'''
                 parts.append(f"Run: {entry.run_name}")
             if entry.run_url:
                 parts.append(f"[Link]({entry.run_url})")
-            line = f"{anchor}**[{idx + 1}]** {' | '.join(parts)} <!-- @cite:{entry.id} -->"
+            meta = citation_details_meta_comment(entry.governance_meta)
+            line = (
+                f"{anchor}**[{idx + 1}]** {' | '.join(parts)} "
+                f"<!-- @cite:{entry.id}{meta} -->"
+            )
             lines.append(line)
         return new_markdown_cell(source="\n".join(lines))
 

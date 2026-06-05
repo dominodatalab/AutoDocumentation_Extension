@@ -1144,6 +1144,12 @@ class ContentGenerator:
         if not gov:
             return details
 
+        base = {
+            "bundle_id": gov.bundle_id,
+            "bundle_name": gov.bundle_name,
+            "policy_name": gov.policy_name,
+        }
+
         bundle_facts = {
             "bundle": gov.bundle_name,
             "policy": gov.policy_name,
@@ -1156,6 +1162,7 @@ class ContentGenerator:
             if value:
                 cid = build_governance_citation_id(key)
                 details[cid] = {
+                    **base,
                     "type": "governance",
                     "source_key": key,
                     "evidence_text": str(value),
@@ -1164,9 +1171,14 @@ class ContentGenerator:
         for item in gov.evidence or []:
             cid = item.citation_id or build_evidence_citation_id(item.question)
             details[cid] = {
+                **base,
                 "type": "evidence",
                 "source_key": cid.split(".", 1)[-1],
                 "evidence_text": f"{item.question} — {item.answer}",
+                "evidence_stage": item.stage,
+                "evidence_set_name": item.evidence_set_name,
+                "question": item.question,
+                "answer": item.answer,
             }
 
         for finding in gov.findings or []:
@@ -1175,9 +1187,14 @@ class ContentGenerator:
             if finding.description:
                 text = f"{finding.title} — {finding.description}"
             details[cid] = {
+                **base,
                 "type": "finding",
                 "source_key": finding.finding_id,
                 "evidence_text": text,
+                "finding_title": finding.title,
+                "finding_description": finding.description,
+                "finding_severity": finding.severity,
+                "finding_status": finding.status,
             }
 
         return details

@@ -48,6 +48,8 @@ def _bundle_summary() -> BundleSummary:
         classification_value=raw.get("classificationValue"),
         attachments=[],
         created_at=raw.get("createdAt"),
+        owner_username="integration-test",
+        project_owner="integration-test",
     )
 
 
@@ -106,6 +108,7 @@ class TestLoadGovernanceContext:
             )
 
         assert ctx.bundle_id == BUNDLE_ID
+        assert ctx.owner == "integration-test"
         assert ctx.risk_tier == "Medium"
         assert len(ctx.evidence) == 2
         assert ctx.evidence[0].citation_id.startswith("evidence.")
