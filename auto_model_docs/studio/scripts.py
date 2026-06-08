@@ -628,6 +628,14 @@ MAIN_DOM_JS = r"""
             return names;
         }
 
+        function _prefillModelNameFilterFromUrl() {
+            var mid = resolvedModelId();
+            if (!mid) return;
+            var el = document.getElementById('filter-model-names');
+            if (!el || String(el.value || '').trim()) return;
+            el.value = mid;
+        }
+
         function _filterModelNamePatterns() {
             var el = document.getElementById('filter-model-names');
             var raw = el ? String(el.value || '').trim() : '';
@@ -872,11 +880,6 @@ MAIN_DOM_JS = r"""
                     if (_selectedBundleId) _setGovernanceHint('');
                     updateGenerateButton();
                 });
-            }
-            var modelFilter = document.getElementById('filter-model-names');
-            if (modelFilter) {
-                modelFilter.addEventListener('input', applyGovernanceBundleSelection);
-                modelFilter.addEventListener('change', applyGovernanceBundleSelection);
             }
         })();
 
@@ -2080,6 +2083,7 @@ MAIN_DOM_JS = r"""
 
         // ── Init ───────────────────────────────────────────────────────
         _rememberPreviewDefaultHtml();
+        _prefillModelNameFilterFromUrl();
         loadBuiltinTemplates();
         loadGovernanceBundles();
         updateGenerateButton();

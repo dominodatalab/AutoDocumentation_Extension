@@ -498,6 +498,20 @@ class TestGovernanceBundlePickerOptgroups:
         assert "filter-model-names" in scripts_src
         assert "applyGovernanceBundleSelection" in scripts_src
 
+    def test_model_name_filter_not_live_wired_to_bundle_picker(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "filter-model-names" in scripts_src
+        assert "addEventListener('input', applyGovernanceBundleSelection)" not in scripts_src
+        assert "addEventListener('change', applyGovernanceBundleSelection)" not in scripts_src
+
+    def test_model_name_filter_prefilled_from_model_id_url(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_prefillModelNameFilterFromUrl" in scripts_src
+        assert "resolvedModelId()" in scripts_src
+        assert "_prefillModelNameFilterFromUrl();" in scripts_src
+
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent
         web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
