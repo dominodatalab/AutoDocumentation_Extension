@@ -674,8 +674,24 @@ MAIN_DOM_JS = r"""
             return false;
         }
 
+        function _bundleContainsModel(bundle, modelId) {
+            if (!modelId) return true;
+            var names = _bundleModelNames(bundle);
+            for (var i = 0; i < names.length; i++) {
+                if (names[i] === modelId) return true;
+            }
+            return false;
+        }
+
         function _bundlesForContext(bundles) {
-            return bundles || [];
+            var list = bundles || [];
+            var mid = resolvedModelId();
+            if (!mid) return list;
+            var out = [];
+            for (var i = 0; i < list.length; i++) {
+                if (_bundleContainsModel(list[i], mid)) out.push(list[i]);
+            }
+            return out;
         }
 
         function _defaultBundleId(bundles) {

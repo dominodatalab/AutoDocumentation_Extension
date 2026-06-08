@@ -381,6 +381,16 @@ async def index(req: Request):
                                 cls="template-gallery",
                             ),
 
+                            Div(
+                                Span("Documents:", cls="doc-scope-prefix"),
+                                Span(
+                                    "Code · Metrics · Artifacts · Governance · Evidence · Findings",
+                                    cls="doc-scope-items",
+                                ),
+                                id="doc-scope-label",
+                                cls="doc-scope-label",
+                            ),
+
                             Details(
                                 Summary(
                                     Span("filter_list", cls="material-symbols-outlined", style="font-size:16px"),

@@ -2539,6 +2539,24 @@ select.hw-tier-select option {
     color: var(--outline);
 }
 
+.doc-scope-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.5rem;
+    margin-top: 0.75rem;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--outline);
+}
+.doc-scope-prefix {
+    font-weight: 600;
+    color: var(--on-surface-variant);
+}
+.doc-scope-items {
+    color: var(--outline);
+}
+
 /* ── Template card ────────────────────────────────────────────────── */
 .template-card {
     background: var(--surface-container-lowest);
