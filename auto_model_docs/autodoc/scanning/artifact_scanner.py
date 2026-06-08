@@ -318,6 +318,12 @@ class ArtifactScanner:
                     tags = dict(run.data.tags or {}) if hasattr(run.data, "tags") else {}
                     for key in tags:
                         all_run_tag_keys.add(key)
+                    self._debug(
+                        "run tags experiment=%s run_id=%s all_tags=%s",
+                        exp_name,
+                        run.info.run_id,
+                        tags,
+                    )
                     log_model_keys = {
                         k: v
                         for k, v in tags.items()
@@ -358,9 +364,19 @@ class ArtifactScanner:
             if self.model_names:
                 for pattern in self.model_names:
                     found_in_registry = False
+                    registry_run_ids: List[str] = []
                     try:
                         rm = client.get_registered_model(pattern)
                         found_in_registry = rm is not None
+                        if found_in_registry:
+                            versions = client.search_model_versions(
+                                f"name='{pattern}'"
+                            )
+                            registry_run_ids = [
+                                getattr(v, "run_id", None)
+                                for v in versions
+                                if getattr(v, "run_id", None)
+                            ]
                     except Exception:
                         found_in_registry = False
                     found_in_log_model_runs = any(
@@ -369,11 +385,35 @@ class ArtifactScanner:
                     )
                     self._debug(
                         "filter probe pattern=%s in_registry=%s "
-                        "in_log_model_run_discovery=%s",
+                        "in_log_model_run_discovery=%s registry_run_ids=%s",
                         pattern,
                         found_in_registry,
                         found_in_log_model_runs,
+                        registry_run_ids,
                     )
+                    for run_id in registry_run_ids:
+                        try:
+                            run = client.get_run(run_id)
+                            run_tags = (
+                                dict(run.data.tags)
+                                if hasattr(run.data, "tags") and run.data.tags
+                                else {}
+                            )
+                            self._debug(
+                                "filter probe registry run tags model=%s "
+                                "run_id=%s all_tags=%s",
+                                pattern,
+                                run_id,
+                                run_tags,
+                            )
+                        except Exception as exc:
+                            self._debug(
+                                "filter probe registry run tags failed "
+                                "model=%s run_id=%s error=%s",
+                                pattern,
+                                run_id,
+                                exc,
+                            )
         except Exception as exc:
             self._debug("log-model tag dump failed: %s", exc)
 

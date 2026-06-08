@@ -148,3 +148,50 @@ async def test_scan_logs_bound_model_when_version_accepted(caplog):
     messages = "\n".join(r.message for r in caplog.records)
     assert "accepted version" in messages
     assert "scan complete models_found=1" in messages
+
+
+@pytest.mark.asyncio
+async def test_scan_logs_run_tag_values_without_log_model_tags(caplog):
+    caplog.set_level(logging.WARNING)
+
+    domino_tags = {
+        "mlflow.domino.project_id": "proj-123",
+        "mlflow.domino.project_name": "test-project",
+        "mlflow.user": "integration-test",
+    }
+
+    client = MagicMock()
+    client.search_registered_models.return_value = [
+        _registered_model("target-model"),
+    ]
+    client.search_experiments.return_value = [
+        _experiment(
+            "proj-exp",
+            "exp-1",
+            tags={"mlflow.domino.project_id": "proj-123"},
+        ),
+    ]
+    client.search_runs.return_value = [_run("run-1", tags=domino_tags)]
+    client.search_model_versions.return_value = [
+        _model_version("target-model", "1", "run-1"),
+    ]
+    client.get_registered_model.return_value = _registered_model("target-model")
+    client.get_run.return_value = _run("run-1", tags=domino_tags)
+    client.get_experiment.return_value = _experiment(
+        "proj-exp",
+        "exp-1",
+        tags={"mlflow.domino.project_id": "proj-123"},
+    )
+    client.list_artifacts.return_value = []
+
+    scanner = ArtifactScanner(model_names=["target-model"], latest_only=True)
+
+    with patch.dict("os.environ", {"DOMINO_PROJECT_ID": "proj-123"}, clear=False):
+        with patch.object(scanner, "_get_client", return_value=client):
+            await scanner.scan()
+
+    messages = "\n".join(r.message for r in caplog.records)
+    assert "run tags experiment=proj-exp run_id=run-1 all_tags=" in messages
+    assert "'mlflow.domino.project_id': 'proj-123'" in messages
+    assert "filter probe registry run tags model=target-model run_id=run-1" in messages
+    assert "registry_run_ids=['run-1']" in messages
