@@ -675,21 +675,21 @@ MAIN_DOM_JS = r"""
         }
 
         function _bundlesForContext(bundles) {
-            var all = bundles || [];
-            var patterns = _filterModelNamePatterns();
-            if (patterns.length) {
-                all = all.filter(function(b) { return _bundleMatchesModelNameFilters(b, patterns); });
-            }
+            return bundles || [];
+        }
+
+        function _defaultBundleId(bundles) {
             var mid = resolvedModelId();
-            if (!mid) return all;
-            var matched = [];
-            for (var i = 0; i < all.length; i++) {
-                var names = _bundleModelNames(all[i]);
-                for (var j = 0; j < names.length; j++) {
-                    if (names[j] === mid) { matched.push(all[i]); break; }
+            if (mid) {
+                for (var i = 0; i < bundles.length; i++) {
+                    var names = _bundleModelNames(bundles[i]);
+                    for (var j = 0; j < names.length; j++) {
+                        if (names[j] === mid) return bundles[i].id;
+                    }
                 }
             }
-            return matched.length ? matched : all;
+            var first = _firstVisibleBundle(bundles);
+            return first ? first.id : '';
         }
 
         function _bundlePrimaryModelName(bundle) {
@@ -799,30 +799,16 @@ MAIN_DOM_JS = r"""
             }
 
             if (field) field.style.display = '';
+            if (autoEl) autoEl.style.display = 'none';
 
-            var defaultBundle = _firstVisibleBundle(visible);
-            _selectedBundleId = defaultBundle ? defaultBundle.id : '';
-
-            if (visible.length === 1) {
-                if (select) {
-                    select.style.display = 'none';
-                    select.disabled = true;
-                }
-                if (autoEl) {
-                    autoEl.textContent = 'Using: ' + _bundleAutoLabel(visible[0]);
-                    autoEl.style.display = '';
-                }
-                _setGovernanceHint('');
-            } else {
-                if (autoEl) autoEl.style.display = 'none';
-                if (select) {
-                    select.style.display = '';
-                    select.disabled = false;
-                    select.innerHTML = _renderGovernanceBundleSelectOptions(visible, _selectedBundleId);
-                    if (_selectedBundleId) select.value = _selectedBundleId;
-                }
-                _setGovernanceHint('');
+            _selectedBundleId = _defaultBundleId(visible);
+            if (select) {
+                select.style.display = '';
+                select.disabled = false;
+                select.innerHTML = _renderGovernanceBundleSelectOptions(visible, _selectedBundleId);
+                if (_selectedBundleId) select.value = _selectedBundleId;
             }
+            _setGovernanceHint('');
             updateGenerateButton();
         }
 
