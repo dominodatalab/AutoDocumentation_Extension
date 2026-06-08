@@ -4,15 +4,17 @@ import asyncio
 import fnmatch
 import logging
 import os
-from typing import Callable, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from autodoc.core.exceptions import ScannerError
 from autodoc.core.models import ArtifactContext, ModelInfo
 
-# Type alias for progress callback
 ProgressCallback = Callable[[float], None]
 
 logger = logging.getLogger(__name__)
+
+_DEBUG_PREFIX = "[AUTODOC_MLFLOW_SCAN]"
+_LOG_MODEL_TAG_SUBSTR = "mlflow.log-model"
 
 
 class ArtifactScanner:
@@ -40,11 +42,14 @@ class ArtifactScanner:
             latest_only: Only include the latest version of each model.
         """
         self.tracking_uri = tracking_uri
-        self.experiment_name = experiment_name  # Keep for backward compatibility
+        self.experiment_name = experiment_name
         self.experiment_names = experiment_names or []
         self.model_names = model_names or []
         self.latest_only = latest_only
         self._client = None
+
+    def _debug(self, message: str, *args: Any) -> None:
+        logger.warning(_DEBUG_PREFIX + " " + message, *args)
 
     def _get_client(self):
         """Lazily initialize MLflow client."""
@@ -82,7 +87,6 @@ class ArtifactScanner:
         project_metadata = {}
 
         def report_progress(progress: float) -> None:
-            """Report progress if callback is provided."""
             if on_progress:
                 on_progress(progress)
 
@@ -90,7 +94,7 @@ class ArtifactScanner:
 
         client = self._get_client()
         if client is None:
-            # MLflow not available, return empty context
+            self._debug("MLflow client unavailable (import/init failed)")
             report_progress(1.0)
             return ArtifactContext(
                 models=models,
@@ -98,35 +102,54 @@ class ArtifactScanner:
                 project_metadata={"mlflow_available": False},
             )
 
-
         try:
+            import mlflow
+
+            resolved_uri = mlflow.get_tracking_uri()
+            self._debug(
+                "scan start tracking_uri=%s resolved_uri=%s model_filters=%s "
+                "experiment_filters=%s latest_only=%s",
+                self.tracking_uri,
+                resolved_uri,
+                self.model_names,
+                self.experiment_names,
+                self.latest_only,
+            )
+
             report_progress(0.05)
 
             domino_project_id = os.environ.get("DOMINO_PROJECT_ID")
+            domino_project_name = os.environ.get("DOMINO_PROJECT_NAME")
             if domino_project_id:
                 project_metadata["domino_project_id"] = domino_project_id
-                project_metadata["domino_project_name"] = os.environ.get("DOMINO_PROJECT_NAME")
+                project_metadata["domino_project_name"] = domino_project_name
+
+            self._debug(
+                "domino env DOMINO_PROJECT_ID=%s DOMINO_PROJECT_NAME=%s",
+                domino_project_id,
+                domino_project_name,
+            )
 
             report_progress(0.1)
 
-            # Get target experiments based on filtering
+            self._debug_dump_registry_inventory(client)
             target_experiments = self._get_target_experiments(client, domino_project_id)
+            self._debug_dump_experiments(client, domino_project_id, target_experiments)
+            self._debug_dump_log_model_tags(client, target_experiments)
 
             report_progress(0.15)
 
-            # Get registered models with filtering (progress 0.2 to 0.95)
             models = self._scan_registered_models(
                 client, target_experiments, on_progress=on_progress
             )
 
             report_progress(0.95)
 
-            # Get experiment info if specified (backward compatibility)
             if self.experiment_name:
                 project_metadata.update(self._get_experiment_metadata(client))
 
             project_metadata["mlflow_available"] = True
-            project_metadata["tracking_uri"] = self.tracking_uri
+            project_metadata["tracking_uri"] = self.tracking_uri or resolved_uri
             project_metadata["models_found"] = len(models)
             project_metadata["filtering_applied"] = {
                 "project_filtering": domino_project_id is not None,
@@ -134,10 +157,25 @@ class ArtifactScanner:
                 "model_filtering": bool(self.model_names),
                 "latest_only": self.latest_only,
             }
+            self._debug(
+                "scan complete models_found=%s model_names=%s",
+                len(models),
+                [m.name for m in models],
+            )
+            for m in models:
+                self._debug(
+                    "selected model name=%s version=%s run_id=%s experiment=%s "
+                    "metric_keys=%s",
+                    m.name,
+                    m.version,
+                    m.run_id,
+                    m.experiment_name,
+                    list((m.metrics or {}).keys())[:20],
+                )
 
         except Exception as e:
             logger.error(f"Error scanning MLflow artifacts: {e}")
-            # Log but don't fail - MLflow might not be configured
+            self._debug("scan failed with exception: %s", e)
             project_metadata["mlflow_error"] = str(e)
             project_metadata["mlflow_available"] = False
 
@@ -192,63 +230,208 @@ class ArtifactScanner:
             mlflow_artifacts=mlflow_artifacts,
         )
 
+    def _debug_dump_registry_inventory(self, client) -> None:
+        try:
+            registered = list(client.search_registered_models())
+            self._debug("registry inventory count=%s", len(registered))
+            for rm in registered:
+                try:
+                    versions = client.search_model_versions(f"name='{rm.name}'")
+                except Exception as exc:
+                    self._debug(
+                        "registry model=%s version_query_error=%s",
+                        rm.name,
+                        exc,
+                    )
+                    continue
+                version_summaries = []
+                for v in versions:
+                    version_summaries.append(
+                        {
+                            "version": getattr(v, "version", None),
+                            "run_id": getattr(v, "run_id", None),
+                            "stage": getattr(v, "current_stage", None),
+                        }
+                    )
+                self._debug(
+                    "registry model=%s versions=%s",
+                    rm.name,
+                    version_summaries,
+                )
+        except Exception as exc:
+            self._debug("registry inventory dump failed: %s", exc)
+
+    def _debug_dump_experiments(
+        self,
+        client,
+        domino_project_id: Optional[str],
+        target_experiments: dict,
+    ) -> None:
+        try:
+            experiments = client.search_experiments()
+            self._debug("all experiments count=%s", len(experiments))
+            for exp in experiments:
+                tags = dict(exp.tags or {})
+                domino_tag = tags.get("mlflow.domino.project_id")
+                in_target = exp.name in target_experiments
+                self._debug(
+                    "experiment name=%s id=%s lifecycle=%s in_target=%s "
+                    "domino.project_id tag=%s all_tags=%s",
+                    exp.name,
+                    exp.experiment_id,
+                    exp.lifecycle_stage,
+                    in_target,
+                    domino_tag,
+                    tags,
+                )
+                if domino_project_id and domino_tag != domino_project_id:
+                    self._debug(
+                        "experiment excluded by domino project filter name=%s "
+                        "tag=%s expected=%s",
+                        exp.name,
+                        domino_tag,
+                        domino_project_id,
+                    )
+            self._debug(
+                "target_experiments count=%s names=%s",
+                len(target_experiments),
+                sorted(target_experiments.keys()),
+            )
+        except Exception as exc:
+            self._debug("experiment dump failed: %s", exc)
+
+    def _debug_dump_log_model_tags(self, client, target_experiments: dict) -> None:
+        log_model_runs: List[Dict[str, Any]] = []
+        all_run_tag_keys: Set[str] = set()
+        try:
+            for exp_name, exp_id in target_experiments.items():
+                runs = client.search_runs(
+                    experiment_ids=[exp_id],
+                    max_results=10000,
+                )
+                self._debug(
+                    "experiment runs experiment=%s run_count=%s",
+                    exp_name,
+                    len(runs),
+                )
+                for run in runs:
+                    tags = dict(run.data.tags or {}) if hasattr(run.data, "tags") else {}
+                    for key in tags:
+                        all_run_tag_keys.add(key)
+                    log_model_keys = {
+                        k: v
+                        for k, v in tags.items()
+                        if _LOG_MODEL_TAG_SUBSTR in k
+                    }
+                    if not log_model_keys:
+                        continue
+                    version_names: List[str] = []
+                    try:
+                        versions = client.search_model_versions(
+                            f"run_id='{run.info.run_id}'"
+                        )
+                        version_names = [v.name for v in versions]
+                    except Exception as exc:
+                        version_names = [f"query_error:{exc}"]
+                    entry = {
+                        "experiment": exp_name,
+                        "run_id": run.info.run_id,
+                        "log_model_tags": log_model_keys,
+                        "all_tag_keys": sorted(tags.keys()),
+                        "registered_names_from_run": version_names,
+                    }
+                    log_model_runs.append(entry)
+                    self._debug(
+                        "run with log-model tags experiment=%s run_id=%s "
+                        "log_model_tags=%s registered_names=%s all_tag_keys=%s",
+                        exp_name,
+                        run.info.run_id,
+                        log_model_keys,
+                        version_names,
+                        sorted(tags.keys()),
+                    )
+            self._debug(
+                "log-model run summary count=%s unique_run_tag_keys_sample=%s",
+                len(log_model_runs),
+                sorted(all_run_tag_keys)[:100],
+            )
+            if self.model_names:
+                for pattern in self.model_names:
+                    found_in_registry = False
+                    try:
+                        rm = client.get_registered_model(pattern)
+                        found_in_registry = rm is not None
+                    except Exception:
+                        found_in_registry = False
+                    found_in_log_model_runs = any(
+                        pattern in (e.get("registered_names_from_run") or [])
+                        for e in log_model_runs
+                    )
+                    self._debug(
+                        "filter probe pattern=%s in_registry=%s "
+                        "in_log_model_run_discovery=%s",
+                        pattern,
+                        found_in_registry,
+                        found_in_log_model_runs,
+                    )
+        except Exception as exc:
+            self._debug("log-model tag dump failed: %s", exc)
+
     def _get_target_experiments(self, client, domino_project_id: Optional[str]) -> dict:
         """Get target experiments based on filtering criteria.
-        
+
         Returns:
             Dict mapping experiment name to experiment ID for target experiments.
         """
         target_experiments = {}
-        
+
         try:
-            # Get all experiments
             experiments = client.search_experiments()
-            
+
             excluded_count = 0
             for exp in experiments:
-                # Skip deleted experiments
                 if exp.lifecycle_stage == "deleted":
                     excluded_count += 1
                     continue
-                    
+
                 if domino_project_id:
                     project_tag = exp.tags.get("mlflow.domino.project_id")
                     if project_tag != domino_project_id:
                         excluded_count += 1
                         continue
-                
-                # Apply experiment name filtering
+
                 if self.experiment_names:
-                    # Check if any pattern matches this experiment
                     matched = False
-                    matching_pattern = None
                     for pattern in self.experiment_names:
-                        # Use wildcard matching if pattern contains wildcards
                         if '*' in pattern or '?' in pattern:
                             if fnmatch.fnmatch(exp.name, pattern):
                                 matched = True
-                                matching_pattern = pattern
                                 break
                         else:
-                            # Exact match for non-wildcard patterns
                             if exp.name == pattern:
                                 matched = True
-                                matching_pattern = pattern
                                 break
-                    
+
                     if not matched:
                         excluded_count += 1
                         continue
 
-                elif self.experiment_name:  # Backward compatibility
+                elif self.experiment_name:
                     if exp.name != self.experiment_name:
                         excluded_count += 1
                         continue
 
                 target_experiments[exp.name] = exp.experiment_id
 
+            self._debug(
+                "get_target_experiments excluded=%s included=%s",
+                excluded_count,
+                len(target_experiments),
+            )
+
         except Exception as e:
             logger.warning(f"Error getting target experiments: {e}")
+            self._debug("get_target_experiments error: %s", e)
 
         return target_experiments
 
@@ -259,40 +442,67 @@ class ArtifactScanner:
     ) -> set[str]:
         """Get unique model names from runs in target experiments."""
         model_names = set()
-        
-        
+
         for exp_name, exp_id in target_experiments.items():
             try:
-                
-                # Get all runs from this experiment
                 runs = client.search_runs(
                     experiment_ids=[exp_id],
-                    max_results=10000  # Large number to get all runs
+                    max_results=10000,
                 )
-                
+
                 exp_model_count = 0
                 for run in runs:
-                    # Look for model registry references in run tags
                     if hasattr(run.data, 'tags') and run.data.tags:
-                        # Check for MLflow model registry tags
                         for tag_key, tag_value in run.data.tags.items():
-                            if 'mlflow.log-model' in tag_key and tag_value:
-                                # This run logged a model
-                                # Try to find registered model versions that reference this run
+                            if _LOG_MODEL_TAG_SUBSTR in tag_key and tag_value:
                                 try:
-                                    # Search for model versions with this run_id
-                                    versions = client.search_model_versions(f"run_id='{run.info.run_id}'")
+                                    versions = client.search_model_versions(
+                                        f"run_id='{run.info.run_id}'"
+                                    )
                                     for version in versions:
                                         model_names.add(version.name)
                                         exp_model_count += 1
+                                        self._debug(
+                                            "experiment discovery hit experiment=%s "
+                                            "run_id=%s tag_key=%s tag_value=%s "
+                                            "registered_name=%s version=%s",
+                                            exp_name,
+                                            run.info.run_id,
+                                            tag_key,
+                                            tag_value,
+                                            version.name,
+                                            version.version,
+                                        )
                                 except Exception as e:
-                                    logger.debug(f"    Error searching model versions for run {run.info.run_id}: {e}")
+                                    self._debug(
+                                        "experiment discovery version query failed "
+                                        "experiment=%s run_id=%s error=%s",
+                                        exp_name,
+                                        run.info.run_id,
+                                        e,
+                                    )
                                     continue
+
+                self._debug(
+                    "experiment discovery summary experiment=%s "
+                    "discovered_model_links=%s",
+                    exp_name,
+                    exp_model_count,
+                )
 
             except Exception as e:
                 logger.warning(f"  ⚠ Error scanning experiment '{exp_name}': {e}")
+                self._debug(
+                    "experiment discovery failed experiment=%s error=%s",
+                    exp_name,
+                    e,
+                )
                 continue
 
+        self._debug(
+            "experiment discovery total unique model names=%s",
+            sorted(model_names),
+        )
         return model_names
 
     def _scan_registered_models(
@@ -303,31 +513,43 @@ class ArtifactScanner:
     ) -> list[ModelInfo]:
         """Scan MLflow model registry for registered models."""
         models = []
-        model_versions_by_name = {}  # For latest_only filtering
+        model_versions_by_name = {}
+        target_experiments = target_experiments or {}
 
-        # Progress range for model scanning: 0.2 to 0.95
         progress_start = 0.2
         progress_end = 0.95
         progress_range = progress_end - progress_start
 
         def report_progress(fraction: float) -> None:
-            """Report progress scaled to the model scanning range."""
             if on_progress:
                 scaled_progress = progress_start + (fraction * progress_range)
                 on_progress(scaled_progress)
 
         try:
-            # Optimization: Use experiment-based pre-filtering when both experiment and model filters are specified
+            scan_path = "unknown"
+            matching_models = []
+
             if target_experiments and self.model_names:
-                
-                # Get models from target experiments first
-                experiment_models = self._get_models_from_experiments(client, target_experiments)
-                
+                scan_path = "experiment_discovery_then_registry"
+                self._debug(
+                    "scan path=%s target_experiment_count=%s model_filters=%s",
+                    scan_path,
+                    len(target_experiments),
+                    self.model_names,
+                )
+
+                experiment_models = self._get_models_from_experiments(
+                    client, target_experiments
+                )
+
                 if not experiment_models:
+                    self._debug(
+                        "scan path=%s early exit: experiment_models empty",
+                        scan_path,
+                    )
                     report_progress(1.0)
                     return models
-                
-                # Filter experiment models by model name patterns
+
                 matching_model_names = set()
                 for model_name in experiment_models:
                     for pattern in self.model_names:
@@ -339,74 +561,140 @@ class ArtifactScanner:
                             if model_name == pattern:
                                 matching_model_names.add(model_name)
                                 break
-                
-                
-                # Get registered model objects for the matching names
-                matching_models = []
+
+                self._debug(
+                    "scan path=%s experiment_models=%s matching_model_names=%s",
+                    scan_path,
+                    sorted(experiment_models),
+                    sorted(matching_model_names),
+                )
+
+                if not matching_model_names:
+                    self._debug(
+                        "scan path=%s early exit: no name intersection with filters",
+                        scan_path,
+                    )
+                    report_progress(1.0)
+                    return models
+
                 for model_name in matching_model_names:
                     try:
                         rm = client.get_registered_model(model_name)
                         matching_models.append(rm)
+                        self._debug(
+                            "fetched registered model name=%s",
+                            model_name,
+                        )
                     except Exception as e:
-                        logger.warning(f"⚠ Could not fetch registered model '{model_name}': {e}")
+                        logger.warning(
+                            f"⚠ Could not fetch registered model '{model_name}': {e}"
+                        )
+                        self._debug(
+                            "get_registered_model failed name=%s error=%s",
+                            model_name,
+                            e,
+                        )
                         continue
-                        
-            else:
-                # Original approach: get all registered models first, then filter
-                registered_models = list(client.search_registered_models())
 
-                # Filter to matching models
-                matching_models = []
+            else:
+                scan_path = "registry_search"
+                self._debug(
+                    "scan path=%s reason=target_experiments_empty=%s "
+                    "model_filters_empty=%s",
+                    scan_path,
+                    not bool(target_experiments),
+                    not bool(self.model_names),
+                )
+                registered_models = list(client.search_registered_models())
+                self._debug(
+                    "registry_search count=%s names=%s",
+                    len(registered_models),
+                    [rm.name for rm in registered_models],
+                )
+
                 for rm in registered_models:
                     if self.model_names:
                         matched = False
+                        matched_pattern = None
                         for pattern in self.model_names:
                             if '*' in pattern or '?' in pattern:
                                 if fnmatch.fnmatch(rm.name, pattern):
                                     matched = True
+                                    matched_pattern = pattern
                                     break
                             else:
                                 if rm.name == pattern:
                                     matched = True
+                                    matched_pattern = pattern
                                     break
                         if matched:
                             matching_models.append(rm)
+                            self._debug(
+                                "registry_search matched name=%s pattern=%s",
+                                rm.name,
+                                matched_pattern,
+                            )
                     else:
                         matching_models.append(rm)
 
             total_models = len(matching_models)
+            self._debug(
+                "matching registered model objects count=%s names=%s",
+                total_models,
+                [rm.name for rm in matching_models],
+            )
             if total_models == 0:
+                self._debug("early exit: matching_models empty")
                 report_progress(1.0)
                 return models
 
-            # Process each model
             for i, rm in enumerate(matching_models):
-                # Report progress based on models processed
                 report_progress(i / total_models)
 
-                # Get all versions of this model
                 versions = client.search_model_versions(f"name='{rm.name}'")
+                self._debug(
+                    "processing model=%s version_count=%s",
+                    rm.name,
+                    len(versions),
+                )
 
                 for version in versions:
                     try:
-                        # Get the run associated with this version
                         run = client.get_run(version.run_id)
-                        
-                        # Check if the experiment is deleted
+
                         experiment = client.get_experiment(run.info.experiment_id)
                         if experiment and experiment.lifecycle_stage == "deleted":
-                            # Skip models from deleted experiments
+                            self._debug(
+                                "skip version=%s run_id=%s reason=deleted_experiment "
+                                "experiment=%s",
+                                version.version,
+                                version.run_id,
+                                experiment.name,
+                            )
                             continue
 
-                        # Apply experiment filtering if specified
-                        # Check if experiment filtering was requested (not just if matches exist)
-                        if self.experiment_names is not None and experiment.name not in target_experiments:
+                        if (
+                            self.experiment_names is not None
+                            and experiment.name not in target_experiments
+                        ):
+                            self._debug(
+                                "skip version=%s run_id=%s reason=experiment_not_in_"
+                                "target_experiments experiment=%s "
+                                "experiment_names_filter=%s target_keys=%s",
+                                version.version,
+                                version.run_id,
+                                experiment.name,
+                                self.experiment_names,
+                                sorted(target_experiments.keys()),
+                            )
                             continue
 
                         artifact_paths = self._list_artifacts(client, version.run_id)
-                        
+
                         if artifact_paths:
-                            artifact_data = self._download_and_parse_artifacts(client, version.run_id, artifact_paths)
+                            artifact_data = self._download_and_parse_artifacts(
+                                client, version.run_id, artifact_paths
+                            )
                         else:
                             artifact_data = {}
 
@@ -424,9 +712,18 @@ class ArtifactScanner:
                             artifact_data=artifact_data,
                         )
 
-                        # Summary for this model version
-                        
-                        # For latest_only filtering, track versions by model name
+                        self._debug(
+                            "accepted version=%s model=%s run_id=%s experiment=%s "
+                            "metrics=%s params=%s run_tag_keys=%s",
+                            version.version,
+                            rm.name,
+                            version.run_id,
+                            experiment.name if experiment else None,
+                            list(model_info.metrics.keys()),
+                            list(model_info.params.keys())[:20],
+                            sorted(model_info.tags.keys())[:30],
+                        )
+
                         if self.latest_only:
                             if rm.name not in model_versions_by_name:
                                 model_versions_by_name[rm.name] = []
@@ -435,40 +732,44 @@ class ArtifactScanner:
                             models.append(model_info)
 
                     except Exception as e:
-                        logger.debug(f"    ✗ Version {version.version}: Error - {str(e)}")
-                        # Skip versions that can't be loaded - already filtered by model name patterns above
+                        self._debug(
+                            "skip version=%s model=%s run_id=%s reason=exception %s",
+                            getattr(version, "version", "?"),
+                            rm.name,
+                            getattr(version, "run_id", "?"),
+                            e,
+                        )
 
-            # Apply latest_only filtering
             if self.latest_only:
                 for model_name, model_list in model_versions_by_name.items():
-                    # Sort by version number (descending) and take the first one
                     latest_model = max(model_list, key=lambda m: int(m.version))
                     models.append(latest_model)
+                    self._debug(
+                        "latest_only selected model=%s version=%s run_id=%s",
+                        model_name,
+                        latest_model.version,
+                        latest_model.run_id,
+                    )
+                if not model_versions_by_name:
+                    self._debug(
+                        "latest_only produced no models; all versions were skipped"
+                    )
 
             report_progress(1.0)
 
         except Exception as e:
             logger.warning(f"Error scanning registered models: {e}")
+            self._debug("scan_registered_models exception: %s", e)
 
         return models
 
     def _list_artifacts(self, client, run_id: str, path: str = "") -> list[str]:
-        """Recursively list all artifacts for a run.
-
-        Args:
-            client: MLflow client instance.
-            run_id: The run ID to list artifacts from.
-            path: The artifact path to start from (for recursion).
-
-        Returns:
-            List of artifact paths.
-        """
+        """Recursively list all artifacts for a run."""
         artifact_paths = []
         try:
             artifacts = client.list_artifacts(run_id, path)
             for artifact in artifacts:
                 if artifact.is_dir:
-                    # Recursively list artifacts in subdirectories
                     nested = self._list_artifacts(client, run_id, artifact.path)
                     artifact_paths.extend(nested)
                 else:
@@ -480,41 +781,35 @@ class ArtifactScanner:
     def _download_and_parse_artifacts(
         self, client, run_id: str, artifact_paths: list[str]
     ) -> dict[str, any]:
-        """Download and parse CSV/text/image artifacts.
-
-        Args:
-            client: MLflow client instance.
-            run_id: The run ID to download artifacts from.
-            artifact_paths: List of artifact paths to process.
-
-        Returns:
-            Dict mapping artifact path to parsed content.
-        """
+        """Download and parse CSV/text/image artifacts."""
         import base64
         import tempfile
 
         import pandas as pd
 
         artifact_data = {}
-        
 
         for path in artifact_paths:
             try:
                 if path.endswith('.csv'):
-                    # Download to temp directory
-                    local_path = client.download_artifacts(run_id, path, tempfile.gettempdir())
+                    local_path = client.download_artifacts(
+                        run_id, path, tempfile.gettempdir()
+                    )
                     df = pd.read_csv(local_path)
                     artifact_data[path] = df.to_dict('records')
                     os.remove(local_path)
                 elif path.endswith('.txt'):
-                    local_path = client.download_artifacts(run_id, path, tempfile.gettempdir())
+                    local_path = client.download_artifacts(
+                        run_id, path, tempfile.gettempdir()
+                    )
                     with open(local_path, 'r') as f:
                         content = f.read()
                         artifact_data[path] = content
                     os.remove(local_path)
                 elif path.endswith(('.png', '.jpg', '.jpeg')):
-                    # Download and embed images as base64
-                    local_path = client.download_artifacts(run_id, path, tempfile.gettempdir())
+                    local_path = client.download_artifacts(
+                        run_id, path, tempfile.gettempdir()
+                    )
                     with open(local_path, 'rb') as f:
                         image_bytes = f.read()
                     artifact_data[path] = {
@@ -525,7 +820,7 @@ class ArtifactScanner:
                     os.remove(local_path)
             except Exception as e:
                 logger.warning(f"        ✗ Failed to download/parse {path}: {str(e)}")
-                continue  # Skip artifacts that can't be parsed
+                continue
 
         return artifact_data
 
@@ -536,18 +831,18 @@ class ArtifactScanner:
         try:
             experiment = client.get_experiment_by_name(self.experiment_name)
             if experiment:
-                # Skip deleted experiments
                 if experiment.lifecycle_stage == "deleted":
                     metadata["experiment_skipped"] = True
-                    metadata["skip_reason"] = f"Experiment '{self.experiment_name}' is deleted"
+                    metadata["skip_reason"] = (
+                        f"Experiment '{self.experiment_name}' is deleted"
+                    )
                     return metadata
-                    
+
                 metadata["experiment_id"] = experiment.experiment_id
                 metadata["experiment_name"] = experiment.name
                 metadata["artifact_location"] = experiment.artifact_location
                 metadata["lifecycle_stage"] = experiment.lifecycle_stage
 
-                # Get run count
                 runs = client.search_runs(
                     experiment_ids=[experiment.experiment_id],
                     max_results=1,

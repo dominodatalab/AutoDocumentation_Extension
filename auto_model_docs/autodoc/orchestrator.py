@@ -230,7 +230,13 @@ class Orchestrator:
             await asyncio.gather(code_task, artifact_task, return_exceptions=True)
             raise
 
-        # Log scan summary for debugging
+        logger.warning(
+            "[AUTODOC_MLFLOW_SCAN] orchestrator post-scan models_found=%s names=%s "
+            "project_metadata=%s",
+            len(artifact_ctx.models),
+            [m.name for m in artifact_ctx.models],
+            artifact_ctx.project_metadata,
+        )
         for m in artifact_ctx.models:
             metrics_list = list(m.metrics.keys()) if m.metrics else []
             artifacts_list = m.artifacts if m.artifacts else []
@@ -507,7 +513,12 @@ class Orchestrator:
                 models = artifact_ctx.models or []
 
                 if not models:
-                    # No models found, create a generic section
+                    logger.warning(
+                        "[AUTODOC_MLFLOW_SCAN] per_model section=%s UNBOUND "
+                        "(artifact_ctx.models empty); filters=%s",
+                        section.name,
+                        artifact_ctx.project_metadata.get("filtering_applied"),
+                    )
                     context = GenerationContext(
                         code_context=code_ctx,
                         artifact_context=artifact_ctx,
@@ -519,6 +530,15 @@ class Orchestrator:
                     planning_tasks.append((section, context, str(section_num)))
                 else:
                     for j, model in enumerate(models, 1):
+                        logger.warning(
+                            "[AUTODOC_MLFLOW_SCAN] per_model section=%s BOUND "
+                            "model_name=%s run_id=%s section_number=%s.%s",
+                            section.name,
+                            model.name,
+                            model.run_id,
+                            section_num,
+                            j,
+                        )
                         context = GenerationContext(
                             code_context=code_ctx,
                             artifact_context=artifact_ctx,
