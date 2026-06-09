@@ -17,11 +17,16 @@ for p in (str(_repo_root), str(_pkg_dir)):
 
 from autodoc.core.models import (
     ArtifactResult,
+    BundleAttachment,
     BundleSummary,
     ComputedPolicy,
     GovernanceFinding,
 )
-from autodoc.governance_read import GovernanceLoadError, load_governance_context
+from autodoc.governance_read import (
+    GovernanceLoadError,
+    load_governance_context,
+    merge_scan_model_names,
+)
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "governance"
 PROJECT_ID = "6a21c81b3bff9f0d3ae561b1"
@@ -34,7 +39,7 @@ def _load(name: str):
         return json.load(f)
 
 
-def _bundle_summary() -> BundleSummary:
+def _bundle_summary(*, attachments=None) -> BundleSummary:
     raw = _load("compute-policy-mlflow3-bundle.json")["bundle"]
     return BundleSummary(
         id=raw["id"],
@@ -46,7 +51,7 @@ def _bundle_summary() -> BundleSummary:
         evidence_restricted=raw.get("evidenceRestricted", False),
         stage=raw.get("stage"),
         classification_value=raw.get("classificationValue"),
-        attachments=[],
+        attachments=attachments or [],
         created_at=raw.get("createdAt"),
         owner_username="integration-test",
         owner_display_name="Integration Test",
@@ -75,6 +80,35 @@ def _computed_policy() -> ComputedPolicy:
         policy_name=payload["policy"]["name"],
         policy_stages=payload["policy"]["stages"],
         results=results,
+    )
+
+
+def _bundle_summary_from_list_fixture() -> BundleSummary:
+    raw = _load("bundles-list-modeldocs-target-bgp.json")["data"][0]
+    attachments = [
+        BundleAttachment(
+            id=a["id"],
+            type=a["type"],
+            identifier=a["identifier"],
+        )
+        for a in raw.get("attachments") or []
+    ]
+    created_by = raw.get("createdBy") or {}
+    return BundleSummary(
+        id=raw["id"],
+        name=raw["name"],
+        project_id=raw["projectId"],
+        policy_id=raw["policyId"],
+        policy_name=raw["policyName"],
+        state=raw["state"],
+        evidence_restricted=raw.get("evidenceRestricted", False),
+        stage=raw.get("stage"),
+        classification_value=raw.get("classificationValue"),
+        attachments=attachments,
+        created_at=raw.get("createdAt"),
+        owner_username=created_by.get("userName"),
+        owner_display_name=f"{created_by.get('firstName', '')} {created_by.get('lastName', '')}".strip(),
+        project_owner=raw.get("projectOwner"),
     )
 
 
@@ -136,3 +170,30 @@ class TestLoadGovernanceContext:
         ):
             with pytest.raises(GovernanceLoadError):
                 load_governance_context(BUNDLE_ID, api_host="https://domino.example.com")
+
+    def test_governed_model_names_from_model_version_attachments(self):
+        bundle = _bundle_summary_from_list_fixture()
+        with patch("autodoc.governance_read.list_bundles", return_value=[bundle]), patch(
+            "autodoc.governance_read.compute_policy", return_value=_computed_policy()
+        ), patch("autodoc.governance_read.get_findings", return_value=_findings_raw()):
+            ctx = load_governance_context(
+                BUNDLE_ID, api_host="https://domino.example.com", findings_scope="open"
+            )
+        assert ctx.governed_model_names == ["mlflow3-logged-and-registered1"]
+
+
+class TestMergeScanModelNames:
+    def test_returns_filtered_when_no_governed(self):
+        assert merge_scan_model_names(["a", "b"], []) == ["a", "b"]
+
+    def test_returns_governed_when_no_filter(self):
+        assert merge_scan_model_names(None, ["g1", "g2"]) == ["g1", "g2"]
+
+    def test_unions_governed_not_in_filter(self):
+        assert merge_scan_model_names(["filtered"], ["governed"]) == [
+            "filtered",
+            "governed",
+        ]
+
+    def test_deduplicates_overlap(self):
+        assert merge_scan_model_names(["same", "other"], ["same"]) == ["same", "other"]

@@ -339,6 +339,44 @@ def main(
             console.print("[dim]Set API keys in .env file or environment variables[/]")
             sys.exit(1)
 
+        governance_context = None
+        if bundle_id:
+            from domino_auth import cli_auth, configure_auth
+            from autodoc.governance_read import (
+                GovernanceLoadError,
+                load_governance_context,
+                merge_scan_model_names,
+            )
+
+            configure_auth(cli_auth)
+            scope = findings_scope or doc_spec.governance_findings_scope
+            gov_host = (governance_api_host or "").strip()
+            if not gov_host:
+                console.print(
+                    "\n[bold red]Error:[/] --governance-api-host is required when --bundle-id is set",
+                    style="red",
+                )
+                sys.exit(1)
+            try:
+                governance_context = load_governance_context(
+                    bundle_id,
+                    api_host=gov_host,
+                    findings_scope=scope,
+                )
+            except GovernanceLoadError as exc:
+                console.print(f"\n[bold red]Error:[/] {exc}", style="red")
+                sys.exit(1)
+            model_names = merge_scan_model_names(
+                model_names, governance_context.governed_model_names
+            )
+            if verbose:
+                console.print(f"[dim]Governance bundle:[/] {bundle_id}")
+                if governance_context.governed_model_names:
+                    console.print(
+                        f"[dim]Governed models (scan union):[/] "
+                        f"{', '.join(governance_context.governed_model_names)}"
+                    )
+
         # Initialize components
         _pbu = (
             settings.anthropic_base_url
@@ -380,32 +418,6 @@ def main(
             latest_only=latest_only,
             language=language,
         )
-
-        governance_context = None
-        if bundle_id:
-            from domino_auth import cli_auth, configure_auth
-            from autodoc.governance_read import GovernanceLoadError, load_governance_context
-
-            configure_auth(cli_auth)
-            scope = findings_scope or doc_spec.governance_findings_scope
-            gov_host = (governance_api_host or "").strip()
-            if not gov_host:
-                console.print(
-                    "\n[bold red]Error:[/] --governance-api-host is required when --bundle-id is set",
-                    style="red",
-                )
-                sys.exit(1)
-            try:
-                governance_context = load_governance_context(
-                    bundle_id,
-                    api_host=gov_host,
-                    findings_scope=scope,
-                )
-            except GovernanceLoadError as exc:
-                console.print(f"\n[bold red]Error:[/] {exc}", style="red")
-                sys.exit(1)
-            if verbose:
-                console.print(f"[dim]Governance bundle:[/] {bundle_id}")
 
         # Run generation with progress
         console.print("\n[bold blue]Starting document generation...[/]\n")

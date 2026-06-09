@@ -20,6 +20,43 @@ logger = logging.getLogger(__name__)
 OPEN_FINDING_STATUS = "To do"
 
 
+def _governed_model_names_from_attachments(attachments) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for att in attachments or []:
+        if str(getattr(att, "type", "") or "") != "ModelVersion":
+            continue
+        idf = getattr(att, "identifier", None) or {}
+        if not isinstance(idf, dict):
+            continue
+        name = idf.get("name")
+        if not name:
+            continue
+        key = str(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(key)
+    return names
+
+
+def merge_scan_model_names(
+    filtered: Optional[list[str]],
+    governed: list[str],
+) -> Optional[list[str]]:
+    if not governed:
+        return filtered
+    if not filtered:
+        return list(governed)
+    merged = list(filtered)
+    seen = set(merged)
+    for name in governed:
+        if name not in seen:
+            merged.append(name)
+            seen.add(name)
+    return merged
+
+
 class GovernanceLoadError(Exception):
     pass
 
@@ -153,6 +190,7 @@ def load_governance_context(
     findings = _filter_findings(raw_findings, findings_scope)
 
     bundle = computed.bundle
+    governed_model_names = _governed_model_names_from_attachments(bundle_row.attachments)
     return GovernanceContext(
         bundle_id=bundle_id,
         bundle_name=bundle.name or bundle_row.name,
@@ -161,6 +199,7 @@ def load_governance_context(
         state=bundle.state or bundle_row.state,
         risk_tier=bundle.classification_value or bundle_row.classification_value,
         owner=_bundle_owner(bundle_row),
+        governed_model_names=governed_model_names,
         evidence=evidence,
         findings=findings,
     )
