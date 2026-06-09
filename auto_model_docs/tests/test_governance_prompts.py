@@ -124,3 +124,8 @@ class TestGovernancePrompts:
             governance_evidence=gov,
         )
         assert "Governance Evidence" in prompt
+
+    def test_anti_fabrication_distinguishes_model_of_record_from_candidates(self):
+        assert "[@governance.model_of_record]" in GOVERNANCE_ANTI_FABRICATION
+        assert "development candidates" in GOVERNANCE_ANTI_FABRICATION
+        assert "development history" in GOVERNANCE_SYSTEM_NOTE.lower()

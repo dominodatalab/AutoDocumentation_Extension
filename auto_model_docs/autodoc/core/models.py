@@ -556,6 +556,7 @@ class GovernanceContext:
     state: Optional[str] = None
     risk_tier: Optional[str] = None
     owner: Optional[str] = None
+    governed_model_names: List[str] = field(default_factory=list)
     evidence: List[EvidenceItem] = field(default_factory=list)
     findings: List[Finding] = field(default_factory=list)
 

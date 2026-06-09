@@ -490,11 +490,14 @@ class TestGovernanceBundlePickerOptgroups:
         assert "_renderGovernanceBundleSelectOptions" in scripts_src
         assert "_bundleLeafLabel" in scripts_src
         assert "<optgroup label=" in scripts_src
-        assert "_renderGovernanceBundleSelectOptions(visible, _selectedBundleId)" in scripts_src
+        assert "_renderGovernanceBundleSelectOptions(bundles, _selectedBundleId)" in scripts_src
         assert "_bundleAutoLabel" in scripts_src
-        assert "_filterModelNamePatterns" in scripts_src
-        assert "_bundleMatchesModelNameFilters" in scripts_src
         assert "_firstVisibleBundle" in scripts_src
+        assert "no governance context" in scripts_src
+        assert "_GOVERNANCE_BUNDLE_INFO_MSG" in scripts_src
+        assert "_updateBundleInfoNotice" in scripts_src
+        assert "_bundlesForContext" not in scripts_src
+        assert "_bundleMatchesModelNameFilters" not in scripts_src
         assert "filter-model-names" in scripts_src
         assert "applyGovernanceBundleSelection" in scripts_src
 
@@ -519,25 +522,22 @@ class TestGovernanceBundlePickerOptgroups:
         assert "visible.length === 1" not in scripts_src
         assert "select.style.display = 'none'" not in scripts_src
 
-    def test_bundles_for_context_all_when_no_model_id(self):
+    def test_model_id_preselects_first_matching_bundle(self):
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
         assert "_bundleContainsModel" in scripts_src
-        assert "if (!mid) return list;" in scripts_src
-
-    def test_bundles_for_context_filters_by_model_id(self):
-        root = Path(__file__).resolve().parent.parent
-        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
-        assert "_bundleContainsModel(list[i], mid)" in scripts_src
+        assert "_defaultBundleId" in scripts_src
         assert "resolvedModelId()" in scripts_src
 
-    def test_doc_scope_label_below_template_gallery(self):
+    def test_generate_not_blocked_when_bundle_none_selected(self):
         root = Path(__file__).resolve().parent.parent
-        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        gallery_idx = web.index('id="template-gallery"')
-        scope_idx = web.index('id="doc-scope-label"')
-        assert scope_idx > gallery_idx
-        assert "Code · Metrics · Artifacts · Governance · Evidence · Findings" in web
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "visible.length > 0 && !_selectedBundleId" not in scripts_src
+
+    def test_governance_bundle_hint_info_style(self):
+        root = Path(__file__).resolve().parent.parent
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert "governance-bundle-hint-info" in styles
 
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent

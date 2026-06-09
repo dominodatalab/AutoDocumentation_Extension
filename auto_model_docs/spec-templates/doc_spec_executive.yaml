@@ -8,33 +8,47 @@ authors: "Data Science Team"
 sections:
   - Business Context & Objectives
   - Model Overview
+  - "Development History: per_model"
   - Key Results
   - Risk & Limitations
+  - Governance & Risk
   - Deployment Readiness
 
 hints:
   "Business Context & Objectives": >
     Describe the business problem the model solves, its intended users, and
     the expected business impact. Keep technical details minimal. Focus on
-    why this model matters to the organization and what decision it supports.
-
+    why this model matters to the organization and what decision it supports. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
   "Model Overview": >
     Provide a high-level description of the modeling approach suitable for
     non-technical executives. Avoid jargon. Focus on what the model does,
-    what data it was trained on, and how it generates predictions.
-
+    what data it was trained on, and how it generates predictions. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
   "Key Results": >
     Present the most important performance metrics in plain business language.
     Use outcome-oriented framing (e.g., "correctly identifies 87% of at-risk
     customers") rather than raw metric names. Include a comparison to baseline
-    or prior approach if available.
-
+    or prior approach if available. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
   "Risk & Limitations": >
     Clearly state known model limitations, failure modes, and associated
     business risks in language accessible to non-technical leaders. Include
-    any fairness, compliance, or regulatory considerations.
+    any fairness, compliance, or regulatory considerations. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Development History": >
+    Document the models and versions explored during development, as found in the
+    MLflow experiment history and code. Describe what was tried, how candidates
+    compared, and which model was ultimately promoted. These are development
+    candidates — describe them from code and MLflow evidence only. Do not assign
+    them a risk classification, approval state, or any governance status; they
+    were not governed. The absence of governance data here is expected, not a gap. See Governance & Risk for governed model status.
+  "Governance & Risk": >
+    This section describes the governed model(s) of record named in
+    [@governance.model_of_record] — the model(s) tied to the selected governance
+    bundle. State risk tier, intended use, validation status, approval state, and
+    any open findings VERBATIM from the Governance Evidence block, each with its
+    citation. Always name the governed model(s) so governance facts are never read
+    as applying to a development candidate. Do not infer governance facts from
+    code or MLflow; if a fact is not in the Governance Evidence block, omit it.
 
   "Deployment Readiness": >
     State whether the model is recommended for production deployment and why.
     Describe what monitoring is in place, who owns the model in production,
-    and the planned review or refresh cadence.
+    and the planned review or refresh cadence. Do not state risk tier, approval state, or other governance status in this section; see Governance & Risk.

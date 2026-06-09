@@ -143,6 +143,7 @@ GOVERNANCE_FIELD_LABELS = {
     "state": "State",
     "risk_tier": "Risk tier",
     "owner": "Owner",
+    "model_of_record": "Model of record",
 }
 
 CITATION_META_FIELDS = (

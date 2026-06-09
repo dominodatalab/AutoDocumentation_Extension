@@ -46,6 +46,7 @@ def _sample_context() -> GovernanceContext:
                 status="To do",
             )
         ],
+        governed_model_names=["churn-model", "churn-model-v2"],
     )
 
 
@@ -60,6 +61,7 @@ class TestFormatGovernanceEvidence:
         assert "## Governance Evidence" in block
         assert "[@governance.bundle]: Churn Model Bundle" in block
         assert "[@governance.risk_tier]: High" in block
+        assert "[@governance.model_of_record]: churn-model, churn-model-v2" in block
         assert "Evidence — Stage 1 / Model Training" in block
         assert "hold-out dataset" in block
         assert f"[@{build_finding_citation_id('find-1')}]" in block

@@ -227,6 +227,8 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         max_backoff: float = 120.0
         backoff_jitter: float = 0.2
         notebook_from_cache: bool = False
+        bundle_id: str = ""
+        governance_api_host: str = ""
 
     @dataclass
     class DominoJobRecord:

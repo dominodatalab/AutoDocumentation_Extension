@@ -133,14 +133,19 @@ def sync_builtins_to_autodoc_dataset(dataset_id: str, dest_snapshot_id: str | No
         if not src.is_file():
             continue
         rel = dataset_rel_path(filename)
-        if DatasetManager.file_exists(dest_snapshot_id, rel):
-            logger.info(
-                "sync_builtins_to_autodoc_dataset: skip existing template filename=%r rel=%r",
-                filename,
-                rel,
-            )
-            continue
         body = src.read_bytes()
+        if DatasetManager.file_exists(dest_snapshot_id, rel):
+            try:
+                existing = DatasetManager.read_file(dest_snapshot_id, rel)
+            except Exception:
+                existing = None
+            if existing == body:
+                logger.info(
+                    "sync_builtins_to_autodoc_dataset: skip unchanged template filename=%r rel=%r",
+                    filename,
+                    rel,
+                )
+                continue
         logger.info(
             "sync_builtins_to_autodoc_dataset: write_file dataset_id=%r path=%r bytes=%d",
             dataset_id,

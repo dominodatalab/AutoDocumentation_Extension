@@ -178,6 +178,31 @@ def test_catalog_from_dataset_matches_builtin_when_fileName_is_full_path(monkeyp
 
 
 @patch.object(st, "DatasetManager")
+def test_sync_builtins_overwrites_when_packaged_content_changed(mock_dm, tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    monkeypatch.setattr(st.domino_datasets, "get_rw_snapshot_id", lambda _ds: "snap-dst")
+    (tmp_path / "doc_spec.yaml").write_bytes(
+        b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - new\n"
+    )
+    mock_dm.file_exists.return_value = True
+    mock_dm.read_file.return_value = b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - old\n"
+    st.sync_builtins_to_autodoc_dataset("ds-1")
+    mock_dm.write_file.assert_called_once()
+
+
+@patch.object(st, "DatasetManager")
+def test_sync_builtins_skips_when_packaged_content_unchanged(mock_dm, tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    monkeypatch.setattr(st.domino_datasets, "get_rw_snapshot_id", lambda _ds: "snap-dst")
+    body = b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - same\n"
+    (tmp_path / "doc_spec.yaml").write_bytes(body)
+    mock_dm.file_exists.return_value = True
+    mock_dm.read_file.return_value = body
+    st.sync_builtins_to_autodoc_dataset("ds-1")
+    mock_dm.write_file.assert_not_called()
+
+
+@patch.object(st, "DatasetManager")
 def test_sync_builtins_writes_each_template(mock_dm, tmp_path, monkeypatch):
     monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
     # Destination snapshot id resolution is required for the no-overwrite logic.
@@ -204,3 +229,37 @@ def test_all_packaged_yaml_are_gallery_valid():
     for fn in st.packaged_template_filenames():
         raw = (st._REPO_DIR / fn).read_bytes()
         st.validate_gallery_template_yaml(raw)
+
+
+def test_all_packaged_templates_include_governance_sections():
+    import yaml
+
+    dev_section = "Development History: per_model"
+    gov_section = "Governance & Risk"
+    for fn in st.packaged_template_filenames():
+        data = yaml.safe_load((st._REPO_DIR / fn).read_text(encoding="utf-8"))
+        sections = data.get("sections") or []
+        assert dev_section in sections, fn
+        assert gov_section in sections, fn
+        hints = data.get("hints") or {}
+        assert "Development History" in hints, fn
+        assert "Governance & Risk" in hints, fn
+        assert "model_of_record" in hints["Governance & Risk"], fn
+        assert "development candidates" in hints["Development History"], fn
+
+
+def test_non_governance_hints_direct_readers_to_governance_section():
+    import yaml
+
+    gov_section = "Governance & Risk"
+    for fn in st.packaged_template_filenames():
+        data = yaml.safe_load((st._REPO_DIR / fn).read_text(encoding="utf-8"))
+        hints = data.get("hints") or {}
+        for key, value in hints.items():
+            if key == gov_section:
+                continue
+            assert "Governance & Risk" in value, f"{fn}:{key}"
+            if key == "Development History":
+                assert "governed model status" in value, f"{fn}:{key}"
+            else:
+                assert "see Governance & Risk" in value, f"{fn}:{key}"

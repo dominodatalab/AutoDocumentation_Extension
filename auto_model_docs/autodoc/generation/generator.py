@@ -780,6 +780,9 @@ class ContentGenerator:
             lines.append(f"[@{build_governance_citation_id('risk_tier')}]: {gov.risk_tier}")
         if gov.owner:
             lines.append(f"[@{build_governance_citation_id('owner')}]: {gov.owner}")
+        if gov.governed_model_names:
+            mor = ", ".join(gov.governed_model_names)
+            lines.append(f"[@{build_governance_citation_id('model_of_record')}]: {mor}")
         lines.append("")
 
         evidence_items = list(gov.evidence or [])
@@ -1157,6 +1160,9 @@ class ContentGenerator:
             "state": gov.state,
             "risk_tier": gov.risk_tier,
             "owner": gov.owner,
+            "model_of_record": ", ".join(gov.governed_model_names)
+            if gov.governed_model_names
+            else None,
         }
         for key, value in bundle_facts.items():
             if value:

@@ -104,6 +104,49 @@ class TestMainGovernanceCli:
         passed = mock_orch.generate.await_args.kwargs.get("governance_context")
         assert passed is gov
 
+    def test_bundle_id_unions_governed_models_into_orchestrator_scan(self, tmp_path):
+        spec_path, code_path = _spec_file(tmp_path)
+        runner = CliRunner()
+        gov = GovernanceContext(
+            bundle_id="bundle-uuid-1",
+            bundle_name="Test Bundle",
+            governed_model_names=["governed-model"],
+        )
+
+        with patch("main.Orchestrator") as mock_orch_cls, patch(
+            "main.LLMClient"
+        ), patch("main.ContentSanitizer"), patch(
+            "autodoc.governance_read.load_governance_context", return_value=gov
+        ), patch("domino_auth.configure_auth"):
+            mock_orch = MagicMock()
+            mock_orch.generate = AsyncMock(return_value=tmp_path / "out.docx")
+            mock_orch.run_dir = "docs/test"
+            mock_orch_cls.return_value = mock_orch
+
+            result = runner.invoke(
+                main,
+                [
+                    "--spec",
+                    spec_path,
+                    "--code-root",
+                    code_path,
+                    "--provider",
+                    "anthropic",
+                    "--bundle-id",
+                    "bundle-uuid-1",
+                    "--governance-api-host",
+                    "https://cluster.example.com",
+                    "--filtered-models",
+                    "filtered-only",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert mock_orch_cls.call_args.kwargs["model_names"] == [
+            "filtered-only",
+            "governed-model",
+        ]
+
     def test_bundle_id_without_api_host_exits(self, tmp_path):
         spec_path, code_path = _spec_file(tmp_path)
         runner = CliRunner()

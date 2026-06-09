@@ -2217,6 +2217,10 @@ select.hw-tier-select option {
 .governance-bundle-hint-error {
     color: #b42318;
 }
+.governance-bundle-hint-info {
+    color: var(--text-secondary, #5c6370);
+    font-style: italic;
+}
 
 .adv-opts-accordion-body {
     border-top: 1px solid var(--outline-variant);
