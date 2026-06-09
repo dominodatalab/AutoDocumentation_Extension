@@ -56,7 +56,11 @@ SYSTEM_LIST_GENERATOR = (
 GOVERNANCE_SYSTEM_NOTE = (
     "Treat the Governance Evidence block as the authoritative source for governance facts "
     "(risk tier, intended use, validation status, approval state, findings); never override "
-    "it with inferences."
+    "it with inferences. Some documents cover a model's development history (several candidate "
+    "models and versions) plus governed model(s) of record; governance facts describe only the "
+    "governed model(s). When multiple models appear, always name which model a governance "
+    "statement refers to, so a risk tier, approval, or finding never reads as if it applies "
+    "to a development candidate."
 )
 
 GOVERNANCE_ANTI_FABRICATION = """
@@ -72,6 +76,21 @@ GOVERNANCE_ANTI_FABRICATION = """
   regression [@evidence.model_type]. This discrepancy should be reviewed."
 - Do not fabricate a reconciliation. Do not silently choose one source.
 - Discrepancies of this kind are significant governance observations, not editorial problems.
+
+Model of record vs development candidates:
+- This document may describe several models from the MLflow development history. The governed
+  model(s) of record are named in [@governance.model_of_record]. Every governance fact above
+  — risk tier, intended use, validation status, approval state, findings — applies ONLY to
+  those governed model(s). Never attach a governance fact to any other model.
+- The other models are development candidates: experiments and prior versions explored on the
+  way to promotion. Document them from code and MLflow evidence only. Do NOT state or imply
+  they carry a risk classification, approval, or governance status. Their absence of
+  governance data is expected (they were never promoted), not a gap to flag.
+- Whenever you state a governance fact and more than one model appears in the document, name
+  the governed model(s) explicitly so the reader cannot confuse them with a candidate. For
+  example: "The model of record, churn-model v3 [@governance.model_of_record], is classified
+  High risk [@governance.risk_tier]." Never write an unattributed "the model is High risk"
+  when multiple models appear.
 """.strip()
 
 SYSTEM_FILE_RANKER = (
