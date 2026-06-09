@@ -636,43 +636,8 @@ MAIN_DOM_JS = r"""
             el.value = mid;
         }
 
-        function _filterModelNamePatterns() {
-            var el = document.getElementById('filter-model-names');
-            var raw = el ? String(el.value || '').trim() : '';
-            if (!raw) return [];
-            return raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-        }
-
-        function _globPatternToRegExp(pattern) {
-            var out = '^';
-            for (var i = 0; i < pattern.length; i++) {
-                var c = pattern[i];
-                if (c === '*') out += '.*';
-                else if (c === '?') out += '.';
-                else if (/[\\\\^$+.|()\\[\\]{}]/.test(c)) out += '\\\\' + c;
-                else out += c;
-            }
-            return new RegExp(out + '$');
-        }
-
-        function _nameMatchesFilterPattern(name, pattern) {
-            if (!pattern) return false;
-            if (pattern.indexOf('*') >= 0 || pattern.indexOf('?') >= 0) {
-                return _globPatternToRegExp(pattern).test(name);
-            }
-            return name === pattern;
-        }
-
-        function _bundleMatchesModelNameFilters(bundle, patterns) {
-            if (!patterns.length) return true;
-            var names = _bundleModelNames(bundle);
-            for (var i = 0; i < names.length; i++) {
-                for (var j = 0; j < patterns.length; j++) {
-                    if (_nameMatchesFilterPattern(names[i], patterns[j])) return true;
-                }
-            }
-            return false;
-        }
+        var _GOVERNANCE_BUNDLE_INFO_MSG =
+            'The models linked to this bundle are always included in this document, even if they are outside your model filter.';
 
         function _bundleContainsModel(bundle, modelId) {
             if (!modelId) return true;
@@ -681,17 +646,6 @@ MAIN_DOM_JS = r"""
                 if (names[i] === modelId) return true;
             }
             return false;
-        }
-
-        function _bundlesForContext(bundles) {
-            var list = bundles || [];
-            var mid = resolvedModelId();
-            if (!mid) return list;
-            var out = [];
-            for (var i = 0; i < list.length; i++) {
-                if (_bundleContainsModel(list[i], mid)) out.push(list[i]);
-            }
-            return out;
         }
 
         function _defaultBundleId(bundles) {
@@ -761,7 +715,8 @@ MAIN_DOM_JS = r"""
 
         function _renderGovernanceBundleSelectOptions(bundles, selectedId) {
             var grouped = _groupBundlesByModel(bundles);
-            var html = '<option value="" disabled>Select a bundle\u2026</option>';
+            var noneSel = !selectedId ? ' selected' : '';
+            var html = '<option value=""' + noneSel + '>None \u2014 no governance context</option>';
             for (var g = 0; g < grouped.order.length; g++) {
                 var model = grouped.order[g];
                 var items = grouped.groups[model];
@@ -779,18 +734,27 @@ MAIN_DOM_JS = r"""
             return html;
         }
 
-        function _setGovernanceHint(msg, isError) {
+        function _setGovernanceHint(msg, isError, isInfo) {
             var hint = document.getElementById('governance-bundle-hint');
             if (!hint) return;
             hint.textContent = msg || '';
             hint.classList.toggle('governance-bundle-hint-error', !!isError);
+            hint.classList.toggle('governance-bundle-hint-info', !!isInfo);
+        }
+
+        function _updateBundleInfoNotice() {
+            if (_selectedBundleId) {
+                _setGovernanceHint(_GOVERNANCE_BUNDLE_INFO_MSG, false, true);
+            } else {
+                _setGovernanceHint('', false, false);
+            }
         }
 
         function applyGovernanceBundleSelection() {
             var field = document.getElementById('governance-bundle-field');
             var select = document.getElementById('governance-bundle-select');
             var autoEl = document.getElementById('governance-bundle-auto');
-            var visible = _bundlesForContext(_governanceBundles);
+            var bundles = _governanceBundles;
             _selectedBundleId = '';
 
             if (!_governanceBundlesLoaded) {
@@ -800,16 +764,16 @@ MAIN_DOM_JS = r"""
                     select.disabled = true;
                 }
                 if (autoEl) autoEl.style.display = 'none';
-                _setGovernanceHint('');
+                _setGovernanceHint('', false, false);
                 updateGenerateButton();
                 return;
             }
 
-            if (!visible.length) {
+            if (!bundles.length) {
                 if (field) field.style.display = 'none';
                 if (select) select.innerHTML = '<option value="" selected>No bundles</option>';
                 if (autoEl) autoEl.style.display = 'none';
-                _setGovernanceHint('');
+                _setGovernanceHint('', false, false);
                 updateGenerateButton();
                 return;
             }
@@ -817,14 +781,14 @@ MAIN_DOM_JS = r"""
             if (field) field.style.display = '';
             if (autoEl) autoEl.style.display = 'none';
 
-            _selectedBundleId = _defaultBundleId(visible);
+            _selectedBundleId = _defaultBundleId(bundles);
             if (select) {
                 select.style.display = '';
                 select.disabled = false;
-                select.innerHTML = _renderGovernanceBundleSelectOptions(visible, _selectedBundleId);
+                select.innerHTML = _renderGovernanceBundleSelectOptions(bundles, _selectedBundleId);
                 if (_selectedBundleId) select.value = _selectedBundleId;
             }
-            _setGovernanceHint('');
+            _updateBundleInfoNotice();
             updateGenerateButton();
         }
 
@@ -870,7 +834,7 @@ MAIN_DOM_JS = r"""
                     _governanceBundles = [];
                     _governanceBundlesLoaded = true;
                     applyGovernanceBundleSelection();
-                    _setGovernanceHint(err.message || 'Could not load governance bundles.', true);
+                    _setGovernanceHint(err.message || 'Could not load governance bundles.', true, false);
                 });
         }
 
@@ -879,7 +843,7 @@ MAIN_DOM_JS = r"""
             if (select) {
                 select.addEventListener('change', function() {
                     _selectedBundleId = select.value || '';
-                    if (_selectedBundleId) _setGovernanceHint('');
+                    _updateBundleInfoNotice();
                     updateGenerateButton();
                 });
             }
@@ -892,12 +856,6 @@ MAIN_DOM_JS = r"""
             var hasTemplate = !!_selectedTemplateUid;
             var hasCustomSpec = _customSpecSelected;
             var canGenerate = hasTemplate || hasCustomSpec;
-            if (_governanceBundlesLoaded) {
-                var visible = _bundlesForContext(_governanceBundles);
-                if (visible.length > 0 && !_selectedBundleId) {
-                    canGenerate = false;
-                }
-            }
             btn.disabled = !canGenerate;
 
         }
