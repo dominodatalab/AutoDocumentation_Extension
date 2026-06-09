@@ -204,3 +204,20 @@ def test_all_packaged_yaml_are_gallery_valid():
     for fn in st.packaged_template_filenames():
         raw = (st._REPO_DIR / fn).read_bytes()
         st.validate_gallery_template_yaml(raw)
+
+
+def test_all_packaged_templates_include_governance_sections():
+    import yaml
+
+    dev_section = "Development History: per_model"
+    gov_section = "Governance & Risk"
+    for fn in st.packaged_template_filenames():
+        data = yaml.safe_load((st._REPO_DIR / fn).read_text(encoding="utf-8"))
+        sections = data.get("sections") or []
+        assert dev_section in sections, fn
+        assert gov_section in sections, fn
+        hints = data.get("hints") or {}
+        assert "Development History" in hints, fn
+        assert "Governance & Risk" in hints, fn
+        assert "model_of_record" in hints["Governance & Risk"], fn
+        assert "development candidates" in hints["Development History"], fn

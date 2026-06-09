@@ -8,6 +8,7 @@ authors: "Data Science Team"
 sections:
   - Executive Summary
   - Model & Data Overview
+  - "Development History: per_model"
   - Protected Attributes & Demographic Analysis
   - "Bias Metrics: per_model"
   - Statistical Parity Analysis
@@ -15,6 +16,7 @@ sections:
   - Intersectional Analysis
   - Mitigation Strategies Applied
   - Ongoing Monitoring Plan
+  - Governance & Risk
   - Conclusion & Sign-off
 
 hints:
@@ -64,6 +66,23 @@ hints:
     Define metrics, thresholds, and cadence for ongoing fairness monitoring
     in production. Include trigger conditions for model re-evaluation,
     responsible parties, and escalation procedures.
+
+  "Development History": >
+    Document the models and versions explored during development, as found in the
+    MLflow experiment history and code. Describe what was tried, how candidates
+    compared, and which model was ultimately promoted. These are development
+    candidates — describe them from code and MLflow evidence only. Do not assign
+    them a risk classification, approval state, or any governance status; they
+    were not governed. The absence of governance data here is expected, not a gap.
+
+  "Governance & Risk": >
+    This section describes the governed model(s) of record named in
+    [@governance.model_of_record] — the model(s) tied to the selected governance
+    bundle. State risk tier, intended use, validation status, approval state, and
+    any open findings VERBATIM from the Governance Evidence block, each with its
+    citation. Always name the governed model(s) so governance facts are never read
+    as applying to a development candidate. Do not infer governance facts from
+    code or MLflow; if a fact is not in the Governance Evidence block, omit it.
 
   "Conclusion & Sign-off": >
     Summarize the overall fairness posture of the model. State deployment
