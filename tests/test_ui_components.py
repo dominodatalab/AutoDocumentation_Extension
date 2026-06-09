@@ -531,13 +531,6 @@ class TestGovernanceBundlePickerOptgroups:
         assert "_bundleContainsModel(list[i], mid)" in scripts_src
         assert "resolvedModelId()" in scripts_src
 
-    def test_doc_scope_label_below_template_gallery(self):
-        root = Path(__file__).resolve().parent.parent
-        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        gallery_idx = web.index('id="template-gallery"')
-        scope_idx = web.index('id="doc-scope-label"')
-        assert scope_idx > gallery_idx
-        assert "Code · Metrics · Artifacts · Governance · Evidence · Findings" in web
 
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent

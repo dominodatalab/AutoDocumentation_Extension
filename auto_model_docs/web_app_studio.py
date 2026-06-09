@@ -382,9 +382,9 @@ async def index(req: Request):
                             ),
 
                             Div(
-                                Span("Documents:", cls="doc-scope-prefix"),
+                                Span("Document context:", cls="doc-scope-prefix"),
                                 Span(
-                                    "Code · Metrics · Artifacts · Governance · Evidence · Findings",
+                                    "Code, Model Metrics and Artifacts. Governance Evidence & Findings",
                                     cls="doc-scope-items",
                                 ),
                                 id="doc-scope-label",
