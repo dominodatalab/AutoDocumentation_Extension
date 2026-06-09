@@ -246,3 +246,20 @@ def test_all_packaged_templates_include_governance_sections():
         assert "Governance & Risk" in hints, fn
         assert "model_of_record" in hints["Governance & Risk"], fn
         assert "development candidates" in hints["Development History"], fn
+
+
+def test_non_governance_hints_direct_readers_to_governance_section():
+    import yaml
+
+    gov_section = "Governance & Risk"
+    for fn in st.packaged_template_filenames():
+        data = yaml.safe_load((st._REPO_DIR / fn).read_text(encoding="utf-8"))
+        hints = data.get("hints") or {}
+        for key, value in hints.items():
+            if key == gov_section:
+                continue
+            assert "Governance & Risk" in value, f"{fn}:{key}"
+            if key == "Development History":
+                assert "governed model status" in value, f"{fn}:{key}"
+            else:
+                assert "see Governance & Risk" in value, f"{fn}:{key}"

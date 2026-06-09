@@ -19,6 +19,7 @@ from autodoc.core.models import (
     DocumentSpec,
     GeneratedContent,
     GenerationContext,
+    GovernanceContext,
     LanguageProfile,
     ModelInfo,
     PYTHON_PROFILE,
@@ -28,7 +29,7 @@ from autodoc.core.models import (
     SectionResult,
     SectionSpec,
 )
-from autodoc.orchestrator import Orchestrator
+from autodoc.orchestrator import GOVERNANCE_SECTION_NAME, Orchestrator, _governance_for_section
 
 
 # ---------------------------------------------------------------------------
@@ -762,6 +763,16 @@ class TestCacheSpecFields:
 # ---------------------------------------------------------------------------
 
 
+class TestGovernanceSectionRouting:
+    def test_governance_for_section_only_on_governance_and_risk(self):
+        ctx = GovernanceContext(bundle_id="b1", bundle_name="B")
+        ev = "[@governance.bundle]: B"
+        assert _governance_for_section("Overview", ctx, ev) == (None, "")
+        assert _governance_for_section("Development History", ctx, ev) == (None, "")
+        assert _governance_for_section(GOVERNANCE_SECTION_NAME, ctx, ev) == (ctx, ev)
+        assert _governance_for_section(GOVERNANCE_SECTION_NAME, ctx, "") == (None, "")
+
+
 class TestGovernanceContextWiring:
     @patch("autodoc.orchestrator.Orchestrator._save_results_cache")
     @patch("autodoc.orchestrator.ArtifactScanner")
@@ -798,9 +809,6 @@ class TestGovernanceContextWiring:
             specifics={},
             priority="required",
         )
-        plan = SectionPlan(number="1", name="Overview", title="Overview", content_blocks=[block])
-        orch.planner.plan_section = AsyncMock(return_value=plan)
-
         governance_ctx = GovernanceContext(
             bundle_id="bundle-1",
             bundle_name="Test Bundle",
@@ -810,30 +818,50 @@ class TestGovernanceContextWiring:
 
         gen_called = []
 
+        async def _plan_side_effect(section, context):
+            return SectionPlan(
+                number="",
+                name=section.name,
+                title=section.name,
+                content_blocks=[block],
+            )
+
         async def _gen_side_effect(_block, context):
             gen_called.append(
                 (
+                    context.section_name,
                     context.governance_context,
                     context.governance_evidence,
                 )
             )
             return GeneratedContent(block_type=ContentType.NARRATIVE, content="text")
 
+        orch.planner.plan_section = AsyncMock(side_effect=_plan_side_effect)
         orch.generator.generate = AsyncMock(side_effect=_gen_side_effect)
         orch.builder.build = AsyncMock(return_value=Path("/tmp/out.docx"))
 
+        spec = DocumentSpec(
+            title="Test Doc",
+            authors="tester",
+            sections=[
+                SectionSpec(name="Overview"),
+                SectionSpec(name=GOVERNANCE_SECTION_NAME),
+            ],
+        )
+
         asyncio.run(
             orch.generate(
-                _make_spec(),
+                spec,
                 on_progress=lambda *_: None,
                 governance_context=governance_ctx,
             )
         )
 
-        assert gen_called, "generator.generate should be called at least once"
-        ctx, block_text = gen_called[0]
-        assert ctx is governance_ctx
-        assert "[@governance.bundle]" in block_text
+        assert gen_called
+        by_section = {name: (ctx, ev) for name, ctx, ev in gen_called}
+        assert by_section["Overview"] == (None, "")
+        assert by_section[GOVERNANCE_SECTION_NAME][0] is governance_ctx
+        assert "[@governance.bundle]" in by_section[GOVERNANCE_SECTION_NAME][1]
         orch.generator._format_governance_evidence.assert_called_once_with(governance_ctx)
 
     @patch("autodoc.orchestrator.Orchestrator._save_results_cache")
@@ -920,6 +948,7 @@ class TestGovernanceContextWiring:
             title="Test Doc",
             authors="tester",
             sections=[
+                SectionSpec(name="Overview"),
                 SectionSpec(name="Governance & Risk"),
                 SectionSpec(name="Development History", per_model=True),
             ],
@@ -933,8 +962,12 @@ class TestGovernanceContextWiring:
             )
         )
 
+        overview_plans = [c for c in plan_calls if c[0] == "Overview"]
         gov_plan = [c for c in plan_calls if c[0] == "Governance & Risk"]
         per_model_plans = [c for c in plan_calls if c[0] == "Development History"]
+        assert len(overview_plans) == 1
+        assert overview_plans[0][2].governance_context is None
+        assert overview_plans[0][2].governance_evidence == ""
         assert len(gov_plan) == 1
         assert gov_plan[0][2].governance_context is governance_ctx
         assert gov_plan[0][2].governance_evidence
@@ -944,8 +977,12 @@ class TestGovernanceContextWiring:
             assert ctx.governance_context is None
             assert ctx.governance_evidence == ""
 
+        overview_gen = [c for c in gen_calls if c[0] == "Overview"]
         gov_gen = [c for c in gen_calls if c[0] == "Governance & Risk"]
         per_model_gen = [c for c in gen_calls if c[0] == "Development History"]
+        assert len(overview_gen) == 1
+        assert overview_gen[0][2].governance_context is None
+        assert overview_gen[0][2].governance_evidence == ""
         assert len(gov_gen) == 1
         assert gov_gen[0][2].governance_context is governance_ctx
         assert per_model_gen

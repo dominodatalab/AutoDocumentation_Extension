@@ -38,6 +38,18 @@ from autodoc.core.models import GovernanceContext
 ProgressCallback = Callable[[str, float], None]
 StatusCallback = Callable[[str], None]
 
+GOVERNANCE_SECTION_NAME = "Governance & Risk"
+
+
+def _governance_for_section(
+    section_name: str,
+    governance_context: Optional[GovernanceContext],
+    governance_evidence: str,
+) -> tuple[Optional[GovernanceContext], str]:
+    if section_name == GOVERNANCE_SECTION_NAME and governance_evidence:
+        return governance_context, governance_evidence
+    return None, ""
+
 
 class Orchestrator:
     """Coordinates the document generation pipeline.
@@ -256,14 +268,12 @@ class Orchestrator:
         if on_progress:
             on_progress("Generating", 0.0)
 
-        per_model_section_names = {s.name for s in spec.sections if s.per_model}
         results = await self._generate_all_content(
             plans,
             code_ctx,
             artifact_ctx,
             governance_context,
             governance_evidence,
-            per_model_section_names,
             on_progress,
         )
 
@@ -500,10 +510,11 @@ class Orchestrator:
         section_num = 1
 
         for section in spec.sections:
+            gov_ctx, gov_evidence = _governance_for_section(
+                section.name, governance_context, governance_evidence
+            )
             if section.per_model:
                 models = artifact_ctx.models or []
-                per_model_gov_ctx = None
-                per_model_gov_evidence = ""
 
                 if not models:
                     context = GenerationContext(
@@ -511,8 +522,8 @@ class Orchestrator:
                         artifact_context=artifact_ctx,
                         section_name=section.name,
                         hint=spec.hints.get(section.name),
-                        governance_context=per_model_gov_ctx,
-                        governance_evidence=per_model_gov_evidence,
+                        governance_context=gov_ctx,
+                        governance_evidence=gov_evidence,
                     )
                     planning_tasks.append((section, context, str(section_num)))
                 else:
@@ -524,8 +535,8 @@ class Orchestrator:
                             model_name=model.name,
                             model_run_id=model.run_id,
                             hint=spec.hints.get(section.name),
-                            governance_context=per_model_gov_ctx,
-                            governance_evidence=per_model_gov_evidence,
+                            governance_context=gov_ctx,
+                            governance_evidence=gov_evidence,
                         )
                         planning_tasks.append((section, context, f"{section_num}.{j}"))
             else:
@@ -534,8 +545,8 @@ class Orchestrator:
                     artifact_context=artifact_ctx,
                     section_name=section.name,
                     hint=spec.hints.get(section.name),
-                    governance_context=governance_context,
-                    governance_evidence=governance_evidence,
+                    governance_context=gov_ctx,
+                    governance_evidence=gov_evidence,
                 )
                 planning_tasks.append((section, context, str(section_num)))
 
@@ -588,7 +599,6 @@ class Orchestrator:
         artifact_ctx: ArtifactContext,
         governance_context: Optional[GovernanceContext],
         governance_evidence: str,
-        per_model_section_names: set[str],
         on_progress: Optional[ProgressCallback] = None,
     ) -> List[SectionResult]:
         """Generate content for all sections in parallel."""
@@ -600,15 +610,17 @@ class Orchestrator:
             across all sections compete for the same worker pool, maximising
             LLM call concurrency.
             """
-            strip_governance = plan.name in per_model_section_names
+            gov_ctx, gov_evidence = _governance_for_section(
+                plan.name, governance_context, governance_evidence
+            )
             context = GenerationContext(
                 code_context=code_ctx,
                 artifact_context=artifact_ctx,
                 section_name=plan.name,
                 model_name=plan.model_name,
                 model_run_id=plan.model_run_id,
-                governance_context=None if strip_governance else governance_context,
-                governance_evidence="" if strip_governance else governance_evidence,
+                governance_context=gov_ctx,
+                governance_evidence=gov_evidence,
             )
 
             async def _gen_block(block):
