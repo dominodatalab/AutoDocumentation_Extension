@@ -178,6 +178,31 @@ def test_catalog_from_dataset_matches_builtin_when_fileName_is_full_path(monkeyp
 
 
 @patch.object(st, "DatasetManager")
+def test_sync_builtins_overwrites_when_packaged_content_changed(mock_dm, tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    monkeypatch.setattr(st.domino_datasets, "get_rw_snapshot_id", lambda _ds: "snap-dst")
+    (tmp_path / "doc_spec.yaml").write_bytes(
+        b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - new\n"
+    )
+    mock_dm.file_exists.return_value = True
+    mock_dm.read_file.return_value = b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - old\n"
+    st.sync_builtins_to_autodoc_dataset("ds-1")
+    mock_dm.write_file.assert_called_once()
+
+
+@patch.object(st, "DatasetManager")
+def test_sync_builtins_skips_when_packaged_content_unchanged(mock_dm, tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
+    monkeypatch.setattr(st.domino_datasets, "get_rw_snapshot_id", lambda _ds: "snap-dst")
+    body = b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - same\n"
+    (tmp_path / "doc_spec.yaml").write_bytes(body)
+    mock_dm.file_exists.return_value = True
+    mock_dm.read_file.return_value = body
+    st.sync_builtins_to_autodoc_dataset("ds-1")
+    mock_dm.write_file.assert_not_called()
+
+
+@patch.object(st, "DatasetManager")
 def test_sync_builtins_writes_each_template(mock_dm, tmp_path, monkeypatch):
     monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
     # Destination snapshot id resolution is required for the no-overwrite logic.
