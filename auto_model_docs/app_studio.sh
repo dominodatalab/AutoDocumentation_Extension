@@ -20,10 +20,6 @@ fi
 # Vendor JS dependencies so the app doesn't rely on external CDNs at runtime
 VENDOR_DIR="/mnt/code/auto_model_docs/static/vendor"
 mkdir -p "$VENDOR_DIR"
-if [ ! -f "$VENDOR_DIR/mammoth.browser.min.js" ]; then
-    curl -sL -o "$VENDOR_DIR/mammoth.browser.min.js" \
-        "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"
-fi
 
 # Run the FastHTML web app
 cd /mnt/code/auto_model_docs
