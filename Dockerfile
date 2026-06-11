@@ -1,6 +1,3 @@
-FROM python:3.10-slim-bullseye
-
-
 LABEL maintainer="Domino Data Lab"
 LABEL description="Auto Model Docs extension environment for Domino Data Lab"
 ARG EXTENSION_VERSION=${EXTENSION_VERSION:-main}
@@ -15,10 +12,11 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ENV DOMINO_USER=$DUSER
 ENV DOMINO_GROUP=$DGROUP
+ENV APP_WORK_DIR="/home/${DOMINO_USER:-domino}"
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
-
-ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+USER root
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates \
@@ -34,7 +32,6 @@ RUN if ! id 12574 >/dev/null 2>&1; then \
 
 RUN chown -R ${DOMINO_USER}:${DOMINO_GROUP} "/home/${DOMINO_USER}"
 
-USER root
 RUN pip install --no-cache-dir \
     "anthropic==0.84.0" \
     "openai==2.26.0" \
@@ -63,7 +60,7 @@ RUN pip install --no-cache-dir \
 # Cleanup after apt package installs
 RUN rm -rf /var/lib/apt/lists/*
 
-WORKDIR /home/${DOMINO_USER:-domino}
+WORKDIR ${APP_WORK_DIR}
 
 USER $DOMINO_USER
 

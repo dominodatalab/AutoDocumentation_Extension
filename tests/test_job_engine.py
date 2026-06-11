@@ -473,6 +473,7 @@ class TestBuildJobCommand:
         )
         cmd = je._build_job_command(req, "/path/spec.yaml")
         assert cmd[0] == "python"
+        assert cmd[1].endswith("/auto_model_docs/main.py")
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
         assert "--output_dir" in cmd

@@ -190,10 +190,12 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         raise ValueError("internal: spec_path is required to build the job command")
 
     code_root_arg = (req.code_root or "").strip()
+    app_work_dir = os.environ.get("APP_WORK_DIR", ".")
+    main_py = f"{app_work_dir}/auto_model_docs/main.py"
 
     command = [
         "python",
-        "/mnt/imported/code/AutoDocumentation_Extension/auto_model_docs/main.py",
+        main_py,
         "--spec",
         spec_path,
         "--output_dir",
