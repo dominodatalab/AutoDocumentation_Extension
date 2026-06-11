@@ -7,6 +7,8 @@ ARG EXTENSION_VERSION=${EXTENSION_VERSION:-main}
 LABEL version=$EXTENSION_VERSION
 
 ARG GITHUB_ORG=dominodatalab
+ARG GITHUB_USERNAME=
+ARG GITHUB_PAT=
 ARG DUSER=ubuntu
 ARG DGROUP=ubuntu
 ARG DEBIAN_FRONTEND=noninteractive
@@ -23,11 +25,14 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /home/${DOMINO_USER:-domino}
-WORKDIR /home/${DOMINO_USER:-domino}
 
+# Ensure the DOMINO_USER/DOMINO_GROUP exists inside the container.
+RUN if ! id 12574 >/dev/null 2>&1; then \
+        groupadd -g 12574 ${DOMINO_GROUP}; \
+        useradd -u 12574 -g 12574 -m -N -s /bin/bash ${DOMINO_USER}; \
+    fi
 
-RUN git clone https://github.com/dominodatalab/AutoDocumentation_Extension.git . \
-  && git checkout "${EXTENSION_VERSION}"
+RUN chown -R ${DOMINO_USER}:${DOMINO_GROUP} "/home/${DOMINO_USER}"
 
 USER root
 RUN pip install --no-cache-dir \
@@ -58,7 +63,19 @@ RUN pip install --no-cache-dir \
 # Cleanup after apt package installs
 RUN rm -rf /var/lib/apt/lists/*
 
-RUN chmod +x ./app.sh
+WORKDIR /home/${DOMINO_USER:-domino}
 
 USER $DOMINO_USER
+
+RUN set -eu; \
+    REPO_URL="https://github.com/${GITHUB_ORG}/AutoDocumentation_Extension.git"; \
+    if [ -n "${GITHUB_USERNAME}" ] && [ -n "${GITHUB_PAT}" ]; then \
+      git clone "https://${GITHUB_USERNAME}:${GITHUB_PAT}@github.com/${GITHUB_ORG}/AutoDocumentation_Extension.git" .; \
+    else \
+      git clone "${REPO_URL}" .; \
+    fi; \
+    git checkout "${EXTENSION_VERSION}"
+
+RUN chmod +x ./app.sh && chmod +x ./auto_model_docs/app_studio.sh
+
 CMD ["./app.sh"]
