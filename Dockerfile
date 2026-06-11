@@ -74,5 +74,3 @@ RUN set -eu; \
     git checkout "${EXTENSION_VERSION}"
 
 RUN chmod +x ./app.sh && chmod +x ./auto_model_docs/app_studio.sh
-
-CMD ["./app.sh"]
