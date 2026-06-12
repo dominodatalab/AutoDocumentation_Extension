@@ -391,6 +391,8 @@ async def index(req: Request):
                                 cls="doc-scope-label",
                             ),
 
+                            Hr(cls="doc-scope-separator"),
+
                             Div(
                                 Div(
                                     Label(

@@ -545,3 +545,8 @@ class TestGovernanceBundlePickerOptgroups:
         # "open=" is on the Details wrapper, not necessarily near "filters-body"
         assert "cls=\"adv-opts-accordion\"" in web
         assert "open=False" in web
+
+    def test_doc_scope_separator_exists(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        assert 'Hr(cls="doc-scope-separator")' in web
