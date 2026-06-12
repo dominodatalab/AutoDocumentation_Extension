@@ -556,4 +556,8 @@ class TestGovernanceBundlePickerOptgroups:
         assert scope_idx < preview_panel
         section = web[scope_idx:scope_idx + 400]
         assert 'cls="preview-panel-header"' in section
+        assert 'cls="preview-panel-header-row"' in web
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert "flex-direction: column" in styles
+        assert ".preview-panel-header-row" in styles
 

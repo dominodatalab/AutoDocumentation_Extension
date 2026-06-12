@@ -475,17 +475,20 @@ async def index(req: Request):
                         Div(
                             Div(
                                 Div(
-                                    Span(
-                                        Span("Document outline", cls="preview-panel-label"),
-                                        Span("Preview", cls="preview-panel-tag"),
-                                        style="display:flex;align-items:center;gap:0.5rem;",
-                                    ),
-                                    Button(
-                                        Span("history", cls="material-symbols-outlined"),
-                                        "History",
-                                        type="button",
-                                        id="landing-history-btn",
-                                        cls="history-drawer-btn",
+                                    Div(
+                                        Span(
+                                            Span("Document outline", cls="preview-panel-label"),
+                                            Span("Preview", cls="preview-panel-tag"),
+                                            style="display:flex;align-items:center;gap:0.5rem;",
+                                        ),
+                                        Button(
+                                            Span("history", cls="material-symbols-outlined"),
+                                            "History",
+                                            type="button",
+                                            id="landing-history-btn",
+                                            cls="history-drawer-btn",
+                                        ),
+                                        cls="preview-panel-header-row",
                                     ),
                                     Div(
                                         Span("Document context:", cls="doc-scope-prefix"),

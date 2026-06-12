@@ -2447,11 +2447,17 @@ select.hw-tier-select option {
 /* ── Preview panel header ────────────────────────────────────────── */
 .preview-panel-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
     padding: 0.875rem 1.25rem;
     border-bottom: 1px solid var(--outline-variant);
     flex-shrink: 0;
+}
+.preview-panel-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 .preview-panel-label {
     font-size: 12px;
@@ -2548,7 +2554,7 @@ select.hw-tier-select option {
     flex-wrap: wrap;
     align-items: baseline;
     gap: 0.35rem 0.5rem;
-    margin-top: 0.75rem;
+    margin-top: 0;
     font-size: 12px;
     line-height: 1.4;
     color: var(--outline);
