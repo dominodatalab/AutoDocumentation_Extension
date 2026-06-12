@@ -542,6 +542,6 @@ class TestGovernanceBundlePickerOptgroups:
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent
         web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
-        idx = web.index("filters-body")
-        section = web[max(0, idx - 200) : idx + 200]
-        assert "open=True" in section
+        # "open=" is on the Details wrapper, not necessarily near "filters-body"
+        assert "cls=\"adv-opts-accordion\"" in web
+        assert "open=False" in web
