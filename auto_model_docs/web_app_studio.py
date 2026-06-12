@@ -383,31 +383,6 @@ async def index(req: Request):
 
                             Div(
                                 Div(
-                                    Span("Document outline", cls="preview-panel-label"),
-                                    Span("Preview", cls="preview-panel-tag"),
-                                    style="display:flex;align-items:center;gap:0.5rem;",
-                                ),
-                                Button(
-                                    Span("history", cls="material-symbols-outlined"),
-                                    "History",
-                                    type="button",
-                                    id="landing-history-btn",
-                                    cls="history-drawer-btn",
-                                ),
-                                Div(
-                                    Span("Document context:", cls="doc-scope-prefix"),
-                                    Span(
-                                        "Code, Model Metrics and Artifacts. Governance Evidence & Findings",
-                                        cls="doc-scope-items",
-                                    ),
-                                    id="doc-scope-label",
-                                    cls="doc-scope-label",
-                                ),
-                                cls="preview-panel-header",
-                            ),
-
-                            Div(
-                                Div(
                                     Label(
                                         "Governance bundle",
                                         Span(
@@ -511,6 +486,15 @@ async def index(req: Request):
                                         type="button",
                                         id="landing-history-btn",
                                         cls="history-drawer-btn",
+                                    ),
+                                    Div(
+                                        Span("Document context:", cls="doc-scope-prefix"),
+                                        Span(
+                                            "Code, Model Metrics and Artifacts. Governance Evidence & Findings",
+                                            cls="doc-scope-items",
+                                        ),
+                                        id="doc-scope-label",
+                                        cls="doc-scope-label",
                                     ),
                                     cls="preview-panel-header",
                                 ),

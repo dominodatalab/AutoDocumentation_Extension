@@ -546,3 +546,14 @@ class TestGovernanceBundlePickerOptgroups:
         assert "cls=\"adv-opts-accordion\"" in web
         assert "open=False" in web
 
+    def test_doc_scope_label_in_preview_panel_header(self):
+        root = Path(__file__).resolve().parent.parent
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
+        scope_idx = web.index('id="doc-scope-label"')
+        gallery_end = web.index('cls="wizard-col-gallery"')
+        preview_panel = web.index('id="template-preview-panel"')
+        assert scope_idx > gallery_end
+        assert scope_idx < preview_panel
+        section = web[scope_idx:scope_idx + 400]
+        assert 'cls="preview-panel-header"' in section
+
