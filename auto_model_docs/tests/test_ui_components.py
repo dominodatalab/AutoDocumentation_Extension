@@ -2,8 +2,8 @@ from studio.ui_components import format_project_context_label
 
 
 def test_format_project_context_label_splits_on_slash():
-    assert format_project_context_label("integration-test/modeldocs-target-bgp") == (
-        "integration-test / modeldocs-target-bgp"
+    assert format_project_context_label("demo-user/demo-project") == (
+        "demo-user / demo-project"
     )
 
 

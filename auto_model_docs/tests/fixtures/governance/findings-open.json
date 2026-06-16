@@ -15,24 +15,24 @@
       "severity": "S2",
       "status": "To do",
       "required": true,
-      "assignee": { "id": "usr-seed", "name": "integration-test" },
+      "assignee": { "id": "usr-seed", "name": "demo-user" },
       "approver": null,
       "dueDate": "2026-07-01T00:00:00Z",
       "createdAt": "2026-06-01T09:00:00Z",
       "createdBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
       "updatedAt": "2026-06-01T09:00:00Z",
       "updatedBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
-      "policyName": "autodoc-ml-governance-policy"
+      "policyName": "ml-governance-policy"
     },
     {
       "id": "find-seed-2",
@@ -49,24 +49,24 @@
       "severity": "S3",
       "status": "Done",
       "required": false,
-      "assignee": { "id": "usr-seed", "name": "integration-test" },
+      "assignee": { "id": "usr-seed", "name": "demo-user" },
       "approver": null,
       "dueDate": null,
       "createdAt": "2026-06-02T09:00:00Z",
       "createdBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
       "updatedAt": "2026-06-03T09:00:00Z",
       "updatedBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
-      "policyName": "autodoc-ml-governance-policy"
+      "policyName": "ml-governance-policy"
     }
   ],
   "meta": {

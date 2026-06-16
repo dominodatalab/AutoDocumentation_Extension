@@ -29,7 +29,7 @@ from autodoc.governance_read import (
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "governance"
-PROJECT_ID = "6a21c81b3bff9f0d3ae561b1"
+PROJECT_ID = "aaaaaaaa-bbbb-cccc-dddd-000000000001"
 BUNDLE_ID = "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0"
 POLICY_ID = "a1111111-1111-1111-1111-111111111101"
 
@@ -40,7 +40,7 @@ def _load(name: str):
 
 
 def _bundle_summary(*, attachments=None) -> BundleSummary:
-    raw = _load("compute-policy-mlflow3-bundle.json")["bundle"]
+    raw = _load("bundle-computed-policy.json")["bundle"]
     return BundleSummary(
         id=raw["id"],
         name=raw["name"],
@@ -53,14 +53,14 @@ def _bundle_summary(*, attachments=None) -> BundleSummary:
         classification_value=raw.get("classificationValue"),
         attachments=attachments or [],
         created_at=raw.get("createdAt"),
-        owner_username="integration-test",
-        owner_display_name="Integration Test",
-        project_owner="integration-test",
+        owner_username="demo-user",
+        owner_display_name="Demo User",
+        project_owner="demo-user",
     )
 
 
 def _computed_policy() -> ComputedPolicy:
-    payload = _load("compute-policy-mlflow3-bundle.json")
+    payload = _load("bundle-computed-policy.json")
     bundle = _bundle_summary()
     results = [
         ArtifactResult(
@@ -84,7 +84,7 @@ def _computed_policy() -> ComputedPolicy:
 
 
 def _bundle_summary_from_list_fixture() -> BundleSummary:
-    raw = _load("bundles-list-modeldocs-target-bgp.json")["data"][0]
+    raw = _load("bundles-list.json")["data"][0]
     attachments = [
         BundleAttachment(
             id=a["id"],
@@ -122,7 +122,7 @@ def _findings_raw():
             status=f["status"],
             description=f.get("description"),
         )
-        for f in _load("findings-todo.json").get("data") or []
+        for f in _load("findings-open.json").get("data") or []
     ]
 
 
@@ -143,7 +143,7 @@ class TestLoadGovernanceContext:
             )
 
         assert ctx.bundle_id == BUNDLE_ID
-        assert ctx.owner == "Integration Test"
+        assert ctx.owner == "Demo User"
         assert ctx.risk_tier == "Medium"
         assert len(ctx.evidence) == 2
         assert ctx.evidence[0].citation_id.startswith("evidence.")
@@ -179,7 +179,7 @@ class TestLoadGovernanceContext:
             ctx = load_governance_context(
                 BUNDLE_ID, api_host="https://domino.example.com", findings_scope="open"
             )
-        assert ctx.governed_model_names == ["mlflow3-logged-and-registered1"]
+        assert ctx.governed_model_names == ["fraud-detector-v1"]
 
 
 class TestMergeScanModelNames:

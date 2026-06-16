@@ -44,31 +44,31 @@ def _filter_bundles(bundles: list[dict[str, Any]], raw: str) -> list[dict[str, A
 
 
 def _load_bundles() -> list[dict[str, Any]]:
-    payload = json.loads((FIXTURES_DIR / "bundles-list-modeldocs-target-bgp.json").read_text())
+    payload = json.loads((FIXTURES_DIR / "bundles-list.json").read_text())
     return list(payload.get("data") or [])
 
 
-def test_mlflow_wildcard_matches_three_bundles():
+def test_wildcard_matches_fraud_and_churn_bundles():
     bundles = _load_bundles()
-    matched = _filter_bundles(bundles, "mlflow*")
+    matched = _filter_bundles(bundles, "fraud*,churn*")
     assert len(matched) == 3
     names = {_bundle_model_names(b)[0] for b in matched}
     assert names == {
-        "mlflow3-logged-and-registered1",
-        "mlflow3-mixed-logged-and-registered1",
+        "fraud-detector-v1",
+        "churn-predictor-v1",
     }
 
 
 def test_exact_model_name_matches_one():
     bundles = _load_bundles()
-    matched = _filter_bundles(bundles, "internalqwen")
+    matched = _filter_bundles(bundles, "legacy-classifier-v1")
     assert len(matched) == 1
-    assert matched[0]["name"] == "internalqwen-governance-bundle"
+    assert matched[0]["name"] == "legacy-classifier-v1-governance-bundle"
 
 
 def test_comma_separated_patterns_union():
     bundles = _load_bundles()
-    matched = _filter_bundles(bundles, "internalqwen, mlflow3-logged-and-registered1")
+    matched = _filter_bundles(bundles, "legacy-classifier-v1, fraud-detector-v1")
     assert len(matched) == 2
 
 

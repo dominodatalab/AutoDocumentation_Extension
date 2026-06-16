@@ -1,4 +1,4 @@
-"""FT (FastHTML) UI component helpers for the Stitch UI."""
+"""FastHTML UI component helpers for Model Docs Studio."""
 
 from __future__ import annotations
 

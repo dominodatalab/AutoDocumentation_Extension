@@ -1,4 +1,4 @@
-"""Blueprint Enterprise Design System CSS for the Stitch UI."""
+"""Studio UI styles for Model Docs."""
 
 from __future__ import annotations
 

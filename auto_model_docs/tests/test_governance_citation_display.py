@@ -19,8 +19,8 @@ from autodoc.generation.notebook_exporter import NotebookExporter
 
 
 BUNDLE_ID = "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0"
-BUNDLE_NAME = "mlflow3-logged-and-registered1-governance-bundle"
-POLICY_NAME = "autodoc-ml-governance-policy"
+BUNDLE_NAME = "fraud-detector-v1-governance-bundle"
+POLICY_NAME = "ml-governance-policy"
 
 
 def _gov_base() -> dict:

@@ -1,29 +1,29 @@
 {
   "bundle": {
     "id": "7f746bd1-3c88-4d89-97d0-9eba1bfb38b0",
-    "name": "mlflow3-logged-and-registered1-governance-bundle",
+    "name": "fraud-detector-v1-governance-bundle",
     "createdAt": "2026-05-01T12:00:00Z",
     "policyId": "a1111111-1111-1111-1111-111111111101",
     "policyVersionId": "a1111111-1111-1111-1111-111111111102",
-    "policyName": "autodoc-ml-governance-policy",
-    "projectId": "6a21c81b3bff9f0d3ae561b1",
+    "policyName": "ml-governance-policy",
+    "projectId": "aaaaaaaa-bbbb-cccc-dddd-000000000001",
     "stage": "Stage 1",
     "state": "Active",
     "evidenceRestricted": false,
     "classificationValue": "Medium",
     "attachments": [
       {
-        "id": "att-mlflow3-1",
+        "id": "att-fraud-1",
         "type": "ModelVersion",
-        "identifier": { "name": "mlflow3-logged-and-registered1", "version": 1 },
+        "identifier": { "name": "fraud-detector-v1", "version": 1 },
         "source": "DFS"
       }
     ]
   },
   "policy": {
     "id": "a1111111-1111-1111-1111-111111111101",
-    "name": "autodoc-ml-governance-policy",
-    "description": "Seed policy for modeldocs-target-bgp",
+    "name": "ml-governance-policy",
+    "description": "Example ML governance policy for demo purposes",
     "archived": false,
     "status": "Active",
     "enforceSequentialOrder": true,
@@ -90,9 +90,9 @@
       "createdAt": "2026-05-10T14:00:00Z",
       "createdBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
       "isLatest": true
     },
@@ -107,9 +107,9 @@
       "createdAt": "2026-05-10T14:02:00Z",
       "createdBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
       "isLatest": true
     },
@@ -122,9 +122,9 @@
       "createdAt": "2026-05-09T10:00:00Z",
       "createdBy": {
         "id": "usr-seed",
-        "firstName": "Integration",
-        "lastName": "Test",
-        "userName": "integration-test"
+        "firstName": "Demo",
+        "lastName": "User",
+        "userName": "demo-user"
       },
       "isLatest": false
     }
