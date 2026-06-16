@@ -155,14 +155,11 @@ def render_studio_bootstrap_error_page(
 ) -> tuple:
     import pathlib
 
-    from studio.font_assets import STUDIO_FONT_BASE_PATCH_JS, fontawesome_faces_css
     from studio.styles import STUDIO_CSS
 
     logo_svg = (pathlib.Path(__file__).resolve().parent.parent.parent / "domino-logo.svg").read_text()
     return (
         Title("Model Docs — Domino"),
-        Style(fontawesome_faces_css()),
-        Script(STUDIO_FONT_BASE_PATCH_JS),
         Style(STUDIO_CSS),
         Div(Div(NotStr(logo_svg), cls="domino-header-inner"), cls="domino-header"),
         Div(

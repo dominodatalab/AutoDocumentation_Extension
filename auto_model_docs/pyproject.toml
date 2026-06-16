@@ -57,7 +57,6 @@ autodoc = "auto_model_docs.main:main"
 where = ["."]
 
 [tool.setuptools.package-data]
-studio = ["static/fontawesome/*.otf"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
