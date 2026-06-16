@@ -561,3 +561,27 @@ class TestGovernanceBundlePickerOptgroups:
         assert "flex-direction: column" in styles
         assert ".preview-panel-header-row" in styles
 
+class TestStudioJobStoreConfigError:
+    def test_missing_datasets_dir(self, monkeypatch):
+        ui = _import_ui()
+        monkeypatch.delenv("DOMINO_DATASETS_DIR", raising=False)
+        monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+        err = ui.studio_job_store_config_error()
+        assert err is not None
+        assert err[0] == "Job history not configured"
+        assert "DOMINO_DATASETS_DIR" in err[1]
+
+    def test_missing_project_name(self, monkeypatch):
+        ui = _import_ui()
+        monkeypatch.setenv("DOMINO_DATASETS_DIR", "/mnt/datasets")
+        monkeypatch.delenv("DOMINO_PROJECT_NAME", raising=False)
+        err = ui.studio_job_store_config_error()
+        assert err is not None
+        assert "DOMINO_PROJECT_NAME" in err[1]
+
+    def test_ok_when_configured(self, monkeypatch):
+        ui = _import_ui()
+        monkeypatch.setenv("DOMINO_DATASETS_DIR", "/mnt/datasets")
+        monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+        assert ui.studio_job_store_config_error() is None
+

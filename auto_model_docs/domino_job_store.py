@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _ACTIVE_REFRESH_STATUSES = frozenset({"queued", "submitted", "pending", "running"})
 
 
-def _job_db_not_configured_msg() -> str | None:
+def job_db_not_configured_msg() -> str | None:
     if not (os.environ.get("DOMINO_DATASETS_DIR") or "").strip():
         return "DOMINO_DATASETS_DIR is not set"
     if not (os.environ.get("DOMINO_PROJECT_NAME") or "").strip():
@@ -79,7 +79,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 def ensure_database() -> None:
     db_file = _db_path()
     if db_file is None:
-        msg = _job_db_not_configured_msg()
+        msg = job_db_not_configured_msg()
         if msg:
             logger.warning("%s; job database was not created", msg)
         return
@@ -136,7 +136,7 @@ def record_job(
         return
     db_file = _db_path()
     if db_file is None:
-        msg = _job_db_not_configured_msg()
+        msg = job_db_not_configured_msg()
         if msg:
             logger.warning("%s; job history not persisted", msg)
         return

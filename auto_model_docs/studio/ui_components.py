@@ -8,6 +8,8 @@ from typing import Optional
 
 from fasthtml.common import *
 
+from domino_job_store import job_db_not_configured_msg
+
 from .state import (
     DominoJobRecord,
     EnvironmentWarning,
@@ -19,6 +21,15 @@ from .state import (
 # ---------------------------------------------------------------------------
 # Sanitizers / parsers
 # ---------------------------------------------------------------------------
+
+def format_project_context_label(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    parts = [part.strip() for part in value.split("/") if part.strip()]
+    if len(parts) <= 1:
+        return value.strip()
+    return " / ".join(parts)
+
 
 def _sanitize_optional_int(value: Optional[str]) -> Optional[int]:
     if value is None or value == "":
@@ -118,6 +129,55 @@ def validate_studio_domino_compute_environment(domino_client_mod: Any) -> list[s
             "Please contact your administrator to fix access or update the configuration.",
         ]
     return []
+
+
+def studio_job_store_config_error() -> tuple[str, str, str] | None:
+    missing = job_db_not_configured_msg()
+    if not missing:
+        return None
+    if "DOMINO_DATASETS_DIR" in missing:
+        return (
+            "Job history not configured",
+            "This app requires DOMINO_DATASETS_DIR so job history can be stored on a Domino dataset mount.",
+            "If you're running this as a Domino App, contact your administrator to configure the app environment.",
+        )
+    return (
+        "Job history not configured",
+        "This app requires DOMINO_PROJECT_NAME so job history can be stored for this deployment.",
+        "If you're running this as a Domino App, contact your administrator to configure the app environment.",
+    )
+
+
+def render_studio_bootstrap_error_page(
+    heading: str,
+    message: str,
+    detail: str,
+) -> tuple:
+    import pathlib
+
+    from studio.font_assets import STUDIO_FONT_BASE_PATCH_JS, fontawesome_faces_css
+    from studio.styles import STUDIO_CSS
+
+    logo_svg = (pathlib.Path(__file__).resolve().parent.parent.parent / "domino-logo.svg").read_text()
+    return (
+        Title("Model Docs — Domino"),
+        Style(fontawesome_faces_css()),
+        Script(STUDIO_FONT_BASE_PATCH_JS),
+        Style(STUDIO_CSS),
+        Div(Div(NotStr(logo_svg), cls="domino-header-inner"), cls="domino-header"),
+        Div(
+            Div(
+                Div(
+                    H2(heading),
+                    P(message),
+                    P(detail, cls="bootstrap-error-detail"),
+                    cls="bootstrap-error-card",
+                ),
+                cls="bootstrap-error-wrap",
+            ),
+            cls="page",
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

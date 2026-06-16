@@ -2142,6 +2142,10 @@ select.hw-tier-select option {
     gap: 0.75rem;
     margin-bottom: 1rem;
 }
+.gallery-header-row > div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+}
 .gallery-action-btns {
     display: flex;
     gap: 0.5rem;
@@ -2431,6 +2435,7 @@ select.hw-tier-select option {
 .project-context-chip {
     display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.3rem;
     font-family: var(--font-body);
     font-size: 11px;
@@ -2441,7 +2446,10 @@ select.hw-tier-select option {
     border-radius: 4px;
     padding: 2px 8px 2px 5px;
     margin-top: 0.3rem;
-    white-space: nowrap;
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 /* ── Preview panel header ────────────────────────────────────────── */
@@ -2820,9 +2828,14 @@ select.hw-tier-select option {
 .results-nav-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
     padding-top: 1rem;
     margin-bottom: 1rem;
+}
+.results-nav-row .project-context-chip {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 .back-link-btn {
     background: none;

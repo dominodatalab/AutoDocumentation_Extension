@@ -88,3 +88,13 @@ def test_no_cross_user_leak(monkeypatch, tmp_path):
     )
     assert store.get_user_jobs("proj-x", "bob", limit=10) == []
     assert len(store.get_user_jobs("proj-x", "alice", limit=10)) == 1
+
+def test_job_db_not_configured_msg(monkeypatch):
+    monkeypatch.delenv("DOMINO_DATASETS_DIR", raising=False)
+    monkeypatch.delenv("DOMINO_PROJECT_NAME", raising=False)
+    assert store.job_db_not_configured_msg() == "DOMINO_DATASETS_DIR is not set"
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", "/mnt/datasets")
+    assert store.job_db_not_configured_msg() == "DOMINO_PROJECT_NAME is not set"
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+    assert store.job_db_not_configured_msg() is None
+

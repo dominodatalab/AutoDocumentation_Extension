@@ -37,6 +37,9 @@ from studio.scripts import MAIN_DOM_JS
 from studio.ui_components import (
     _render_warnings_banner,
     _validate_environment,
+    format_project_context_label,
+    render_studio_bootstrap_error_page,
+    studio_job_store_config_error,
     validate_studio_domino_compute_environment,
 )
 from studio.font_assets import (
@@ -253,6 +256,11 @@ async def index(req: Request):
             ),
         )
 
+    config_err = studio_job_store_config_error()
+    if config_err:
+        heading, message, detail = config_err
+        return render_studio_bootstrap_error_page(heading, message, detail)
+
     project_display_name: Optional[str] = None
     if project_id:
         info = domino_client.resolve_project(project_id)
@@ -338,7 +346,7 @@ async def index(req: Request):
                                     H2("Choose a template", cls="wizard-col-title"),
                                     Span(
                                         Span("folder", cls="material-symbols-outlined", style="font-size:13px"),
-                                        project_display_name or project_id,
+                                        format_project_context_label(project_display_name or project_id),
                                         cls="project-context-chip",
                                     ) if (project_display_name or project_id) else None,
                                 ),
@@ -692,7 +700,7 @@ async def index(req: Request):
                         ),
                         Span(
                             Span("folder", cls="material-symbols-outlined", style="font-size:13px"),
-                            project_display_name or project_id,
+                            format_project_context_label(project_display_name or project_id),
                             cls="project-context-chip",
                         ) if (project_display_name or project_id) else None,
                         Div(id="layout-switcher-slot", cls="layout-switcher-slot"),

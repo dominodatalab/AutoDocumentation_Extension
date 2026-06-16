@@ -4,7 +4,7 @@ A FastHTML app that generates ML model documentation (.docx and .ipynb) from cod
 
 ## Architecture & Design
 
-See [auto_model_docs/README.md](./auto_model_docs/README.md) for the pipeline architecture, scanner stages, Studio UI design, and full configuration reference. Studio design tokens are in [auto_model_docs/DESIGN.md](./auto_model_docs/DESIGN.md).
+See [auto_model_docs/README.md](./auto_model_docs/README.md) for the pipeline architecture, scanner stages, Studio UI design, and full configuration reference.
 
 ## Prerequisites
 
