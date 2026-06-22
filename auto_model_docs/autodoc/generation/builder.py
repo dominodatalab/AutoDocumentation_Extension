@@ -7,7 +7,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -40,8 +40,10 @@ class DocumentBuilder:
     title page, table of contents, and content sections.
     """
 
-    def __init__(self, output_dir: str = "/mnt/artifacts"):
-        self.output_dir = output_dir
+    def __init__(self, output_dir: Optional[str] = None):
+        from artifact_layout import get_artifacts_root
+
+        self.output_dir = output_dir if output_dir is not None else get_artifacts_root()
 
     async def build(
         self,

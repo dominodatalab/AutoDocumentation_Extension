@@ -53,6 +53,7 @@ class JobRequest:
     notebook_from_cache: bool
     bundle_id: str = ""
     governance_api_host: str = ""
+    branch: str = ""
 
 
 _JR_DEFAULTS = {
@@ -82,6 +83,7 @@ _JR_DEFAULTS = {
     "notebook_from_cache": False,
     "bundle_id": "",
     "governance_api_host": "",
+    "branch": "",
 }
 
 
@@ -458,12 +460,55 @@ async def test_parse_request_empty_code_path_falls_back_to_auto_detect():
     mock_state.domino_client.get_project_code_root.assert_called()
 
 
+@pytest.mark.asyncio
+async def test_parse_request_branch_from_body():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    mock_state = sys.modules.get("studio.state")
+    mock_state.domino_client.get_code_source_info.return_value = {"is_git": True}
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+            "branch": "feature/docs",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.branch == "feature/docs"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_branch_cleared_for_dfs():
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    mock_state = sys.modules.get("studio.state")
+    mock_state.domino_client.get_code_source_info.return_value = {"is_git": False}
+
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+            "branch": "feature/docs",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.branch == ""
+
+
 # ---------------------------------------------------------------------------
 # _build_job_command
 # ---------------------------------------------------------------------------
 
 class TestBuildJobCommand:
-    def test_minimal_command(self):
+    def test_minimal_command(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_ARTIFACTS_DIR", raising=False)
         je = _import_job_engine()
         req = _jr(
             provider="anthropic",
@@ -477,7 +522,8 @@ class TestBuildJobCommand:
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
         assert "--output_dir" in cmd
-        assert "/mnt/artifacts" in cmd
+        i = cmd.index("--output_dir")
+        assert cmd[i + 1] == "/mnt"
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
@@ -492,6 +538,14 @@ class TestBuildJobCommand:
         assert "--backoff-jitter" in cmd
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "gpt-4"
+
+    def test_uses_domino_artifacts_dir_when_set(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_ARTIFACTS_DIR", "/mnt/artifacts")
+        je = _import_job_engine()
+        req = _jr(provider="anthropic", code_root="/mnt/code")
+        cmd = je._build_job_command(req, "/path/spec.yaml")
+        i = cmd.index("--output_dir")
+        assert cmd[i + 1] == "/mnt/artifacts"
 
     def test_notebook_unchecked_omits_flag(self):
         je = _import_job_engine()
@@ -739,7 +793,8 @@ class TestValidateJobInputs:
 
 class TestSubmitDominoJob:
     @pytest.mark.asyncio
-    async def test_calls_domino_without_job_store(self, _mock_studio):
+    async def test_calls_domino_without_job_store(self, _mock_studio, monkeypatch):
+        monkeypatch.delenv("DOMINO_ARTIFACTS_DIR", raising=False)
         je = _import_job_engine()
         client = _mock_studio.domino_client
         client.submit_job.return_value = "run-abc"
@@ -756,8 +811,25 @@ class TestSubmitDominoJob:
         assert url == "https://domino/jobs/run-abc"
         client.submit_job.assert_called_once()
         cmd = client.submit_job.call_args[0][0]
-        assert "/mnt/artifacts" in cmd
+        assert "--output_dir /mnt" in cmd
         client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
+
+    @pytest.mark.asyncio
+    async def test_passes_branch_to_submit_job(self, _mock_studio):
+        je = _import_job_engine()
+        client = _mock_studio.domino_client
+        client.submit_job.return_value = "run-abc"
+        client.build_job_url.return_value = "https://domino/jobs/run-abc"
+
+        req = _jr(
+            spec_path="/spec.yaml",
+            provider="anthropic",
+            project_id="proj-123",
+            code_root="/mnt/code",
+            branch="feature/docs",
+        )
+        await je._submit_domino_job(req)
+        assert client.submit_job.call_args.kwargs["branch"] == "feature/docs"
 
     @pytest.mark.asyncio
     async def test_raises_when_no_spec(self, _mock_studio):

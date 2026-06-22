@@ -342,16 +342,25 @@ MAIN_DOM_JS = r"""
             if (!inp) return;
             var pid = resolvedProjectId();
             if (!pid) return;
-            fetch(_adUrl('api/code-paths') + '?projectId=' + encodeURIComponent(pid))
-                .then(_checkResp).then(function(r) { return r.json(); })
-                .then(function(data) {
+            var qs = '?projectId=' + encodeURIComponent(pid);
+            Promise.all([
+                fetch(_adUrl('api/code-paths') + qs).then(_checkResp).then(function(r) { return r.json(); }),
+                fetch(_adUrl('api/code-root') + qs).then(_checkResp).then(function(r) { return r.json(); }),
+            ])
+                .then(function(results) {
                     _codePathsLoaded = true;
+                    var data = results[0];
+                    var codeRoot = results[1];
                     _codePaths = data.paths || [];
                     var def = data.default || (_codePaths[0] || '');
                     inp.value = def;
                     inp.placeholder = '';
                     _renderComboboxOptions(_codePaths);
                     _wireCombobox();
+                    var branchField = document.getElementById('branch-field');
+                    if (branchField) {
+                        branchField.style.display = (codeRoot && codeRoot.isGit) ? '' : 'none';
+                    }
                 })
                 .catch(function() { if (inp) inp.placeholder = ''; });
         }
@@ -1958,6 +1967,7 @@ MAIN_DOM_JS = r"""
                         hardware_tier: val('field-hardware_tier'),
                         provider_base_url: val('field-provider_base_url'),
                         code_path: val('field-code_path'),
+                        branch: val('field-branch'),
                     };
                     if (_selectedBundleId) {
                         jsonPayload.bundle_id = _selectedBundleId;

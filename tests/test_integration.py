@@ -229,6 +229,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         notebook_from_cache: bool = False
         bundle_id: str = ""
         governance_api_host: str = ""
+        branch: str = ""
 
     @dataclass
     class DominoJobRecord:

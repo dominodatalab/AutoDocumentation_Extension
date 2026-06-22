@@ -169,8 +169,8 @@ console = Console()
 @click.option(
     "--output_dir",
     type=click.Path(),
-    default="/mnt/artifacts",
-    help="Root artifacts directory where docs and cache are stored (default: /mnt/artifacts)",
+    default=None,
+    help="Root artifacts directory where docs and cache are stored (default: DOMINO_ARTIFACTS_DIR or /mnt)",
 )
 @click.option(
     "--bundle-id",
@@ -285,9 +285,9 @@ def main(
         if planning_workers:
             settings.planning_workers = planning_workers
 
-        from artifact_layout import init_layout, get_layout
+        from artifact_layout import get_artifacts_root, init_layout, get_layout
         init_layout()
-        artifacts_root = output_dir.rstrip("/") or "/mnt/artifacts"
+        artifacts_root = (output_dir or get_artifacts_root()).rstrip("/")
         code_dir = Path(code_root)
 
         # Handle --notebook-from-cache mode (regenerate from cache)

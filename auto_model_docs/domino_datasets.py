@@ -387,23 +387,3 @@ async def upload_file(
             pass
         raise
 
-
-# ---------------------------------------------------------------------------
-# Mount-path helpers
-# ---------------------------------------------------------------------------
-
-def get_dataset_mount_prefix() -> str:
-    """Return the dataset mount prefix based on project type."""
-    if os.path.isdir("/domino/datasets/local"):
-        return "/domino/datasets/local"
-    return "/mnt/data"
-
-
-def build_dataset_mount_path(dataset_name: str, relative_path: str) -> str:
-    """Build the full mount path for a file in a dataset.
-
-    Converts a dataset-relative path to an absolute filesystem path
-    that the Domino job container can read from the mounted dataset.
-    """
-    prefix = get_dataset_mount_prefix()
-    return f"{prefix}/{dataset_name}/{relative_path.lstrip('/')}"

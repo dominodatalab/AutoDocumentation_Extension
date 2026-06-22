@@ -15,7 +15,7 @@ for p in (_repo_root, _pkg_dir):
         sys.path.insert(0, p)
 
 import artifact_layout
-from artifact_layout import ArtifactLayout, init_layout, get_layout, reset_layout
+from artifact_layout import ArtifactLayout, get_artifacts_root, init_layout, get_layout, reset_layout
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +24,24 @@ def _reset():
     reset_layout()
     yield
     reset_layout()
+
+
+class TestGetArtifactsRoot:
+    def test_defaults_to_dfs_mount_when_env_unset(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_ARTIFACTS_DIR", raising=False)
+        assert get_artifacts_root() == "/mnt"
+
+    def test_uses_domino_artifacts_dir_when_set(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_ARTIFACTS_DIR", "/mnt/artifacts")
+        assert get_artifacts_root() == "/mnt/artifacts"
+
+    def test_strips_trailing_slash(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_ARTIFACTS_DIR", "/mnt/artifacts/")
+        assert get_artifacts_root() == "/mnt/artifacts"
+
+    def test_ignores_blank_env(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_ARTIFACTS_DIR", "   ")
+        assert get_artifacts_root() == "/mnt"
 
 
 class TestArtifactLayout:

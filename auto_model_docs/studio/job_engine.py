@@ -30,6 +30,8 @@ _MAX_JOB_MAX_FILES = 1_000_000
 _MAX_JOB_WORKERS = 512
 _MAX_JOB_TIMEOUT_SEC = 7 * 24 * 3600
 _MAX_JOB_MAX_RETRIES = 100
+from artifact_layout import get_artifacts_root
+
 from .state import (
     JobRequest,
     _resolve_request_project_id,
@@ -151,6 +153,15 @@ async def _parse_request(req: Request) -> JobRequest:
         except Exception as exc:
             raise RuntimeError(f"Could not determine code root for project: {exc}") from exc
 
+    _branch = _form_str(body, "branch").strip()
+    if _branch:
+        try:
+            src = domino_client.get_code_source_info(project_id)
+            if not src.get("is_git"):
+                _branch = ""
+        except Exception:
+            _branch = ""
+
     return JobRequest(
         spec_path=_form_str(body, "spec_path"),
         provider=_prov,
@@ -178,6 +189,7 @@ async def _parse_request(req: Request) -> JobRequest:
         notebook_from_cache=notebook_from_cache,
         bundle_id=_form_str(body, "bundle_id"),
         governance_api_host=_form_str(body, "governance_api_host"),
+        branch=_branch,
     )
 
 
@@ -199,7 +211,7 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         "--spec",
         spec_path,
         "--output_dir",
-        "/mnt/artifacts",
+        get_artifacts_root(),
         "--code-root",
         code_root_arg,
         "--provider",
@@ -263,6 +275,7 @@ def _build_job_command_str(req: JobRequest, spec_path: str) -> str:
 def launch_domino_job_run(
     command_str: str,
     *,
+    branch: str | None = None,
     tier_id: str,
     project_id: str,
     environment_id: str,
@@ -270,7 +283,7 @@ def launch_domino_job_run(
 ) -> tuple[str, str]:
     run_id = domino_client.submit_job(
         command_str,
-        branch=None,
+        branch=branch or None,
         tier_id=tier_id,
         project_id=project_id,
         environment_id=environment_id,
@@ -295,6 +308,7 @@ async def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
     try:
         run_id, job_url = launch_domino_job_run(
             command_str,
+            branch=(req.branch or "").strip() or None,
             tier_id=_domino_id_str(req.hardware_tier),
             project_id=_domino_id_str(req.project_id),
             environment_id=_domino_id_str(req.environment_id),
