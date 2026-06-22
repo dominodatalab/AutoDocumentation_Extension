@@ -22,12 +22,20 @@ def job_db_not_configured_msg() -> str | None:
     return None
 
 
+def _mount_root(datasets_dir: str) -> Path:
+    root = Path(datasets_dir)
+    local = root / "local"
+    if local.is_dir():
+        return local
+    return root
+
+
 def _db_path() -> Path | None:
     root = (os.environ.get("DOMINO_DATASETS_DIR") or "").strip()
     name = (os.environ.get("DOMINO_PROJECT_NAME") or "").strip()
     if not root or not name:
         return None
-    return Path(root) / name / ".data" / "jobs.sqlite"
+    return _mount_root(root) / name / ".data" / "jobs.sqlite"
 
 
 def _connect(db_file: Path) -> sqlite3.Connection:

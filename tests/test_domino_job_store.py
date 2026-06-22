@@ -44,6 +44,28 @@ def test_ensure_database_creates_files(monkeypatch, tmp_path):
     assert db.is_file()
 
 
+def test_ensure_database_uses_local_subdir_for_dfs(monkeypatch, tmp_path):
+    root = tmp_path / "domino" / "datasets"
+    (root / "local").mkdir(parents=True)
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "modeldocs-ext")
+    store.ensure_database()
+    db = root / "local" / "modeldocs-ext" / ".data" / "jobs.sqlite"
+    assert db.is_file()
+
+
+def test_mount_root_prefers_local_when_present(tmp_path):
+    root = tmp_path / "datasets"
+    (root / "local").mkdir(parents=True)
+    assert store._mount_root(str(root)) == root / "local"
+
+
+def test_mount_root_uses_root_when_no_local(tmp_path):
+    root = tmp_path / "mnt" / "data"
+    root.mkdir(parents=True)
+    assert store._mount_root(str(root)) == root
+
+
 def test_roundtrip_and_refresh(monkeypatch, tmp_path):
     root = tmp_path / "ds"
     root.mkdir()

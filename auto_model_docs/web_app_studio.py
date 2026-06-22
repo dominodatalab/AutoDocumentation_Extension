@@ -76,7 +76,7 @@ def _build_advanced_options(tier_options):
     return Div(
             Div(
                 Div(
-                    Label("Branch", for_="field-branch"),
+                    Label("Branch (optional)", for_="field-branch"),
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Git branch for the Domino job. Leave blank to use the project default."),
                     cls="label-row",
                 ),

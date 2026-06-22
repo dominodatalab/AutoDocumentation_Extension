@@ -337,35 +337,6 @@ class TestUploadFile:
 
 
 # ---------------------------------------------------------------------------
-# Mount path helpers
-# ---------------------------------------------------------------------------
-
-class TestMountPaths:
-    def test_git_project_prefix(self):
-        with patch("os.path.isdir", return_value=False):
-            assert ds.get_dataset_mount_prefix() == "/mnt/data"
-
-    def test_dfs_project_prefix(self):
-        with patch("os.path.isdir", return_value=True):
-            assert ds.get_dataset_mount_prefix() == "/domino/datasets/local"
-
-    def test_build_dataset_mount_path_git(self):
-        with patch("os.path.isdir", return_value=False):
-            path = ds.build_dataset_mount_path("autodoc", "specs/my_spec.yaml")
-            assert path == "/mnt/data/autodoc/specs/my_spec.yaml"
-
-    def test_build_dataset_mount_path_dfs(self):
-        with patch("os.path.isdir", return_value=True):
-            path = ds.build_dataset_mount_path("autodoc", "specs/sub/spec.yaml")
-            assert path == "/domino/datasets/local/autodoc/specs/sub/spec.yaml"
-
-    def test_build_dataset_mount_path_strips_leading_slash(self):
-        with patch("os.path.isdir", return_value=False):
-            path = ds.build_dataset_mount_path("autodoc", "/specs/spec.yaml")
-            assert path == "/mnt/data/autodoc/specs/spec.yaml"
-
-
-# ---------------------------------------------------------------------------
 # _api_request (integration-level)
 # ---------------------------------------------------------------------------
 
