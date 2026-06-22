@@ -70,10 +70,12 @@ class NotebookBuilder:
 
     def __init__(
         self,
-        output_dir: str = "/mnt/artifacts",
+        output_dir: Optional[str] = None,
         dependencies: List[str] | None = None,
     ):
-        self.output_dir = output_dir
+        from artifact_layout import get_artifacts_root
+
+        self.output_dir = output_dir if output_dir is not None else get_artifacts_root()
         self.dependencies = (
             dependencies if dependencies is not None else self.DEFAULT_DEPENDENCIES.copy()
         )

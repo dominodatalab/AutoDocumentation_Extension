@@ -30,6 +30,8 @@ _MAX_JOB_MAX_FILES = 1_000_000
 _MAX_JOB_WORKERS = 512
 _MAX_JOB_TIMEOUT_SEC = 7 * 24 * 3600
 _MAX_JOB_MAX_RETRIES = 100
+from artifact_layout import get_artifacts_root
+
 from .state import (
     JobRequest,
     _resolve_request_project_id,
@@ -209,7 +211,7 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         "--spec",
         spec_path,
         "--output_dir",
-        "/mnt/artifacts",
+        get_artifacts_root(),
         "--code-root",
         code_root_arg,
         "--provider",

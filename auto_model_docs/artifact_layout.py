@@ -1,7 +1,8 @@
 """Central path resolver for all autodoc artifacts.
 
 All artifact paths flow through this module. Paths are logical paths
-relative to /mnt/artifacts/, used with domino_artifacts module for actual I/O.
+relative to the job artifacts root (see get_artifacts_root()), used with
+domino_artifacts module for actual I/O.
 
 Directory structure within artifacts:
     docs/          — Generated .docx and .ipynb files
@@ -13,18 +14,28 @@ Directory structure within artifacts:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+_DFS_ARTIFACTS_ROOT = "/mnt"
+
+
+def get_artifacts_root() -> str:
+    configured = (os.environ.get("DOMINO_ARTIFACTS_DIR") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return _DFS_ARTIFACTS_ROOT
+
 _layout: Optional["ArtifactLayout"] = None
 
 
 class ArtifactLayout:
-    """Logical path resolver for autodoc artifacts within /mnt/artifacts/.
+    """Logical path resolver for autodoc artifacts under the job artifacts root.
 
-    Paths returned are relative to /mnt/artifacts/. All actual I/O
+    Paths returned are relative to get_artifacts_root(). All actual I/O
     goes through domino_artifacts module or filesystem in job containers.
     """
 

@@ -35,9 +35,12 @@ class NotebookExporter:
     and delegates to DocumentBuilder for Word assembly.
     """
 
-    def __init__(self, output_dir: str = "/mnt/artifacts"):
-        self.output_dir = output_dir
-        self.builder = DocumentBuilder(output_dir=output_dir)
+    def __init__(self, output_dir: Optional[str] = None):
+        from artifact_layout import get_artifacts_root
+
+        resolved = output_dir if output_dir is not None else get_artifacts_root()
+        self.output_dir = resolved
+        self.builder = DocumentBuilder(output_dir=resolved)
 
     def export_to_word(
         self,

@@ -507,7 +507,8 @@ async def test_parse_request_branch_cleared_for_dfs():
 # ---------------------------------------------------------------------------
 
 class TestBuildJobCommand:
-    def test_minimal_command(self):
+    def test_minimal_command(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_ARTIFACTS_DIR", raising=False)
         je = _import_job_engine()
         req = _jr(
             provider="anthropic",
@@ -521,7 +522,8 @@ class TestBuildJobCommand:
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
         assert "--output_dir" in cmd
-        assert "/mnt/artifacts" in cmd
+        i = cmd.index("--output_dir")
+        assert cmd[i + 1] == "/mnt"
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
@@ -536,6 +538,14 @@ class TestBuildJobCommand:
         assert "--backoff-jitter" in cmd
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "gpt-4"
+
+    def test_uses_domino_artifacts_dir_when_set(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_ARTIFACTS_DIR", "/mnt/artifacts")
+        je = _import_job_engine()
+        req = _jr(provider="anthropic", code_root="/mnt/code")
+        cmd = je._build_job_command(req, "/path/spec.yaml")
+        i = cmd.index("--output_dir")
+        assert cmd[i + 1] == "/mnt/artifacts"
 
     def test_notebook_unchecked_omits_flag(self):
         je = _import_job_engine()
@@ -783,7 +793,8 @@ class TestValidateJobInputs:
 
 class TestSubmitDominoJob:
     @pytest.mark.asyncio
-    async def test_calls_domino_without_job_store(self, _mock_studio):
+    async def test_calls_domino_without_job_store(self, _mock_studio, monkeypatch):
+        monkeypatch.delenv("DOMINO_ARTIFACTS_DIR", raising=False)
         je = _import_job_engine()
         client = _mock_studio.domino_client
         client.submit_job.return_value = "run-abc"
@@ -800,7 +811,7 @@ class TestSubmitDominoJob:
         assert url == "https://domino/jobs/run-abc"
         client.submit_job.assert_called_once()
         cmd = client.submit_job.call_args[0][0]
-        assert "/mnt/artifacts" in cmd
+        assert "--output_dir /mnt" in cmd
         client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
 
     @pytest.mark.asyncio
