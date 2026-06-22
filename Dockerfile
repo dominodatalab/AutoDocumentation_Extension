@@ -19,7 +19,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 USER root
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates \
+  && apt-get install -y --no-install-recommends git ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p "/home/$DOMINO_USER"
