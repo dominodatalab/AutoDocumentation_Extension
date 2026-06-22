@@ -6,7 +6,7 @@ Model Docs generates Word documents and Jupyter notebooks for your ML models. Op
 
 - Model Docs must be installed on your project (Extensions in the left sidebar).
 - Your project needs registered models, code, or MLflow experiments to document.
-- LLM API keys must be set on the compute environment used for generation jobs.
+- LLM API keys must be set on the as project or user environment variables used for generation jobs. ANTHROPIC_API_KEY and OPENAI_API_KEY are supported (see Advanced Options)
 
 ## 1. Open Model Docs
 
