@@ -1,6 +1,6 @@
 LABEL maintainer="Domino Data Lab"
 LABEL description="Auto Model Docs extension environment for Domino Data Lab"
-ARG EXTENSION_VERSION=${EXTENSION_VERSION:-main}
+ARG EXTENSION_VERSION=main
 LABEL version=$EXTENSION_VERSION
 
 ARG GITHUB_ORG=dominodatalab
@@ -12,7 +12,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ENV DOMINO_USER=$DUSER
 ENV DOMINO_GROUP=$DGROUP
-ENV APP_WORK_DIR="/home/${DOMINO_USER:-domino}"
+ENV APP_WORK_DIR="/home/$DOMINO_USER"
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -22,7 +22,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /home/${DOMINO_USER:-domino}
+RUN mkdir -p "/home/$DOMINO_USER"
 
 # Ensure the DOMINO_USER/DOMINO_GROUP exists inside the container.
 RUN if ! id 12574 >/dev/null 2>&1; then \

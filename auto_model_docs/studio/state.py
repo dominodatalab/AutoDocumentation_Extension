@@ -102,6 +102,7 @@ class JobRequest:
     notebook_from_cache: bool
     bundle_id: str = ""
     governance_api_host: str = ""
+    branch: str = ""
 
 
 @dataclass

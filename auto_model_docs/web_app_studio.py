@@ -76,6 +76,23 @@ def _build_advanced_options(tier_options):
     return Div(
             Div(
                 Div(
+                    Label("Branch", for_="field-branch"),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Git branch for the Domino job. Leave blank to use the project default."),
+                    cls="label-row",
+                ),
+                Input(
+                    name="branch",
+                    id="field-branch",
+                    type="text",
+                    autocomplete="off",
+                ),
+                cls="field",
+                id="branch-field",
+                style="display:none",
+            ),
+
+            Div(
+                Div(
                     Label("Code path", for_="field-code_path"),
                     Span("\u24d8", cls="info-tooltip", data_tooltip="Path to the source code to be documented."),
                     cls="label-row",
