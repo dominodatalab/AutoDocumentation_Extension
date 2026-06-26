@@ -594,6 +594,11 @@ async def index(req: Request):
                             cls="adv-opts-link",
                         ),
                         Div(
+                            Span(
+                                "Environment variables ANTHROPIC_API_KEY or OPENAI_API_KEY required.",
+                                id="llm-provider-notice",
+                                cls="wizard-llm-notice",
+                            ),
                             Div(id="wizard-error", cls="wizard-error", style="display:none"),
                             Button(
                                 "Generate Documentation",

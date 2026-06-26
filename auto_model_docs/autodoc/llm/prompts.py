@@ -1,136 +1,71 @@
-"""Centralized LLM prompts for Auto Model Documentation.
-
-This module contains all prompts used throughout the system,
-making it easy to review, update, and maintain them in one place.
-"""
+"""LLM prompt builders and JSON schemas for Auto Model Documentation."""
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
+from autodoc.llm.prompt_templates import (
+    CHART_PROMPT_TEMPLATE,
+    CODE_ANALYSIS_PROMPT_TEMPLATE,
+    GOVERNANCE_ANTI_FABRICATION,
+    GOVERNANCE_SYSTEM_NOTE,
+    LIST_PROMPT_TEMPLATE,
+    NARRATIVE_PROMPT_TEMPLATE,
+    RANKING_PROMPT_TEMPLATE,
+    SECTION_PLANNING_PROMPT_TEMPLATE,
+    SYSTEM_NARRATIVE_WRITER,
+    TABLE_PROMPT_TEMPLATE,
+)
+from autodoc.llm.prompt_templates import (
+    SYSTEM_CHART_GENERATOR,
+    SYSTEM_CODE_ANALYZER,
+    SYSTEM_FILE_RANKER,
+    SYSTEM_LIST_GENERATOR,
+    SYSTEM_SECTION_PLANNER,
+    SYSTEM_TABLE_GENERATOR,
+)
+
+__all__ = [
+    "CHART_SCHEMA",
+    "CODE_ANALYSIS_SCHEMA",
+    "GOVERNANCE_ANTI_FABRICATION",
+    "GOVERNANCE_SYSTEM_NOTE",
+    "LIST_SCHEMA",
+    "RANKING_SCHEMA",
+    "SECTION_PLANNING_SCHEMA",
+    "SYSTEM_CHART_GENERATOR",
+    "SYSTEM_CODE_ANALYZER",
+    "SYSTEM_FILE_RANKER",
+    "SYSTEM_LIST_GENERATOR",
+    "SYSTEM_NARRATIVE_WRITER",
+    "SYSTEM_SECTION_PLANNER",
+    "SYSTEM_TABLE_GENERATOR",
+    "TABLE_SCHEMA",
+    "build_chart_prompt",
+    "build_code_analysis_prompt",
+    "build_list_prompt",
+    "build_narrative_prompt",
+    "build_ranking_prompt",
+    "build_section_planning_prompt",
+    "build_table_prompt",
+    "narrative_system_prompt",
+]
+
 if TYPE_CHECKING:
-    from autodoc.core.models import ComputedPolicy, LanguageProfile
+    from autodoc.core.models import LanguageProfile
     from autodoc.scanning.file_card import FileCard
 
-
-# =============================================================================
-# System Prompts
-# =============================================================================
-
-SYSTEM_CODE_ANALYZER = (
-    "You are an expert at analyzing machine learning code. "
-    "Extract only information that is explicitly present in the provided code. "
-    "Do not infer, assume, or fabricate any techniques, libraries, or methods not directly shown in the code."
-)
-
-SYSTEM_SECTION_PLANNER = (
-    "You are a technical documentation expert. "
-    "Plan content blocks based only on data that is actually available in the provided context. "
-    "Do not plan content that would require fabricating metrics or methodologies."
-)
-
-SYSTEM_NARRATIVE_WRITER = (
-    "You are a technical documentation writer. "
-    "Write clear, informative content about machine learning models. "
-    "Explain the 'why' behind technical decisions, not just the 'what'. "
-    "Do not repeat information that would typically be covered in other sections. "
-    "When referencing specific metrics, parameters, or code, include citation markers using the format [@citation_id] where citation_id is provided in the evidence sections."
-)
-
-SYSTEM_TABLE_GENERATOR = (
-    "You are a technical documentation expert. "
-    "Generate informative tables for ML documentation. "
-    "Include a citation marker [@citation_id] in the table caption when the data comes from a specific source."
-)
-
-SYSTEM_CHART_GENERATOR = (
-    "You are a data visualization expert. "
-    "Generate meaningful chart data. "
-    "Include a citation marker [@citation_id] in the chart title when the data comes from a specific source."
-)
-
-SYSTEM_LIST_GENERATOR = (
-    "You are a technical documentation expert. "
-    "Generate clear, informative list items. "
-    "Include citation markers [@citation_id] when list items reference specific data sources."
-)
-
-GOVERNANCE_SYSTEM_NOTE = (
-    "Treat the Governance Evidence block as the authoritative source for governance facts "
-    "(risk tier, intended use, validation status, approval state, findings); never override "
-    "it with inferences. Some documents cover a model's development history (several candidate "
-    "models and versions) plus governed model(s) of record; governance facts describe only the "
-    "governed model(s). When multiple models appear, always name which model a governance "
-    "statement refers to, so a risk tier, approval, or finding never reads as if it applies "
-    "to a development candidate."
-)
-
-GOVERNANCE_ANTI_FABRICATION = """
-- Any model risk classification, validation status, regulatory mapping, approval state, or
-  intended-use claim must come VERBATIM from the Governance Evidence block above. Do not infer
-  these from code or MLflow. Cite them with [@governance.*]/[@evidence.*].
-- When you state or rely on an open finding, cite it with [@finding.*]. Do not invent findings.
-- Do not fabricate evidence answers; if a fact is not in the Governance Evidence block, omit it.
-- Do not use one source to override or "correct" another. If code and governance evidence
-  describe the same attribute differently (e.g. model type, feature count), present BOTH
-  with their citations and note the discrepancy explicitly:
-  "The code implements XGBoost [@code.x], while the governance record states logistic
-  regression [@evidence.model_type]. This discrepancy should be reviewed."
-- Do not fabricate a reconciliation. Do not silently choose one source.
-- Discrepancies of this kind are significant governance observations, not editorial problems.
-
-Model of record vs development candidates:
-- This document may describe several models from the MLflow development history. The governed
-  model(s) of record are named in [@governance.model_of_record]. Every governance fact above
-  — risk tier, intended use, validation status, approval state, findings — applies ONLY to
-  those governed model(s). Never attach a governance fact to any other model.
-- The other models are development candidates: experiments and prior versions explored on the
-  way to promotion. Document them from code and MLflow evidence only. Do NOT state or imply
-  they carry a risk classification, approval, or governance status. Their absence of
-  governance data is expected (they were never promoted), not a gap to flag.
-- Whenever you state a governance fact and more than one model appears in the document, name
-  the governed model(s) explicitly so the reader cannot confuse them with a candidate. For
-  example: "The model of record, churn-model v3 [@governance.model_of_record], is classified
-  High risk [@governance.risk_tier]." Never write an unattributed "the model is High risk"
-  when multiple models appear.
-""".strip()
-
-SYSTEM_FILE_RANKER = (
-    "You are an expert at analyzing ML codebases. "
-    "Classify files by their role in the ML pipeline and rank them by documentation importance. "
-    "Only classify based on the evidence in the file cards provided."
-)
-
-
-# =============================================================================
-# File Ranking Prompts (Stage 2)
-# =============================================================================
 
 def build_ranking_prompt(
     file_cards: List["FileCard"],
     profile: Optional["LanguageProfile"] = None,
 ) -> str:
-    """Build prompt for ranking files by ML relevance.
-
-    Args:
-        file_cards: List of FileCard objects with extracted metadata.
-        profile: Language profile for framework hints.
-
-    Returns:
-        Formatted prompt string for LLM ranking.
-    """
     cards_text = "\n\n".join(card.to_prompt_text() for card in file_cards)
-
     framework_line = ""
     if profile:
         framework_line = f"\nLanguage: {profile.display_name}\n{profile.framework_hints}"
-
-    return f"""Analyze the following file cards from an ML codebase and rank them by importance for documentation.
-{framework_line}
-
-{cards_text}
-
-For each file, classify its role as one of: entrypoint, training, preprocessing, inference, evaluation, config, utility, irrelevant.
-
-Return the files ranked by documentation importance (most important first). Include only files that are relevant to ML model documentation (exclude irrelevant utility/config files that don't relate to the ML pipeline)."""
+    return RANKING_PROMPT_TEMPLATE.format(
+        framework_line=framework_line,
+        cards_text=cards_text,
+    )
 
 
 RANKING_SCHEMA: Dict[str, Any] = {
@@ -164,25 +99,11 @@ RANKING_SCHEMA: Dict[str, Any] = {
 }
 
 
-# =============================================================================
-# Code Scanner Prompts
-# =============================================================================
-
 def build_code_analysis_prompt(
     code_contents: List[Dict[str, str]],
     profile: Optional["LanguageProfile"] = None,
     file_roles: Optional[Dict[str, str]] = None,
 ) -> str:
-    """Build prompt for analyzing ML codebase.
-
-    Args:
-        code_contents: List of dicts with 'file' and 'content' keys.
-        profile: Language profile for code-fence and framework hints.
-        file_roles: Optional dict mapping file paths to ML roles from ranking.
-
-    Returns:
-        Formatted prompt string.
-    """
     fence_lang = profile.code_fence_lang if profile else "python"
     parts = []
     for c in code_contents:
@@ -192,7 +113,6 @@ def build_code_analysis_prompt(
         parts.append(f"### File: {c['file']}{role_hint}\n```{fence_lang}\n{c['content']}\n```")
     code_text = "\n\n".join(parts)
 
-    # Language-specific framework and library hints
     if profile:
         framework_line = f"\n\nLanguage: {profile.display_name}\n{profile.framework_hints}"
         lib_examples = ", ".join(profile.library_examples)
@@ -202,30 +122,12 @@ def build_code_analysis_prompt(
         lib_examples = "sklearn, xgboost, tensorflow, pytorch"
         transform_cats = "scaling, encoding, feature engineering"
 
-    return f"""Analyze this machine learning codebase and extract information.
-{framework_line}
-
-{code_text}
-
-Extract the following information:
-1. Model classes/functions used (e.g., {lib_examples}, etc.)
-2. Feature names/columns used in the model
-3. Target variable name
-4. Data transformations ({transform_cats}, etc.)
-5. ML task type (classification, regression, clustering, etc.)
-6. Hyperparameters and their values
-7. Data sources (files, databases, APIs)
-8. Any other insights about the model architecture and training
-9. Evidence statements that tie conclusions to specific code locations
-
-CRITICAL INSTRUCTIONS:
-- ONLY report techniques, methods, and libraries that are EXPLICITLY present in the code above
-- Do NOT infer or assume techniques that are not imported or used in the code
-- If you see imbalanced data handling (like class_weight or scale_pos_weight), report ONLY what is actually used
-- Do NOT claim SMOTE, cross-validation, or other techniques unless they are explicitly imported and used
-- For the "insights" field, only describe what is demonstrably in the code - no assumptions or common practices
-- For "code_evidence", provide concise statements that can be quoted in the report.
-- Each evidence item must include: statement, file path, symbol (class/function name), and a short code snippet that demonstrates the claim."""
+    return CODE_ANALYSIS_PROMPT_TEMPLATE.format(
+        framework_line=framework_line,
+        code_text=code_text,
+        lib_examples=lib_examples,
+        transform_cats=transform_cats,
+    )
 
 
 CODE_ANALYSIS_SCHEMA: Dict[str, Any] = {
@@ -296,10 +198,6 @@ CODE_ANALYSIS_SCHEMA: Dict[str, Any] = {
 }
 
 
-# =============================================================================
-# Section Planner Prompts
-# =============================================================================
-
 def build_section_planning_prompt(
     section_name: str,
     hint: Optional[str],
@@ -314,66 +212,22 @@ def build_section_planning_prompt(
     artifacts_info: str = "",
     governance_evidence: str = "",
 ) -> str:
-    """Build prompt for planning section content.
-
-    Args:
-        section_name: Name of the section.
-        hint: Optional user guidance for this section.
-        model_name: Specific model name (for per-model sections).
-        model_classes: Comma-separated ML framework/model names.
-        ml_task_type: Type of ML task.
-        features_preview: Preview of feature names.
-        target_variable: Target variable name.
-        registered_models: Comma-separated registered model names.
-        data_sources: Comma-separated data source names.
-        metrics_info: Optional metrics information string.
-        artifacts_info: Optional MLflow artifacts information string.
-
-    Returns:
-        Formatted prompt string.
-    """
     model_line = f"\n## Specific Model: {model_name}" if model_name else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-
-    return f"""Plan content for a model documentation section.
-
-## Section: {section_name}
-## User Guidance: {hint or 'None provided'}{model_line}
-
-## Project Context
-- ML Framework/Models: {model_classes}
-- ML Task Type: {ml_task_type}
-- Features: {features_preview}
-- Target Variable: {target_variable}
-- Registered Models: {registered_models}{metrics_info}{artifacts_info}
-- Data Sources: {data_sources}{governance_section}
-
-## Task
-Determine what content blocks this section should contain to create useful documentation.
-
-Content block types available:
-- chart: Visual representation (bar, line, or scatter)
-- table: Structured data in rows and columns
-- narrative: Explanatory paragraphs (2-4 paragraphs)
-- bullet_list: Bulleted list of items
-- numbered_list: Numbered/ordered list of steps
-- image: Embedded MLflow visualization (feature importance plots, confusion matrices, etc.)
-
-CRITICAL: Only plan content blocks that can be generated from the data provided above.
-- Do NOT request tables or charts of metrics that are not explicitly listed in the context
-- Do NOT request content about cross-validation unless CV metrics are provided
-- Do NOT request visualizations of data that doesn't exist
-- Do NOT create both a table and chart showing the same data - choose the most effective format
-- If limited data is available, plan fewer content blocks focused on what IS known
-- For performance metrics: Use "chart" type to visualize numeric metrics (accuracy, precision, recall, etc.)
-- Use "image" type ONLY when specific image artifacts are listed in the artifacts_info above (e.g., confusion_matrix.png, feature_importance.png)
-- If metrics are available but no image artifacts, use "chart" to create bar charts showing metric values
-- Do NOT request image artifacts that are not explicitly listed in the artifacts_info above
-- For "image" blocks: Include a descriptive "title" in the specifics object that adds context beyond the filename
-  (e.g., "Feature Importance - XGBoost Credit Risk Model" instead of just "Feature Importance").
-  Include the model name, task context, or relevant metric when available.
-
-Consider what would be most valuable for documenting this section. Prefer visual content (images, charts, tables) when data allows. Include 2-4 content blocks."""
+    return SECTION_PLANNING_PROMPT_TEMPLATE.format(
+        section_name=section_name,
+        user_guidance=hint or "None provided",
+        model_line=model_line,
+        model_classes=model_classes,
+        ml_task_type=ml_task_type,
+        features_preview=features_preview,
+        target_variable=target_variable,
+        registered_models=registered_models,
+        metrics_info=metrics_info,
+        artifacts_info=artifacts_info,
+        data_sources=data_sources,
+        governance_section=governance_section,
+    )
 
 
 SECTION_PLANNING_SCHEMA: Dict[str, Any] = {
@@ -422,10 +276,6 @@ SECTION_PLANNING_SCHEMA: Dict[str, Any] = {
 }
 
 
-# =============================================================================
-# Content Generator Prompts
-# =============================================================================
-
 def _governance_instructions(governance_evidence: str) -> str:
     if not governance_evidence:
         return ""
@@ -455,62 +305,30 @@ def build_narrative_prompt(
     mlflow_evidence: str = "",
     governance_evidence: str = "",
 ) -> str:
-    """Build prompt for generating narrative content.
-
-    Args:
-        section_name: Name of the section.
-        purpose: Purpose of this content block.
-        data_needed: What data should be included.
-        model_classes: Comma-separated model class names.
-        ml_task_type: Type of ML task.
-        target_variable: Target variable name.
-        features: Comma-separated feature names.
-        data_sources: Comma-separated data source names.
-        model_name: Specific model name (optional).
-        model_info: Additional model metrics info.
-        insights: Additional insights from code analysis.
-        artifact_data: Parsed artifact data (feature importance, reports, etc.).
-
-    Returns:
-        Formatted prompt string.
-    """
     data_line = f"\n## Data Needed: {data_needed}" if data_needed else ""
     model_line = f"\n- Specific Model: {model_name}" if model_name else ""
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-
-    return f"""Write professional documentation content.
-
-## Section: {section_name}
-## Purpose: {purpose}{data_line}
-
-## Context
-- Model Type: {model_classes}
-- ML Task: {ml_task_type}
-- Target: {target_variable}
-- Features: {features}
-- Data Sources: {data_sources}{model_line}{model_info}
-
-## Additional Context
-{insights or "No additional insights available."}{artifact_section}{code_section}{mlflow_section}{governance_section}
-
-## Instructions
-- Write 2-4 paragraphs of clear, professional prose
-- Focus on insights and explanations, not just listing facts
-- Explain the "why" behind decisions, not just the "what"
-- Use a formal but accessible tone
-- Do NOT use markdown formatting (no headers, bullets, or bold)
-- Do NOT include a title or heading
-- Just write the paragraph content directly
-- When you reference specific metrics, code, or MLflow data, include a citation using the format [@citation_id] where the citation_id comes from the evidence sections above
-- Only cite when making specific factual claims from the evidence - do not over-cite{_governance_instructions(governance_evidence)}
-
-CRITICAL: Only describe metrics, results, and methodologies that are explicitly mentioned in the context above.
-If cross-validation or other specific techniques are not mentioned in the context, do NOT claim they were performed.
-If specific metrics are not provided, do not invent values - instead note what metrics are available.
-Do NOT fabricate, estimate, or invent any metrics, statistics, or numerical values."""
+    return NARRATIVE_PROMPT_TEMPLATE.format(
+        section_name=section_name,
+        purpose=purpose,
+        data_line=data_line,
+        model_classes=model_classes,
+        ml_task_type=ml_task_type,
+        target_variable=target_variable,
+        features=features,
+        data_sources=data_sources,
+        model_line=model_line,
+        model_info=model_info,
+        insights=insights or "No additional insights available.",
+        artifact_section=artifact_section,
+        code_section=code_section,
+        mlflow_section=mlflow_section,
+        governance_section=governance_section,
+        governance_instructions=_governance_instructions(governance_evidence),
+    )
 
 
 def build_table_prompt(
@@ -526,47 +344,24 @@ def build_table_prompt(
     mlflow_evidence: str = "",
     governance_evidence: str = "",
 ) -> str:
-    """Build prompt for generating table content.
-
-    Args:
-        purpose: Purpose of this table.
-        data_needed: What data should be included.
-        features: Comma-separated feature names.
-        model_classes: Comma-separated model class names.
-        transformations: Transformation info string.
-        hyperparameters: Hyperparameters info string.
-        metrics_info: Optional metrics information.
-        artifact_data: Parsed artifact data (feature importance, etc.).
-
-    Returns:
-        Formatted prompt string.
-    """
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-
-    return f"""Generate a data table for documentation.
-
-## Purpose: {purpose}
-## Data Needed: {data_needed or "Relevant data for this section"}
-
-## Available Context
-- Features: {features}
-- Model Classes: {model_classes}
-- Transformations: {transformations}
-- Hyperparameters: {hyperparameters}{metrics_info}{artifact_section}
-{code_section}{mlflow_section}{governance_section}
-
-CRITICAL INSTRUCTIONS:
-- ONLY include metrics and values that are explicitly provided in the "Available Context" above
-- Do NOT fabricate, estimate, or invent any metrics, statistics, or numerical values
-- Do NOT generate cross-validation metrics unless CV results are explicitly provided above
-- If specific data is not available, either omit that row/column or mark it as "Not Available"
-- Use the exact metric values provided - do not round, estimate, or modify them
-- Include a citation marker [@citation_id] in the table caption referencing the data source from the evidence sections above{_governance_instructions(governance_evidence)}
-
-Generate a useful table with 3-10 rows using ONLY the data provided above."""
+    return TABLE_PROMPT_TEMPLATE.format(
+        purpose=purpose,
+        data_needed=data_needed or "Relevant data for this section",
+        features=features,
+        model_classes=model_classes,
+        transformations=transformations,
+        hyperparameters=hyperparameters,
+        metrics_info=metrics_info,
+        artifact_section=artifact_section,
+        code_section=code_section,
+        mlflow_section=mlflow_section,
+        governance_section=governance_section,
+        governance_instructions=_governance_instructions(governance_evidence),
+    )
 
 
 TABLE_SCHEMA: Dict[str, Any] = {
@@ -603,53 +398,23 @@ def build_chart_prompt(
     mlflow_evidence: str = "",
     governance_evidence: str = "",
 ) -> str:
-    """Build prompt for generating chart data.
-
-    Args:
-        purpose: Purpose of this chart.
-        data_needed: What data should be visualized.
-        chart_type: Type of chart (bar, line, scatter).
-        model_classes: Comma-separated model class names.
-        ml_task_type: Type of ML task.
-        metrics_hint: Optional actual metrics available.
-        artifact_data: Parsed artifact data (feature importance, etc.).
-
-    Returns:
-        Formatted prompt string.
-    """
     artifact_section = f"\n\n## Available Artifact Data\n{artifact_data}" if artifact_data else ""
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-
-    return f"""Generate data for a {chart_type} chart.
-
-## Purpose: {purpose}
-## Data Needed: {data_needed or "Relevant data for visualization"}{metrics_hint}{artifact_section}
-
-## Context
-- Model Type: {model_classes}
-- ML Task: {ml_task_type}
-{code_section}{mlflow_section}{governance_section}
-
-## Instructions for Chart Generation:
-1. If metrics are provided above (e.g., "roc_auc: 0.6903", "precision: 0.2399"), use them as:
-   - labels: The metric names (e.g., ["ROC-AUC", "Precision", "Recall", "F1-Score"])
-   - values: The metric values (e.g., [0.6903, 0.2399, 0.3844, 0.2956])
-   - title: A descriptive title like "Model Performance Metrics"
-
-2. For performance charts specifically, focus on test/validation metrics (not training metrics).
-
-3. If feature importance data is provided, create a chart of top features.
-
-CRITICAL: Only visualize data that is explicitly provided above.
-Do NOT fabricate or estimate any values. If NO metrics are provided above, return:
-- title: ""
-- labels: []
-- values: []
-
-Provide labels and values for the chart using ONLY the data provided above.
-Include a citation marker [@citation_id] in the chart title referencing the data source from the evidence sections above.{_governance_instructions(governance_evidence)}"""
+    return CHART_PROMPT_TEMPLATE.format(
+        chart_type=chart_type,
+        purpose=purpose,
+        data_needed=data_needed or "Relevant data for visualization",
+        metrics_hint=metrics_hint,
+        artifact_section=artifact_section,
+        model_classes=model_classes,
+        ml_task_type=ml_task_type,
+        code_section=code_section,
+        mlflow_section=mlflow_section,
+        governance_section=governance_section,
+        governance_instructions=_governance_instructions(governance_evidence),
+    )
 
 
 CHART_SCHEMA: Dict[str, Any] = {
@@ -683,39 +448,18 @@ def build_list_prompt(
     mlflow_evidence: str = "",
     governance_evidence: str = "",
 ) -> str:
-    """Build prompt for generating list content.
-
-    Args:
-        purpose: Purpose of this list.
-        data_needed: What items should be included.
-        model_classes: Comma-separated model class names.
-        ml_task_type: Type of ML task.
-        features: Comma-separated feature names.
-
-    Returns:
-        Formatted prompt string.
-    """
     governance_section = f"\n{governance_evidence}" if governance_evidence else ""
-
-    return f"""Generate a list for documentation.
-
-## Purpose: {purpose}
-## Data Needed: {data_needed or "Relevant items for this list"}
-
-## Context
-- Model Type: {model_classes}
-- ML Task: {ml_task_type}
-- Features: {features}
-{code_evidence}
-{mlflow_evidence}{governance_section}
-
-CRITICAL: Only include information that is explicitly provided in the context above.
-Do NOT fabricate metrics, statistics, or claim methodologies that are not mentioned.
-If specific data is not available, focus on what IS known from the context.
-
-Generate a descriptive title for this list (e.g., "Key Limitations", "Recommended Actions", "Implementation Steps")
-and 5-10 concise, informative items using ONLY the data provided above.
-When list items reference specific data from the evidence sections, include citation markers using [@citation_id] format.{_governance_instructions(governance_evidence)}"""
+    return LIST_PROMPT_TEMPLATE.format(
+        purpose=purpose,
+        data_needed=data_needed or "Relevant items for this list",
+        model_classes=model_classes,
+        ml_task_type=ml_task_type,
+        features=features,
+        code_evidence=code_evidence,
+        mlflow_evidence=mlflow_evidence,
+        governance_section=governance_section,
+        governance_instructions=_governance_instructions(governance_evidence),
+    )
 
 
 LIST_SCHEMA: Dict[str, Any] = {
@@ -733,5 +477,5 @@ LIST_SCHEMA: Dict[str, Any] = {
             "maxItems": 15,
         },
     },
-    "required": ["items"],  # title optional for backward compatibility
+    "required": ["items"],
 }

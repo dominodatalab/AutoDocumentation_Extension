@@ -40,3 +40,12 @@ def test_index_shows_job_store_config_error_without_datasets_env(monkeypatch):
     assert "Job history not configured" in resp.text
     assert "DOMINO_DATASETS_DIR" in resp.text
 
+
+def test_index_shows_llm_api_key_notice(monkeypatch, tmp_path):
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(tmp_path / "domino_datasets"))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "autodoc-extension")
+    with TestClient(web_app_studio.app) as client:
+        resp = client.get("/?projectId=proj-123")
+    assert resp.status_code == 200
+    assert "Environment variables ANTHROPIC_API_KEY or OPENAI_API_KEY required." in resp.text
+

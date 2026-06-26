@@ -2525,6 +2525,12 @@ select.hw-tier-select option {
     align-items: center;
     gap: 0.75rem;
 }
+.wizard-llm-notice {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #5c6370);
+    font-style: italic;
+    margin-right: 0.25rem;
+}
 
 /* ── Template gallery (2-column card grid) ────────────────────────── */
 .template-gallery {

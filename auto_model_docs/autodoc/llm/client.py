@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from autodoc.core.exceptions import LLMError
+from autodoc.llm.prompt_templates import DEFAULT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class LLMClient:
     async def complete(
         self,
         prompt: str,
-        system: str = "You are a technical documentation expert.",
+        system: str = DEFAULT_SYSTEM_PROMPT,
         max_tokens: int = 4096,
         temperature: float = 0.7,
     ) -> LLMResponse:
@@ -154,7 +155,7 @@ class LLMClient:
         self,
         prompt: str,
         schema: Dict[str, Any],
-        system: str = "You are a technical documentation expert.",
+        system: str = DEFAULT_SYSTEM_PROMPT,
         max_tokens: int = 4096,
     ) -> Dict[str, Any]:
         """Generate structured JSON output.
