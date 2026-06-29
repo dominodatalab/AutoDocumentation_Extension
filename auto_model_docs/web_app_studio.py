@@ -127,7 +127,7 @@ def _build_advanced_options(tier_options):
                 Label("Provider", for_="field-provider"),
                 Select(
                     Option("Anthropic", value="anthropic"),
-                    Option("OpenAI (Compatible)", value="openai", selected=True),
+                    Option("OpenAI (and compatible)", value="openai", selected=True),
                     name="provider",
                     id="field-provider",
                     onchange="toggleOpenAIFields(this.value)",
@@ -313,12 +313,12 @@ async def index(req: Request):
                     spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=snap_id)
                 else:
                     spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
-        except Exception as exc:
+        except Exception:
             page_warnings.append(
                 EnvironmentWarning(
                     level="error",
-                    message="Could not create or access the autodoc dataset for this project.",
-                    action=str(exc) or "Check permissions and try again.",
+                    message="Access to this project's Datasets is required.",
+                    action="Ask the project owner for access, or contact your administrator.",
                 )
             )
 

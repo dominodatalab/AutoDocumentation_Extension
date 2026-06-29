@@ -79,7 +79,7 @@ def _validate_environment() -> list:
     if not code_root.exists() or code_root == Path("."):
         warnings.append(EnvironmentWarning(
             level="warning",
-            message="Code directory not found at /mnt/code.",
+            message="Code directory not found.",
             action="Documents will be generated from MLflow artifacts only.",
         ))
 
@@ -95,7 +95,7 @@ def _validate_environment() -> list:
         warnings.append(EnvironmentWarning(
             level="warning",
             message="Domino API host not configured.",
-            action="Job submission may fail. Set DOMINO_API_HOST.",
+            action="Job submission may fail.",
         ))
 
     # Output and cache are managed via DatasetStore — no local directories needed.
