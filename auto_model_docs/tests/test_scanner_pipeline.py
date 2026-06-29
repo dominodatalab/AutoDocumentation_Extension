@@ -112,6 +112,7 @@ class TestStage1FileCards:
 # ── Stage 2: LLM ranking with fallback ───────────────────────────
 
 class TestStage2Ranking:
+    @pytest.mark.asyncio
     async def test_llm_ranking_success(self, tmp_code_root, sanitizer, mock_llm):
         mock_llm.complete_json.return_value = {
             "ranked_files": [
@@ -131,6 +132,7 @@ class TestStage2Ranking:
         assert ranked_paths[0] == "train.py"
         assert roles["train.py"] == "training"
 
+    @pytest.mark.asyncio
     async def test_heuristic_fallback_on_llm_failure(self, tmp_code_root, sanitizer, mock_llm):
         mock_llm.complete_json.side_effect = Exception("LLM unavailable")
 
@@ -145,6 +147,7 @@ class TestStage2Ranking:
         # Should fall back to heuristic sort (all card paths returned)
         assert len(ranked_paths) == len(cards)
 
+    @pytest.mark.asyncio
     async def test_heuristic_fallback_on_malformed_json(self, tmp_code_root, sanitizer, mock_llm):
         mock_llm.complete_json.return_value = {"ranked_files": []}
 
@@ -163,6 +166,7 @@ class TestStage2Ranking:
 # ── Stage 3: Batched deep analysis ───────────────────────────────
 
 class TestStage3BatchAnalysis:
+    @pytest.mark.asyncio
     async def test_batch_grouping(self, tmp_code_root, sanitizer, mock_llm):
         mock_llm.complete_json.return_value = {
             "model_classes": ["XGBClassifier"],
@@ -184,6 +188,7 @@ class TestStage3BatchAnalysis:
         assert len(results) == 2
         assert skipped == []
 
+    @pytest.mark.asyncio
     async def test_partial_failure(self, tmp_code_root, sanitizer, mock_llm):
         call_count = 0
 
@@ -212,6 +217,7 @@ class TestStage3BatchAnalysis:
         assert len(results) == 1
         assert len(skipped) > 0
 
+    @pytest.mark.asyncio
     async def test_all_batches_fail(self, tmp_code_root, sanitizer, mock_llm):
         mock_llm.complete_json.side_effect = Exception("All fail")
 

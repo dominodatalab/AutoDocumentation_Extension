@@ -247,7 +247,7 @@ async def index(req: Request):
             """),
             Div(Div(NotStr(_LOGO_SVG), cls="domino-header-inner"), cls="domino-header"),
             Div(
-                Div(Div(Span("Resolving project...", cls="bootstrap-status-text"), cls="bootstrap-status-wrap")),
+                Div(Div(Span("Fetching project details...", cls="bootstrap-status-text"), cls="bootstrap-status-wrap")),
                 Div(
                     Div(
                         H2("Project ID required"),
@@ -595,7 +595,7 @@ async def index(req: Request):
                         ),
                         Div(
                             Span(
-                                "Environment variables ANTHROPIC_API_KEY or OPENAI_API_KEY required.",
+                                "Uses the LLM provider selected in Advanced options. Environment variables ANTHROPIC_API_KEY or OPENAI_API_KEY required.",
                                 id="llm-provider-notice",
                                 cls="wizard-llm-notice",
                             ),

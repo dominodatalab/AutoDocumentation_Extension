@@ -54,6 +54,7 @@ class JobRequest:
     bundle_id: str = ""
     governance_api_host: str = ""
     branch: str = ""
+    prompts_file: str = ""
 
 
 _JR_DEFAULTS = {
@@ -84,6 +85,7 @@ _JR_DEFAULTS = {
     "bundle_id": "",
     "governance_api_host": "",
     "branch": "",
+    "prompts_file": "",
 }
 
 

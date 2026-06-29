@@ -189,7 +189,7 @@ def resolve_project(project_id: str) -> Optional[ProjectInfo]:
         return info
 
     except Exception:
-        logger.exception("Error resolving project %s", project_id)
+        logger.exception("Error fetching project details for project id %s", project_id)
         return None
 
 

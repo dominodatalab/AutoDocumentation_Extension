@@ -230,6 +230,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         bundle_id: str = ""
         governance_api_host: str = ""
         branch: str = ""
+        prompts_file: str = ""
 
     @dataclass
     class DominoJobRecord:

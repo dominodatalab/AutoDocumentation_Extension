@@ -53,6 +53,7 @@ def file_contents():
 # ── Regression: annotation removed ───────────────────────────────
 
 class TestAnnotationRemoved:
+    @pytest.mark.asyncio
     async def test_batch_sends_raw_code_without_line_numbers(
         self, tmp_path, sanitizer, mock_llm
     ):
