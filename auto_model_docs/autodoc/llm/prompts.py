@@ -2,32 +2,13 @@
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from autodoc.llm.prompt_templates import (
-    CHART_PROMPT_TEMPLATE,
-    CODE_ANALYSIS_PROMPT_TEMPLATE,
-    GOVERNANCE_ANTI_FABRICATION,
-    GOVERNANCE_SYSTEM_NOTE,
-    LIST_PROMPT_TEMPLATE,
-    NARRATIVE_PROMPT_TEMPLATE,
-    RANKING_PROMPT_TEMPLATE,
-    SECTION_PLANNING_PROMPT_TEMPLATE,
-    SYSTEM_NARRATIVE_WRITER,
-    TABLE_PROMPT_TEMPLATE,
-)
-from autodoc.llm.prompt_templates import (
-    SYSTEM_CHART_GENERATOR,
-    SYSTEM_CODE_ANALYZER,
-    SYSTEM_FILE_RANKER,
-    SYSTEM_LIST_GENERATOR,
-    SYSTEM_SECTION_PLANNER,
-    SYSTEM_TABLE_GENERATOR,
-)
+from autodoc.llm import prompt_loader
 
 __all__ = [
     "CHART_SCHEMA",
     "CODE_ANALYSIS_SCHEMA",
-    "GOVERNANCE_ANTI_FABRICATION",
-    "GOVERNANCE_SYSTEM_NOTE",
+    "GOVERNANCE_INSTRUCTIONS",
+    "GOVERNANCE_NARRATIVE_NOTE",
     "LIST_SCHEMA",
     "RANKING_SCHEMA",
     "SECTION_PLANNING_SCHEMA",
@@ -49,6 +30,34 @@ __all__ = [
     "narrative_system_prompt",
 ]
 
+_EXPORT_ALIASES = {
+    "DEFAULT_SYSTEM_PROMPT": lambda: prompt_loader.system_prompt("default"),
+    "GOVERNANCE_ANTI_FABRICATION": lambda: prompt_loader.governance_text("instructions"),
+    "GOVERNANCE_INSTRUCTIONS": lambda: prompt_loader.governance_text("instructions"),
+    "GOVERNANCE_NARRATIVE_NOTE": lambda: prompt_loader.governance_text("narrative_note"),
+    "GOVERNANCE_SYSTEM_NOTE": lambda: prompt_loader.governance_text("narrative_note"),
+    "RANKING_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("ranking"),
+    "CODE_ANALYSIS_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("code_analysis"),
+    "SECTION_PLANNING_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("section_planning"),
+    "NARRATIVE_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("narrative"),
+    "TABLE_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("table"),
+    "CHART_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("chart"),
+    "LIST_PROMPT_TEMPLATE": lambda: prompt_loader.template_prompt("list"),
+    "SYSTEM_FILE_RANKER": lambda: prompt_loader.system_prompt("ranking"),
+    "SYSTEM_CODE_ANALYZER": lambda: prompt_loader.system_prompt("code_analysis"),
+    "SYSTEM_SECTION_PLANNER": lambda: prompt_loader.system_prompt("section_planning"),
+    "SYSTEM_NARRATIVE_WRITER": lambda: prompt_loader.system_prompt("narrative"),
+    "SYSTEM_TABLE_GENERATOR": lambda: prompt_loader.system_prompt("table"),
+    "SYSTEM_CHART_GENERATOR": lambda: prompt_loader.system_prompt("chart"),
+    "SYSTEM_LIST_GENERATOR": lambda: prompt_loader.system_prompt("list"),
+}
+
+
+def __getattr__(name: str):
+    if name in _EXPORT_ALIASES:
+        return _EXPORT_ALIASES[name]()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 if TYPE_CHECKING:
     from autodoc.core.models import LanguageProfile
     from autodoc.scanning.file_card import FileCard
@@ -62,7 +71,7 @@ def build_ranking_prompt(
     framework_line = ""
     if profile:
         framework_line = f"\nLanguage: {profile.display_name}\n{profile.framework_hints}"
-    return RANKING_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("ranking").format(
         framework_line=framework_line,
         cards_text=cards_text,
     )
@@ -122,7 +131,7 @@ def build_code_analysis_prompt(
         lib_examples = "sklearn, xgboost, tensorflow, pytorch"
         transform_cats = "scaling, encoding, feature engineering"
 
-    return CODE_ANALYSIS_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("code_analysis").format(
         framework_line=framework_line,
         code_text=code_text,
         lib_examples=lib_examples,
@@ -214,7 +223,7 @@ def build_section_planning_prompt(
 ) -> str:
     model_line = f"\n## Specific Model: {model_name}" if model_name else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-    return SECTION_PLANNING_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("section_planning").format(
         section_name=section_name,
         user_guidance=hint or "None provided",
         model_line=model_line,
@@ -279,13 +288,15 @@ SECTION_PLANNING_SCHEMA: Dict[str, Any] = {
 def _governance_instructions(governance_evidence: str) -> str:
     if not governance_evidence:
         return ""
-    return f"\n{GOVERNANCE_ANTI_FABRICATION}\n"
+    return f"\n{prompt_loader.governance_text('instructions')}\n"
 
 
 def narrative_system_prompt(governance_evidence: str = "") -> str:
+    system = prompt_loader.system_prompt("narrative")
     if not governance_evidence:
-        return SYSTEM_NARRATIVE_WRITER
-    return f"{SYSTEM_NARRATIVE_WRITER} {GOVERNANCE_SYSTEM_NOTE}"
+        return system
+    note = prompt_loader.governance_text("narrative_note")
+    return f"{system} {note}"
 
 
 def build_narrative_prompt(
@@ -311,7 +322,7 @@ def build_narrative_prompt(
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-    return NARRATIVE_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("narrative").format(
         section_name=section_name,
         purpose=purpose,
         data_line=data_line,
@@ -348,7 +359,7 @@ def build_table_prompt(
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-    return TABLE_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("table").format(
         purpose=purpose,
         data_needed=data_needed or "Relevant data for this section",
         features=features,
@@ -402,7 +413,7 @@ def build_chart_prompt(
     code_section = f"\n\n{code_evidence}" if code_evidence else ""
     mlflow_section = f"\n\n{mlflow_evidence}" if mlflow_evidence else ""
     governance_section = f"\n\n{governance_evidence}" if governance_evidence else ""
-    return CHART_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("chart").format(
         chart_type=chart_type,
         purpose=purpose,
         data_needed=data_needed or "Relevant data for visualization",
@@ -449,7 +460,7 @@ def build_list_prompt(
     governance_evidence: str = "",
 ) -> str:
     governance_section = f"\n{governance_evidence}" if governance_evidence else ""
-    return LIST_PROMPT_TEMPLATE.format(
+    return prompt_loader.template_prompt("list").format(
         purpose=purpose,
         data_needed=data_needed or "Relevant items for this list",
         model_classes=model_classes,

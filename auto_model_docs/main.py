@@ -190,6 +190,12 @@ console = Console()
     type=click.Choice(["open", "all"], case_sensitive=False),
     help="Findings filter: open (To do only) or all",
 )
+@click.option(
+    "--prompts-file",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to prompts YAML file (default: bundled llm_prompts/prompts.yaml)",
+)
 def main(
     spec: str,
     code_root: str,
@@ -216,6 +222,7 @@ def main(
     bundle_id: str | None,
     governance_api_host: str | None,
     findings_scope: str | None,
+    prompts_file: str | None,
 ) -> None:
     """Generate model documentation from ML codebases.
 
@@ -255,6 +262,14 @@ def main(
             handlers=[logging.StreamHandler()]
         )
 
+        from autodoc.llm.prompt_loader import PromptLoadError, active_prompts, configure_prompts_file
+
+        try:
+            configure_prompts_file(prompts_file)
+        except PromptLoadError as exc:
+            console.print(f"\n[bold red]Error:[/] {exc}", style="red")
+            sys.exit(1)
+
         # Load settings from .env and environment
         settings = Settings()
 
@@ -277,6 +292,8 @@ def main(
             settings.llm_max_backoff = max_backoff
         if backoff_jitter is not None:
             settings.llm_backoff_jitter = backoff_jitter
+        if prompts_file:
+            settings.prompts_file = Path(prompts_file)
         settings.code_root = Path(code_root)
         if max_files:
             settings.max_files = max_files
@@ -324,6 +341,7 @@ def main(
             console.print(f"[dim]Max backoff:[/] {settings.llm_max_backoff}")
             console.print(f"[dim]Backoff jitter:[/] {settings.llm_backoff_jitter}")
             console.print(f"[dim]Timeout:[/] {timeout}s")
+            console.print(f"[dim]Prompts file:[/] {active_prompts().source_path}")
             if experiment_names:
                 console.print(f"[dim]Experiments:[/] {', '.join(experiment_names)}")
             if model_names:

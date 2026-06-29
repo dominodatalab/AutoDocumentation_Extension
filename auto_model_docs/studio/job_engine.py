@@ -190,6 +190,7 @@ async def _parse_request(req: Request) -> JobRequest:
         bundle_id=_form_str(body, "bundle_id"),
         governance_api_host=_form_str(body, "governance_api_host"),
         branch=_branch,
+        prompts_file=_form_str(body, "prompts_file"),
     )
 
 
@@ -254,6 +255,9 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
     if req.verbose:
         command += ["--verbose"]
     bundle_id = (req.bundle_id or "").strip()
+    prompts_path = (req.prompts_file or "").strip()
+    if prompts_path:
+        command += ["--prompts-file", prompts_path]
     if bundle_id:
         command += ["--bundle-id", bundle_id]
         governance_api_host = (req.governance_api_host or "").strip()

@@ -103,6 +103,7 @@ class JobRequest:
     bundle_id: str = ""
     governance_api_host: str = ""
     branch: str = ""
+    prompts_file: str = ""
 
 
 @dataclass

@@ -1,28 +1,25 @@
-from autodoc.llm import prompt_templates as templates
+from autodoc.llm import prompt_loader
 from autodoc.llm.prompts import (
+    GOVERNANCE_INSTRUCTIONS,
+    GOVERNANCE_NARRATIVE_NOTE,
     build_code_analysis_prompt,
     build_narrative_prompt,
     build_ranking_prompt,
 )
 
 
-def test_prompt_templates_are_non_empty():
-    for name in (
-        "DEFAULT_SYSTEM_PROMPT",
-        "SYSTEM_NARRATIVE_WRITER",
-        "GOVERNANCE_ANTI_FABRICATION",
-        "RANKING_PROMPT_TEMPLATE",
-        "CODE_ANALYSIS_PROMPT_TEMPLATE",
-        "NARRATIVE_PROMPT_TEMPLATE",
-    ):
-        value = getattr(templates, name)
-        assert isinstance(value, str)
-        assert value.strip()
+def test_loaded_prompt_sections_are_non_empty():
+    bundle = prompt_loader.active_prompts()
+    for key in prompt_loader.PROMPT_SECTIONS:
+        assert bundle.templates[key].strip()
+        assert bundle.system[key].strip()
+    assert bundle.governance["instructions"].strip()
+    assert bundle.governance["narrative_note"].strip()
 
 
-def test_builders_use_templates():
+def test_builders_use_yaml_templates():
     ranking = build_ranking_prompt([])
-    assert templates.RANKING_PROMPT_TEMPLATE.split("{")[0] in ranking
+    assert prompt_loader.template_prompt("ranking").split("{")[0] in ranking
 
     code_prompt = build_code_analysis_prompt([{"file": "train.py", "content": "x = 1"}])
     assert "Analyze this machine learning codebase" in code_prompt
@@ -42,4 +39,6 @@ def test_builders_use_templates():
         insights="",
     )
     assert "Write professional documentation content." in narrative
-    assert templates.NARRATIVE_PROMPT_TEMPLATE.split("{")[0] in narrative
+    assert prompt_loader.template_prompt("narrative").split("{")[0] in narrative
+    assert GOVERNANCE_INSTRUCTIONS
+    assert GOVERNANCE_NARRATIVE_NOTE

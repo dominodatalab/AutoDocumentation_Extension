@@ -184,6 +184,12 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AUTODOC_MLFLOW_EXPERIMENT_NAME", "MLFLOW_EXPERIMENT_NAME"),
     )
 
+    prompts_file: Optional[Path] = Field(
+        default=None,
+        description="Path to prompts YAML file (default: bundled llm_prompts/prompts.yaml)",
+        validation_alias=AliasChoices("AUTODOC_PROMPTS_FILE", "PROMPTS_FILE"),
+    )
+
     _repo_root = Path(__file__).resolve().parents[3]
     model_config = SettingsConfigDict(
         env_file=str(_repo_root / ".env"),
