@@ -807,7 +807,7 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        rid, url = await je._submit_domino_job(req)
+        rid, url = je._submit_domino_job(req)
         assert rid == "run-abc"
         assert url == "https://domino/jobs/run-abc"
         client.submit_job.assert_called_once()
@@ -829,7 +829,7 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
             branch="feature/docs",
         )
-        await je._submit_domino_job(req)
+        je._submit_domino_job(req)
         assert client.submit_job.call_args.kwargs["branch"] == "feature/docs"
 
     @pytest.mark.asyncio
@@ -837,7 +837,7 @@ class TestSubmitDominoJob:
         je = _import_job_engine()
         req = _jr(provider="anthropic", project_id="proj-123")
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req)
+            je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_launch_failure_propagates(self, _mock_studio):
@@ -852,7 +852,7 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
         )
         with pytest.raises(RuntimeError, match="API down"):
-            await je._submit_domino_job(req)
+            je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_raises_when_missing_hardware_tier(self, _mock_studio):
@@ -865,7 +865,7 @@ class TestSubmitDominoJob:
             hardware_tier="",
         )
         with pytest.raises(ValueError, match="Hardware tier"):
-            await je._submit_domino_job(req)
+            je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_raises_when_missing_environment(self, _mock_studio):
@@ -878,7 +878,7 @@ class TestSubmitDominoJob:
             environment_id="",
         )
         with pytest.raises(ValueError, match="Environment is required"):
-            await je._submit_domino_job(req)
+            je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_raises_when_missing_environment_revision(self, _mock_studio):
@@ -891,7 +891,7 @@ class TestSubmitDominoJob:
             environment_revision_id="",
         )
         with pytest.raises(ValueError, match="Environment revision"):
-            await je._submit_domino_job(req)
+            je._submit_domino_job(req)
 
     @pytest.mark.asyncio
     async def test_absolute_spec_path_in_command(self, _mock_studio):
@@ -906,7 +906,7 @@ class TestSubmitDominoJob:
             project_id="proj-123",
             code_root="/mnt/code",
         )
-        await je._submit_domino_job(req)
+        je._submit_domino_job(req)
         cmd = client.submit_job.call_args[0][0]
         assert "doc_spec.yaml" in cmd
 
@@ -921,6 +921,6 @@ class TestSubmitDominoJob:
             code_root="/mnt/code",
         )
         with pytest.raises(ValueError, match="spec file is required"):
-            await je._submit_domino_job(req)
+            je._submit_domino_job(req)
 
 

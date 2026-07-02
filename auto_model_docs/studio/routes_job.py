@@ -14,13 +14,15 @@ from authorization import (
 )
 
 from .state import (
+    _max_jobs,
     _resolve_request_project_id,
     domino_job_store,
     logger,
 )
 from .job_engine import (
     _parse_request,
-    _submit_domino_job,
+    submit_from_queue_payload,
+    submit_or_enqueue,
 )
 
 
@@ -50,7 +52,13 @@ def _jobs_payload(project_id: str, owner_id: str) -> list:
     if not owner_id or not project_id:
         return []
     try:
-        jobs = domino_job_store.get_user_jobs(project_id, owner_id, limit=50)
+        jobs = domino_job_store.get_user_jobs(
+            project_id,
+            owner_id,
+            limit=50,
+            max_jobs=_max_jobs(),
+            submit_fn=submit_from_queue_payload,
+        )
     except RuntimeError:
         return []
     import domino_client
@@ -81,20 +89,27 @@ def register_job_routes(rt):
         except HTTPException as e:
             return _json({"error": _error_body(e)}, e.status_code)
         try:
-            run_id, job_url = await _submit_domino_job(job_request)
+            result = submit_or_enqueue(owner_id, job_request)
         except ValueError as e:
             return _json({"error": str(e)}, 400)
         except Exception:
             return _json({"error": "Job submission failed. Try again later."}, 500)
-        domino_job_store.record_job(
-            owner_id,
-            job_request.project_id,
-            domino_run_id=run_id,
-            job_url=job_url,
-            hardware_tier=(job_request.hardware_tier or "").strip(),
-            spec_path=(job_request.spec_path or "").strip(),
+        jobs = result.get("jobs") or []
+        import domino_client
+        for j in jobs:
+            run_id = str(j.get("domino_run_id") or "").strip()
+            j["document_url"] = (
+                domino_client.build_autodoc_artifacts_run_url(job_request.project_id, run_id) or ""
+                if run_id else ""
+            )
+        return _json(
+            {
+                "ok": True,
+                "queued": bool(result.get("queued")),
+                "jobs": jobs,
+            },
+            200,
         )
-        return _json({"ok": True}, 200)
 
     rt("/run")(run)
 
@@ -124,4 +139,3 @@ def register_job_routes(rt):
         return _json({"ok": True, "jobs": jobs})
 
     rt("/cancel-queued-jobs")(cancel_queued_jobs)
-

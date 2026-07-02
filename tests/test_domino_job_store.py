@@ -30,8 +30,8 @@ def test_record_job_skips_without_env():
     )
 
 
-def test_cancel_queued_jobs_noop():
-    store.cancel_queued_jobs("proj", "alice")
+def test_cancel_queued_jobs_without_db_returns_zero():
+    assert store.cancel_queued_jobs("proj", "alice") == 0
 
 
 def test_ensure_database_creates_files(monkeypatch, tmp_path):

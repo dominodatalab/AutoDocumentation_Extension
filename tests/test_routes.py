@@ -185,8 +185,26 @@ def _mock_studio_modules(monkeypatch):
         environment_id="env-1",
         environment_revision_id="rev-1",
     ))
-    mock_job_engine._submit_domino_job = AsyncMock(
+    mock_job_engine.submit_from_queue_payload = MagicMock(
         return_value=("run-mock", "https://jobs.example/run-mock"),
+    )
+    mock_job_engine.submit_or_enqueue = MagicMock(
+        return_value={
+            "ok": True,
+            "queued": False,
+            "jobs": [
+                {
+                    "id": "1",
+                    "job_id": "1",
+                    "domino_run_id": "run-mock",
+                    "status": "submitted",
+                    "job_url": "https://jobs.example/run-mock",
+                    "hardware_tier": "tier-small",
+                    "spec_path": "/spec.yaml",
+                    "submitted_at": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+        }
     )
 
     # fasthtml.common — provide real Response import + FT component stubs
@@ -860,24 +878,19 @@ class TestJobRoutes:
         store = _mock_studio_modules["state"].domino_job_store
         req = _make_request()
         result = await routes["/run"](req)
-        _mock_studio_modules["job_engine"]._submit_domino_job.assert_called_once()
-        store.record_job.assert_called_once_with(
-            "test_user",
-            "proj-123",
-            domino_run_id="run-mock",
-            job_url="https://jobs.example/run-mock",
-            hardware_tier="tier-small",
-            spec_path="/spec.yaml",
-        )
+        _mock_studio_modules["job_engine"].submit_or_enqueue.assert_called_once()
+        store.record_job.assert_not_called()
         assert result.status_code == 200
         body = json.loads(result.body.decode())
         assert body.get("ok") is True
+        assert body.get("queued") is False
+        assert len(body.get("jobs") or []) == 1
 
     @pytest.mark.asyncio
     async def test_run_validation_error_returns_400(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        _mock_studio_modules["job_engine"]._submit_domino_job.side_effect = ValueError("bad input")
+        _mock_studio_modules["job_engine"].submit_or_enqueue.side_effect = ValueError("bad input")
         req = _make_request()
         result = await routes["/run"](req)
         assert result.status_code == 400
@@ -889,7 +902,7 @@ class TestJobRoutes:
     async def test_run_handles_submission_error(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
-        _mock_studio_modules["job_engine"]._submit_domino_job.side_effect = RuntimeError("fail")
+        _mock_studio_modules["job_engine"].submit_or_enqueue.side_effect = RuntimeError("fail")
         store = _mock_studio_modules["state"].domino_job_store
         store.get_user_jobs.return_value = []
         req = _make_request()
@@ -914,9 +927,10 @@ class TestJobRoutes:
         # Job with no domino_run_id gets empty document_url
         assert body["jobs"][0].get("document_url") == ""
         assert "document_url" not in body
-        _mock_studio_modules["state"].domino_job_store.get_user_jobs.assert_called_with(
-            "proj-123", "test_user", limit=50
-        )
+        call_kwargs = _mock_studio_modules["state"].domino_job_store.get_user_jobs.call_args.kwargs
+        assert _mock_studio_modules["state"].domino_job_store.get_user_jobs.call_args.args == ("proj-123", "test_user")
+        assert call_kwargs["limit"] == 50
+        assert call_kwargs["max_jobs"] == 1
 
     @pytest.mark.asyncio
     async def test_job_history_document_url_points_to_artifacts(self, _mock_studio_modules):
@@ -981,7 +995,7 @@ class TestJobRoutes:
         routes = _register(mod, "register_job_routes")
         req = _make_request()
         result = await routes["/run"](req)
-        _mock_studio_modules["job_engine"]._submit_domino_job.assert_not_called()
+        _mock_studio_modules["job_engine"].submit_or_enqueue.assert_not_called()
         _mock_studio_modules["state"].domino_datasets.get_existing_autodoc_dataset.assert_not_called()
         _mock_studio_modules["state"].domino_job_store.record_job.assert_not_called()
         assert result.status_code == 401

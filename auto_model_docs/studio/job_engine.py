@@ -296,7 +296,7 @@ def launch_domino_job_run(
     return run_id, job_url
 
 
-async def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
+def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
     spec_path = (req.spec_path or "").strip()
 
     if not spec_path:
@@ -321,3 +321,75 @@ async def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
     except Exception as exc:
         logger.error("Domino job submission failed: %s", exc, exc_info=True)
         raise
+
+def build_queue_payload(req: JobRequest, spec_path: str) -> dict[str, Any]:
+    return {
+        "command_str": _build_job_command_str(req, spec_path),
+        "branch": (req.branch or "").strip() or None,
+        "tier_id": _domino_id_str(req.hardware_tier),
+        "project_id": _domino_id_str(req.project_id),
+        "environment_id": _domino_id_str(req.environment_id),
+        "environment_revision_id": _domino_id_str(req.environment_revision_id),
+    }
+
+
+def submit_from_queue_payload(payload: dict[str, Any]) -> tuple[str, str]:
+    return launch_domino_job_run(
+        str(payload.get("command_str") or ""),
+        branch=payload.get("branch") or None,
+        tier_id=str(payload.get("tier_id") or ""),
+        project_id=str(payload.get("project_id") or ""),
+        environment_id=str(payload.get("environment_id") or ""),
+        environment_revision_id=str(payload.get("environment_revision_id") or ""),
+    )
+
+
+def submit_or_enqueue(owner_id: str, req: JobRequest) -> dict[str, Any]:
+    import json
+
+    from .state import _max_jobs, domino_job_store
+
+    spec_path = (req.spec_path or "").strip()
+    _validate_job_inputs(req, spec_path)
+    project_id = _domino_id_str(req.project_id)
+    max_jobs = _max_jobs()
+
+    domino_job_store.dispatch_queued_jobs(
+        project_id,
+        owner_id,
+        max_jobs,
+        submit_from_queue_payload,
+    )
+
+    active = domino_job_store.count_active_slots(project_id, owner_id)
+    queued = False
+    if active < max_jobs:
+        run_id, job_url = _submit_domino_job(req)
+        domino_job_store.record_job(
+            owner_id,
+            project_id,
+            domino_run_id=run_id,
+            job_url=job_url,
+            hardware_tier=(req.hardware_tier or "").strip(),
+            spec_path=spec_path,
+        )
+    else:
+        payload = build_queue_payload(req, spec_path)
+        domino_job_store.enqueue_job(
+            owner_id,
+            project_id,
+            hardware_tier=(req.hardware_tier or "").strip(),
+            spec_path=spec_path,
+            queue_payload=json.dumps(payload),
+        )
+        queued = True
+
+    jobs = domino_job_store.get_user_jobs(
+        project_id,
+        owner_id,
+        limit=50,
+        max_jobs=max_jobs,
+        submit_fn=submit_from_queue_payload,
+    )
+    return {"ok": True, "queued": queued, "jobs": jobs}
+
