@@ -519,8 +519,7 @@ class TestBuildJobCommand:
             verbose=True,
         )
         cmd = je._build_job_command(req, "/path/spec.yaml")
-        assert cmd[0] == "python"
-        assert cmd[1].endswith("/auto_model_docs/main.py")
+        assert cmd[0].endswith("/cli.sh")
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
         assert "--output_dir" in cmd
@@ -683,7 +682,7 @@ class TestBuildJobCommand:
         )
         cmd_str = je._build_job_command_str(req, "/spec.yaml")
         assert isinstance(cmd_str, str)
-        assert "python" in cmd_str
+        assert "cli.sh" in cmd_str
         assert "--spec" in cmd_str
         assert "/spec.yaml" in cmd_str
 

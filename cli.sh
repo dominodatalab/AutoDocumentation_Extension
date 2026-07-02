@@ -7,5 +7,5 @@ if [[ "${MODELDOCS_AUTO_INSTALL_PYDEPS:-}" == "1" ]]; then
   "${script_dir}/setup-deps.sh"
 fi
 
-cd "${script_dir}"
-exec ./auto_model_docs/app_studio.sh
+cd "${script_dir}/auto_model_docs"
+exec python main.py "$@"

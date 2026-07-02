@@ -204,11 +204,10 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
 
     code_root_arg = (req.code_root or "").strip()
     app_work_dir = os.environ.get("APP_WORK_DIR", ".")
-    main_py = f"{app_work_dir}/auto_model_docs/main.py"
+    cli_sh = f"{app_work_dir}/cli.sh"
 
     command = [
-        "python",
-        main_py,
+        cli_sh,
         "--spec",
         spec_path,
         "--output_dir",
