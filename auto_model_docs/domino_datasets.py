@@ -62,7 +62,7 @@ def _api_request(
         if json is not None and files is None:
             headers["Content-Type"] = "application/json"
         try:
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(follow_redirects=True, timeout=timeout) as client:
                 resp = client.request(
                     method, url,
                     json=json, params=params,
@@ -325,7 +325,7 @@ async def upload_file(
     base_url = base.rstrip("/")
 
     # Step 1: start upload session
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
         resp = await client.request(
             "POST",
             f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/start",
@@ -356,7 +356,7 @@ async def upload_file(
         }
         # Csrf-Token: nocheck bypasses Play framework CSRF protection on multipart POSTs
         chunk_headers = {**headers, "Csrf-Token": "nocheck"}
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             resp = await client.request(
                 "POST",
                 f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file",
@@ -367,7 +367,7 @@ async def upload_file(
             resp.raise_for_status()
 
         # Step 3: finalize
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             resp = await client.request(
                 "GET",
                 f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/end/{upload_key}",
@@ -377,7 +377,7 @@ async def upload_file(
 
     except Exception:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
                 await client.request(
                     "GET",
                     f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/cancel/{upload_key}",

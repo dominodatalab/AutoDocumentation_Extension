@@ -51,7 +51,7 @@ class DatasetManager:
         upload_key = None
         try:
             headers = _get_auth_headers()
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(follow_redirects=True, timeout=30.0) as client:
                 resp = client.post(
                     f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/start",
                     json={"filePaths": [path], "fileCollisionSetting": "Overwrite"},
@@ -82,7 +82,7 @@ class DatasetManager:
                 "checksum": checksum,
             }
             chunk_headers = {**_get_auth_headers(), "Csrf-Token": "nocheck"}
-            with httpx.Client(timeout=60.0) as client:
+            with httpx.Client(follow_redirects=True, timeout=60.0) as client:
                 resp = client.post(
                     f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file",
                     params=chunk_params,
@@ -91,7 +91,7 @@ class DatasetManager:
                 )
                 resp.raise_for_status()
 
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(follow_redirects=True, timeout=30.0) as client:
                 resp = client.get(
                     f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/end/{upload_key}",
                     headers=_get_auth_headers(),
@@ -101,7 +101,7 @@ class DatasetManager:
         except Exception:
             if upload_key:
                 try:
-                    with httpx.Client(timeout=10.0) as client:
+                    with httpx.Client(follow_redirects=True, timeout=10.0) as client:
                         client.get(
                             f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/cancel/{upload_key}",
                             headers=_get_auth_headers(),
@@ -127,7 +127,7 @@ class DatasetManager:
             {"path": path},
             snapshot_id,
         )
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(follow_redirects=True, timeout=60.0) as client:
             resp = client.get(
                 url,
                 params={"path": path},
@@ -151,7 +151,7 @@ class DatasetManager:
         Endpoint: GET /v4/datasetrw/snapshot/{snapshotId}/file/meta?path=
         """
         base_url = _resolve_api_host().rstrip("/")
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(follow_redirects=True, timeout=30.0) as client:
             resp = client.get(
                 f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/meta",
                 params={"path": path},
@@ -174,7 +174,7 @@ class DatasetManager:
             {"path": path},
             snapshot_id,
         )
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(follow_redirects=True, timeout=30.0) as client:
             resp = client.get(
                 url,
                 params={"path": path},

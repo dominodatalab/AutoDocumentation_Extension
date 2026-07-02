@@ -47,6 +47,7 @@ _CANCELLED_STATUSES = {"stopped", "cancelled", "canceled", "archived"}
 _RETRYABLE_STATUS_CODES = (408, 502, 503, 504)
 _DEFAULT_TIMEOUT = 30.0
 _DEFAULT_MAX_RETRIES = 3
+_HTTPX_CLIENT_KWARGS = {"follow_redirects": True}
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +105,7 @@ def _domino_request(
         if json is not None:
             headers["Content-Type"] = "application/json"
         try:
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(timeout=timeout, **_HTTPX_CLIENT_KWARGS) as client:
                 resp = client.request(method, url, json=json, params=params, headers=headers)
                 if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < max_retries:
                     backoff = 2 ** attempt
@@ -342,7 +343,7 @@ def read_gbp_file_raw(project_id: str, repo_id: str, file_path: str) -> bytes:
         raise RuntimeError("Domino API host is not configured")
     url = f"{base_url}/v4/projects/{project_id}/gitRepositories/{repo_id}/git/raw"
     headers = _get_auth_headers()
-    with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
+    with httpx.Client(timeout=_DEFAULT_TIMEOUT, **_HTTPX_CLIENT_KWARGS) as client:
         resp = client.get(url, params={"fileName": file_path}, headers=headers)
         resp.raise_for_status()
         return resp.content
@@ -840,7 +841,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
     url = f"{api_host}/u/{powner}/{pname}/raw/latest/{path}"
     headers = _get_auth_headers()
     try:
-        with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
+        with httpx.Client(timeout=_DEFAULT_TIMEOUT, **_HTTPX_CLIENT_KWARGS) as client:
             resp = client.get(url, params={"inline": "false"}, headers=headers)
             if resp.status_code == 404:
                 return None

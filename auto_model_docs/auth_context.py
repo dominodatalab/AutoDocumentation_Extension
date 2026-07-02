@@ -60,7 +60,7 @@ def get_viewing_user() -> User:
         raise RuntimeError("DOMINO_API_HOST is not configured.")
 
     headers = current_auth().to_headers()
-    with httpx.Client(timeout=10.0) as client:
+    with httpx.Client(follow_redirects=True, timeout=10.0) as client:
         resp = client.get(f"{host}/v4/users/self", headers=headers)
         resp.raise_for_status()
         data = resp.json()

@@ -76,7 +76,7 @@ def _post_authorized_actions(
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    with httpx.Client(timeout=_TIMEOUT) as client:
+    with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
         resp = client.post(
             url,
             json=request_body.model_dump(exclude_none=True),
