@@ -515,12 +515,19 @@ class TestGovernanceBundlePickerOptgroups:
         assert "resolvedModelId()" in scripts_src
         assert "_prefillModelNameFilterFromUrl();" in scripts_src
 
-    def test_governance_bundle_select_always_shown(self):
+    def test_governance_bundle_select_hidden_until_loaded(self):
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
         assert "_defaultBundleId" in scripts_src
         assert "visible.length === 1" not in scripts_src
         assert "select.style.display = 'none'" not in scripts_src
+        assert 'id="governance-bundle-field"' in web
+        assert "display:none" in web.split('id="governance-bundle-field"')[0][-120:]
+        assert "if (!_governanceBundlesLoaded)" in scripts_src
+        assert "field.style.display = 'none'" in scripts_src
+        assert "if (!bundles.length)" in scripts_src
+        assert "field.style.display = ''" in scripts_src
 
     def test_model_id_preselects_first_matching_bundle(self):
         root = Path(__file__).resolve().parent.parent

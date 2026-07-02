@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Governance v1 (rai-guardrails-service), same host as other Domino API calls:
-#   GET  /api/governance/v1/bundles?projectId[]=<projectId>
+#   GET  /api/governance/v1/bundles?projectId=<projectId>
 #   POST /api/governance/v1/rpc/compute-policy  body: bundleId, policyId
 #   GET  /api/governance/v1/bundles/<bundleId>/findings
 # v1 does not call GET /api/governance/v1/bundles/<bundleId> (list + compute-policy only).
@@ -994,6 +994,10 @@ def _governance_page_exhausted(data: dict[str, Any], offset: int, fetched_count:
 
 
 def list_bundles(project_id: str, *, api_host: str) -> "List[BundleSummary]":
+    project_id = (project_id or "").strip()
+    if not project_id:
+        return []
+
     offset = 0
     limit = _DEFAULT_BUNDLE_PAGE_LIMIT
     all_bundles: list[Any] = []
@@ -1003,7 +1007,7 @@ def list_bundles(project_id: str, *, api_host: str) -> "List[BundleSummary]":
                 "GET",
                 f"{_GOVERNANCE_BASE}/bundles",
                 api_host=api_host,
-                params={"projectId[]": project_id, "offset": offset, "limit": limit},
+                params={"projectId": project_id, "offset": offset, "limit": limit},
             )
             items = _governance_bundle_items(data)
             all_bundles.extend(_parse_governance_bundle(b) for b in items)
@@ -1015,7 +1019,7 @@ def list_bundles(project_id: str, *, api_host: str) -> "List[BundleSummary]":
     except Exception:
         logger.exception("list_bundles failed for project %s", project_id)
         return []
-    return all_bundles
+    return [b for b in all_bundles if str(b.project_id) == project_id]
 
 
 def compute_policy(bundle_id: str, policy_id: str, *, api_host: str) -> "Optional[ComputedPolicy]":

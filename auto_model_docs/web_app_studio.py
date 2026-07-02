@@ -423,10 +423,10 @@ async def index(req: Request):
                                         cls="governance-bundle-hint",
                                     ),
                                     cls="filter-field",
-                                    id="governance-bundle-field",
                                 ),
                                 cls="filters-body",
-                                style="padding: 0.25rem 0 0.5rem 0;",
+                                style="padding: 0.25rem 0 0.5rem 0; display:none",
+                                id="governance-bundle-field",
                             ),
 
                             Details(

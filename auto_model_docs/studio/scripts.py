@@ -767,7 +767,7 @@ MAIN_DOM_JS = r"""
             _selectedBundleId = '';
 
             if (!_governanceBundlesLoaded) {
-                if (field) field.style.display = '';
+                if (field) field.style.display = 'none';
                 if (select) {
                     select.innerHTML = '<option value="" selected disabled>Loading bundles\u2026</option>';
                     select.disabled = true;

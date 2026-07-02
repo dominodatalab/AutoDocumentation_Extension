@@ -192,7 +192,7 @@ class TestListBundles:
             "GET",
             "/api/governance/v1/bundles",
             api_host=_API_HOST,
-            params={"projectId[]": "proj-123", "offset": 0, "limit": 25},
+            params={"projectId": "proj-123", "offset": 0, "limit": 25},
         )
         assert len(result) == 1
         assert result[0].id == "bundle-abc"
@@ -206,6 +206,19 @@ class TestListBundles:
         with patch.object(dc, "_governance_request", side_effect=RuntimeError("boom")):
             result = list_bundles("proj-123", api_host=_API_HOST)
         assert result == []
+
+    def test_filters_bundles_to_requested_project(self):
+        other = dict(_BUNDLE, id="bundle-other", projectId="proj-other")
+        with patch.object(dc, "_governance_request", return_value={"data": [_BUNDLE, other]}):
+            result = list_bundles("proj-123", api_host=_API_HOST)
+        assert len(result) == 1
+        assert result[0].id == "bundle-abc"
+
+    def test_returns_empty_for_blank_project_id(self):
+        with patch.object(dc, "_governance_request") as m:
+            result = list_bundles("  ", api_host=_API_HOST)
+        assert result == []
+        m.assert_not_called()
 
     def test_paginates_until_exhausted(self):
         page1 = {
