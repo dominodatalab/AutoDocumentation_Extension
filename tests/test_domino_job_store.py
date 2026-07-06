@@ -111,6 +111,30 @@ def test_no_cross_user_leak(monkeypatch, tmp_path):
     assert store.get_user_jobs("proj-x", "bob", limit=10) == []
     assert len(store.get_user_jobs("proj-x", "alice", limit=10)) == 1
 
+def test_refresh_persists_unknown_status(monkeypatch, tmp_path):
+    root = tmp_path / "ds"
+    root.mkdir()
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+
+    mock_client = MagicMock()
+    mock_client.get_job_status.return_value = {"local_status": "unknown", "domino_status": "unknown"}
+    monkeypatch.setattr(store, "_domino_client", lambda: mock_client)
+
+    store.record_job(
+        "u1",
+        "proj-a",
+        domino_run_id="run-1",
+        job_url="http://job",
+        hardware_tier="small",
+        spec_path="/x.yaml",
+        status="running",
+    )
+    jobs = store.get_user_jobs("proj-a", "u1", limit=10)
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "unknown"
+
+
 def test_job_db_not_configured_msg(monkeypatch):
     monkeypatch.delenv("DOMINO_DATASETS_DIR", raising=False)
     monkeypatch.delenv("DOMINO_PROJECT_NAME", raising=False)

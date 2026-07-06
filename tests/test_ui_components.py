@@ -546,6 +546,16 @@ class TestGovernanceBundlePickerOptgroups:
         styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
         assert "governance-bundle-hint-info" in styles
 
+    def test_unknown_job_status_ui(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
+        assert "status === 'unknown'" in scripts_src
+        assert "Could not verify job status" in scripts_src
+        assert "results-unknown-banner" in scripts_src
+        assert "terminal-status-unknown" in styles
+        assert "history-status-unknown" in styles
+
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent
         web = (root / "auto_model_docs" / "web_app_studio.py").read_text()

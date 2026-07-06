@@ -695,7 +695,7 @@ def get_job_status(run_id: str) -> dict[str, Any]:
         data = _domino_request("GET", f"/v4/jobs/{run_id}")
     except Exception as exc:
         logger.warning("Failed to get status for run %s: %s", run_id, exc)
-        return {"domino_status": "unknown", "local_status": "running"}
+        return {"domino_status": "unknown", "local_status": "unknown"}
 
     raw = (
         data.get("statuses", {}).get("executionStatus", "")

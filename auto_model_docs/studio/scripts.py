@@ -1697,6 +1697,21 @@ MAIN_DOM_JS = r"""
                     + '<div class="results-failed-text">'
                     + '<div class="results-failed-headline">Job cancelled</div>'
                     + '</div></div></div>';
+            } else if (status === 'unknown') {
+                var unknownDetail = 'Status checks failed. The job may still be running or may have finished.';
+                if (latestJob.job_url) {
+                    unknownDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View job logs</a> for details.';
+                } else {
+                    unknownDetail += ' Check job logs in Domino for details.';
+                }
+                html += '<div class="results-unknown">';
+                html += '<div class="results-unknown-banner">'
+                    + '<span class="material-symbols-outlined results-unknown-icon">help</span>'
+                    + '<div class="results-unknown-text">'
+                    + '<div class="results-unknown-headline">Could not verify job status</div>'
+                    + '<div class="results-unknown-detail">' + unknownDetail + '</div>'
+                    + '</div></div>';
+                html += '</div>';
             } else {
                 // running / queued / submitted / pending
                 var isQueued = status === 'queued' && !latestJob.domino_run_id;

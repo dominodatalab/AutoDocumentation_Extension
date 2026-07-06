@@ -256,10 +256,10 @@ class TestGetJobStatus:
         assert result["local_status"] == "pending"
 
     @patch.object(dc, "_domino_request")
-    def test_api_error_returns_running(self, mock_req):
+    def test_api_error_returns_unknown(self, mock_req):
         mock_req.side_effect = RuntimeError("timeout")
         result = dc.get_job_status("run-1")
-        assert result["local_status"] == "running"
+        assert result["local_status"] == "unknown"
         assert result["domino_status"] == "unknown"
 
     @patch.object(dc, "_domino_request")

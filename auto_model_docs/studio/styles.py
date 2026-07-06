@@ -1156,6 +1156,10 @@ button.primary:disabled {
     background: var(--success-container);
     color: var(--success);
 }
+.terminal-status-unknown {
+    background: var(--warning-container);
+    color: var(--warning);
+}
 
 /* ── Progress Phases ──────────────────────────────────────────────── */
 .progress-phases {
@@ -1438,6 +1442,7 @@ button.primary:disabled {
 .history-status-succeeded { background: var(--success-container); color: var(--success); }
 .history-status-failed { background: var(--error-container); color: var(--on-surface); }
 .history-status-cancelled { background: var(--warning-container); color: var(--warning); }
+.history-status-unknown { background: var(--warning-container); color: var(--warning); }
 .history-toggle {
     font-size: 13px;
     font-weight: 500;
@@ -3102,6 +3107,44 @@ select.hw-tier-select option {
     flex: 1;
     overflow-y: auto;
     padding: 12px 14px;
+}
+
+/* ── Results: unknown state ────────────────────────────────────── */
+.results-unknown {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.results-unknown-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--warning-container);
+    border-radius: var(--radius-sm);
+    padding: 1rem 1.25rem;
+}
+.results-unknown-icon {
+    font-size: 1.75rem;
+    color: var(--warning);
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    flex-shrink: 0;
+}
+.results-unknown-headline {
+    font-family: var(--font-headline);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--on-surface);
+    margin-bottom: 0.25rem;
+}
+.results-unknown-detail {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--on-surface-variant);
+    line-height: 1.4;
+}
+.results-unknown-detail a {
+    color: var(--primary);
+    text-decoration: underline;
 }
 
 /* ── Results: failed state ───────────────────────────────────────── */

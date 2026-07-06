@@ -12,8 +12,8 @@ from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-_ACTIVE_REFRESH_STATUSES = frozenset({"queued", "submitted", "pending", "running"})
-_SLOT_ACTIVE_STATUSES = frozenset({"submitted", "pending", "running"})
+_ACTIVE_REFRESH_STATUSES = frozenset({"queued", "submitted", "pending", "running", "unknown"})
+_SLOT_ACTIVE_STATUSES = frozenset({"submitted", "pending", "running", "unknown"})
 _QUEUED_STATUS = "queued"
 
 
