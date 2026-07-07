@@ -285,3 +285,11 @@ class TestGovernanceHostResolution:
         with patch.object(dc, "_domino_request", return_value={"data": [_BUNDLE]}) as m:
             list_bundles("proj-123", api_host="https://cluster.example.com")
         assert m.call_args.kwargs["base_url"] == "https://cluster.example.com"
+        assert m.call_args.kwargs["auth"] is True
+
+    def test_use_user_host_omits_auth_and_preserves_scheme(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://127.0.0.1:8763")
+        with patch.object(dc, "_domino_request", return_value={"data": [_BUNDLE]}) as m:
+            list_bundles("proj-123", use_user_host=True)
+        assert m.call_args.kwargs["base_url"] == "http://127.0.0.1:8763"
+        assert m.call_args.kwargs["auth"] is False

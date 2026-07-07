@@ -359,31 +359,44 @@ def main(
 
         governance_context = None
         if bundle_id:
-            from domino_auth import cli_auth, configure_auth
+            from domino_auth import cli_auth, configure_auth, resolve_user_host
             from autodoc.governance_read import (
                 GovernanceLoadError,
                 load_governance_context,
                 merge_scan_model_names,
             )
 
-            configure_auth(cli_auth)
             scope = findings_scope or doc_spec.governance_findings_scope
-            gov_host = (governance_api_host or "").strip()
-            if not gov_host:
-                console.print(
-                    "\n[bold red]Error:[/] --governance-api-host is required when --bundle-id is set",
-                    style="red",
-                )
-                sys.exit(1)
-            try:
-                governance_context = load_governance_context(
-                    bundle_id,
-                    api_host=gov_host,
-                    findings_scope=scope,
-                )
-            except GovernanceLoadError as exc:
-                console.print(f"\n[bold red]Error:[/] {exc}", style="red")
-                sys.exit(1)
+            user_host = resolve_user_host()
+            if user_host:
+                try:
+                    governance_context = load_governance_context(
+                        bundle_id,
+                        findings_scope=scope,
+                        use_user_host=True,
+                    )
+                except GovernanceLoadError as exc:
+                    console.print(f"\n[bold red]Error:[/] {exc}", style="red")
+                    sys.exit(1)
+            else:
+                configure_auth(cli_auth)
+                gov_host = (governance_api_host or "").strip()
+                if not gov_host:
+                    console.print(
+                        "\n[bold red]Error:[/] --governance-api-host is required when "
+                        "--bundle-id is set and DOMINO_USER_HOST is not set",
+                        style="red",
+                    )
+                    sys.exit(1)
+                try:
+                    governance_context = load_governance_context(
+                        bundle_id,
+                        api_host=gov_host,
+                        findings_scope=scope,
+                    )
+                except GovernanceLoadError as exc:
+                    console.print(f"\n[bold red]Error:[/] {exc}", style="red")
+                    sys.exit(1)
             model_names = merge_scan_model_names(
                 model_names, governance_context.governed_model_names
             )

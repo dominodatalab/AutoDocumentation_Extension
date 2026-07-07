@@ -181,6 +181,21 @@ class TestLoadGovernanceContext:
             )
         assert ctx.governed_model_names == ["fraud-detector-v1"]
 
+    def test_use_user_host_skips_explicit_api_host(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://127.0.0.1:8763")
+        with patch("autodoc.governance_read.list_bundles", return_value=[_bundle_summary()]) as mock_list, patch(
+            "autodoc.governance_read.compute_policy", return_value=_computed_policy()
+        ) as mock_compute, patch(
+            "autodoc.governance_read.get_findings", return_value=_findings_raw()
+        ) as mock_findings:
+            ctx = load_governance_context(BUNDLE_ID, use_user_host=True, findings_scope="open")
+
+        assert ctx.bundle_id == BUNDLE_ID
+        mock_list.assert_called_once_with(PROJECT_ID, use_user_host=True)
+        mock_compute.assert_called_once()
+        assert mock_compute.call_args.kwargs == {"use_user_host": True}
+        mock_findings.assert_called_once_with(BUNDLE_ID, use_user_host=True)
+
 
 class TestMergeScanModelNames:
     def test_returns_filtered_when_no_governed(self):

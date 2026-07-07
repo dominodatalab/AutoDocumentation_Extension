@@ -41,3 +41,25 @@ def test_domino_request_uses_follow_redirects(mock_client_cls):
 
     assert result == {"id": "job-1"}
     mock_client_cls.assert_called_once_with(timeout=dc._DEFAULT_TIMEOUT, follow_redirects=True)
+
+
+@patch("httpx.Client")
+def test_domino_request_without_auth_omits_auth_headers(mock_client_cls):
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"data": []}
+    mock_client.__enter__.return_value.request.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    with patch.object(dc, "_resolve_api_host", return_value="http://127.0.0.1:8763"):
+        result = dc._domino_request(
+            "GET",
+            "/api/governance/v1/bundles",
+            auth=False,
+        )
+
+    assert result == {"data": []}
+    sent_headers = mock_client.__enter__.return_value.request.call_args.kwargs["headers"]
+    assert "Authorization" not in sent_headers
+    assert "X-Domino-Api-Key" not in sent_headers

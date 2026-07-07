@@ -112,3 +112,19 @@ def resolve_api_host() -> str:
     host = os.environ.get("DOMINO_API_PROXY") or os.environ.get("DOMINO_API_HOST") or ""
     return host.rstrip("/")
 
+
+def resolve_user_host() -> str:
+    """Return the user-facing Domino API host for gateway-sidecar calls.
+
+    Priority: ``DOMINO_USER_HOST`` > ``DOMINO_API_HOST`` > ``DOMINO_API_PROXY``.
+    Job containers with the API gateway set ``DOMINO_USER_HOST`` to the local
+    gateway (e.g. ``http://127.0.0.1:8763``); identity is injected server-side.
+    """
+    host = (
+        os.environ.get("DOMINO_USER_HOST")
+        or os.environ.get("DOMINO_API_HOST")
+        or os.environ.get("DOMINO_API_PROXY")
+        or ""
+    )
+    return host.rstrip("/")
+

@@ -147,7 +147,10 @@ class TestMainGovernanceCli:
             "governed-model",
         ]
 
-    def test_bundle_id_without_api_host_exits(self, tmp_path):
+    def test_bundle_id_without_api_host_exits(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         spec_path, code_path = _spec_file(tmp_path)
         runner = CliRunner()
 
@@ -167,6 +170,44 @@ class TestMainGovernanceCli:
             )
 
         assert result.exit_code == 1
+
+    def test_bundle_id_with_user_host_skips_legacy_auth(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://127.0.0.1:8763")
+        spec_path, code_path = _spec_file(tmp_path)
+        runner = CliRunner()
+        gov = GovernanceContext(bundle_id="bundle-uuid-1", bundle_name="Test Bundle")
+
+        with patch("main.Orchestrator") as mock_orch_cls, patch(
+            "main.LLMClient"
+        ), patch("main.ContentSanitizer"), patch(
+            "autodoc.governance_read.load_governance_context", return_value=gov
+        ) as mock_load, patch("domino_auth.configure_auth") as mock_configure_auth:
+            mock_orch = MagicMock()
+            mock_orch.generate = AsyncMock(return_value=tmp_path / "out.docx")
+            mock_orch.run_dir = "docs/test"
+            mock_orch_cls.return_value = mock_orch
+
+            result = runner.invoke(
+                main,
+                [
+                    "--spec",
+                    spec_path,
+                    "--code-root",
+                    code_path,
+                    "--provider",
+                    "anthropic",
+                    "--bundle-id",
+                    "bundle-uuid-1",
+                ],
+            )
+
+        assert result.exit_code == 0
+        mock_configure_auth.assert_not_called()
+        mock_load.assert_called_once_with(
+            "bundle-uuid-1",
+            findings_scope="open",
+            use_user_host=True,
+        )
 
     def test_bundle_load_failure_exits(self, tmp_path):
         spec_path, code_path = _spec_file(tmp_path)
