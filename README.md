@@ -9,6 +9,6 @@ Model Docs is a Domino extension that drafts structured documentation for machin
 - Optional grounding in Domino Governance bundles (policy, evidence, open findings)
 - Citations back to source code, artifacts, and governance records
 - Word documents and optional editable Jupyter notebooks
-- Runs heavy generation as Domino jobs in the target project
+- Runs heavy generation as jobs in the target project
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE).

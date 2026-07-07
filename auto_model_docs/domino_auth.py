@@ -87,7 +87,7 @@ def get_cli_token() -> str:
     if not api_key:
         raise MissingAuthError(
             "DOMINO_USER_API_KEY is not set. "
-            "CLI and Domino job containers require an API key."
+            "CLI and job containers require an API key."
         )
     return api_key
 
@@ -98,7 +98,7 @@ def user_auth() -> AuthCredentials:
 
 
 def cli_auth() -> AuthCredentials:
-    """Provider: API key from env. For CLI / Domino job container use only."""
+    """Provider: API key from env. For CLI / job container use only."""
     return AuthCredentials(kind="api_key", token=get_cli_token())
 
 

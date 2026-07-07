@@ -77,7 +77,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
             Div(
                 Div(
                     Label("Branch (optional)", for_="field-branch"),
-                    Span("\u24d8", cls="info-tooltip", data_tooltip="Git branch for the Domino job. Leave blank to use the project default."),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Git branch for the documentation job. Leave blank to use the project default."),
                     cls="label-row",
                 ),
                 Input(
@@ -116,7 +116,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
             Div(
                 Div(
                     Label("Hardware tier", for_="field-hardware_tier"),
-                    Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the Domino job."),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the documentation job."),
                     cls="label-row",
                 ),
                 Select(*tier_options, name="hardware_tier", id="field-hardware_tier", cls="hw-tier-select"),
@@ -127,7 +127,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
                 Div(
                     Div(
                         Label("Environment", for_="field-environment_id"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Compute environment for the Domino job."),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Compute environment for the documentation job."),
                         cls="label-row",
                     ),
                     Select(
@@ -141,7 +141,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
                 Div(
                     Div(
                         Label("Revision", for_="field-environment_revision_id"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Pinned environment revision for this job."),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Pinned environment revision for the documentation job."),
                         cls="label-row",
                     ),
                     Div(

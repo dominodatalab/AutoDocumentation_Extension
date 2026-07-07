@@ -1,6 +1,6 @@
 """Filesystem-backed dataset I/O for the CLI.
 
-The CLI runs inside a Domino job where datasets are mounted as local
+The CLI runs inside a job container where datasets are mounted as local
 directories. All functions take mount_path as an explicit argument.
 """
 

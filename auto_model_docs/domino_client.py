@@ -688,7 +688,7 @@ def submit_job(
     environment_id: str,
     environment_revision_id: str,
 ) -> str:
-    """Submit a Domino job via the v1 jobs API and return the job ID."""
+    """Submit a documentation job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
 
     title = f"Model Docs: {pname or pid}" + (f" ({branch})" if branch else "")
@@ -734,7 +734,7 @@ def submit_job(
         or data.get("jobId")
     )
     if not run_id:
-        raise ValueError(f"Domino job_start returned unexpected response: {data!r}")
+        raise ValueError(f"Starting a documentation job returned unexpected response: {data!r}")
 
     return str(run_id)
 
@@ -784,7 +784,7 @@ def get_job_status(run_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def stop_job(run_id: str, project_id: Optional[str] = None) -> None:
-    """Stop a running Domino job. Requires project_id."""
+    """Stop a running documentation job. Requires project_id."""
     if not project_id:
         raise ValueError("project_id is required to stop a job")
     payload: dict[str, Any] = {"jobId": run_id, "commitResults": True, "projectId": project_id}
@@ -802,7 +802,7 @@ _ui_host: str | None = None
 
 
 def set_ui_host(request_host: str, scheme: str = "https") -> None:
-    """Cache the external Domino UI host from an incoming request header."""
+    """Cache the external UI host from an incoming request header."""
     global _ui_host
     if _ui_host is not None:
         return

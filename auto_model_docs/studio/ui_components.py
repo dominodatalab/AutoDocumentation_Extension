@@ -249,11 +249,11 @@ def _render_warnings_banner(warnings: list) -> list:
 # ---------------------------------------------------------------------------
 
 def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
-    """Render the terminal panel for a Domino job."""
+    """Render the terminal panel for a documentation job."""
     if not record:
         return Div(
             Div(
-                H3("Domino job"),
+                H3("Documentation job"),
                 cls="terminal-header",
             ),
             Div(
@@ -271,7 +271,7 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
     job_link = None
     if record.job_url:
         job_link = A(
-            "View job in Domino \u2192",
+            "View job in UI \u2192",
             href=record.job_url,
             target="_blank",
             cls="domino-job-link",
@@ -310,7 +310,7 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
 
     return Div(
         Div(
-            H3("Domino job"),
+            H3("Documentation job"),
             cls="terminal-header",
         ),
         Div(status.upper(), cls=badge_cls),

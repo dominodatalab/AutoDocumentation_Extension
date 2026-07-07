@@ -1,4 +1,4 @@
-"""Domino job submission and command building."""
+"""Documentation job submission and command building."""
 
 from __future__ import annotations
 
@@ -199,7 +199,7 @@ async def _parse_request(req: Request) -> JobRequest:
 
 
 # ---------------------------------------------------------------------------
-# Domino job command building
+# Documentation job command building
 # ---------------------------------------------------------------------------
 
 def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
@@ -276,7 +276,7 @@ def _build_job_command_str(req: JobRequest, spec_path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Domino job submission
+# Documentation job submission
 # ---------------------------------------------------------------------------
 
 def launch_domino_job_run(
@@ -323,7 +323,7 @@ def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
         )
         return run_id, job_url or ""
     except Exception as exc:
-        logger.error("Domino job submission failed: %s", exc, exc_info=True)
+        logger.error("Documentation job submission failed: %s", exc, exc_info=True)
         raise
 
 def build_queue_payload(req: JobRequest, spec_path: str) -> dict[str, Any]:
