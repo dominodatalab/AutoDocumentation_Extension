@@ -162,6 +162,10 @@ async def _parse_request(req: Request) -> JobRequest:
         except Exception:
             _branch = ""
 
+    env_defaults = domino_client.resolve_job_environment_defaults()
+    environment_id = _form_str(body, "environment_id") or env_defaults["environment_id"]
+    environment_revision_id = _form_str(body, "environment_revision_id") or env_defaults["environment_revision_id"]
+
     return JobRequest(
         spec_path=_form_str(body, "spec_path"),
         provider=_prov,
@@ -178,8 +182,8 @@ async def _parse_request(req: Request) -> JobRequest:
         latest_only=_checkbox_truthy(body.get("latest_only")),
         verbose=_checkbox_truthy(body.get("verbose")),
         hardware_tier=_form_str(body, "hardware_tier"),
-        environment_id=(os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip(),
-        environment_revision_id=(os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip(),
+        environment_id=environment_id,
+        environment_revision_id=environment_revision_id,
         project_id=project_id,
         provider_base_url=_form_str(body, "provider_base_url"),
         max_retries=_form_int(body, "max_retries", DEFAULT_LLM_MAX_RETRIES),

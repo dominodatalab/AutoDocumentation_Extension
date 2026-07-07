@@ -580,6 +580,64 @@ def list_self_environments() -> list[dict[str, Any]]:
         return []
 
 
+def get_default_environment() -> dict[str, Any] | None:
+    try:
+        data = _domino_request("GET", "/v4/environments/defaultEnvironment")
+        if isinstance(data, dict) and data.get("id") is not None:
+            return data
+    except Exception as exc:
+        logger.warning("Failed to get default environment: %s", exc)
+    return None
+
+
+def resolve_job_environment_defaults(
+    *,
+    env_list: list[dict[str, Any]] | None = None,
+) -> dict[str, str]:
+    configured_env_id = (os.environ.get("DOMINO_ENVIRONMENT_ID") or "").strip()
+    configured_rev_id = (os.environ.get("DOMINO_ENVIRONMENT_REVISION_ID") or "").strip()
+
+    envs = env_list if env_list is not None else list_self_environments()
+    env_ids = {str(e.get("id") or "") for e in envs if e.get("id") is not None}
+
+    def _latest_rev_id(environment_id: str) -> str:
+        revs = list_environment_revisions(environment_id)
+        if not revs:
+            return ""
+        return str(revs[0].get("id") or "")
+
+    def _revision_valid(environment_id: str, revision_id: str) -> bool:
+        if not revision_id:
+            return False
+        valid = {str(r.get("id") or "") for r in list_environment_revisions(environment_id)}
+        return revision_id in valid
+
+    env_id = ""
+    rev_id = ""
+
+    if configured_env_id and configured_env_id in env_ids:
+        env_id = configured_env_id
+        if configured_rev_id and _revision_valid(env_id, configured_rev_id):
+            rev_id = configured_rev_id
+        else:
+            rev_id = _latest_rev_id(env_id)
+
+    if not env_id:
+        default_env = get_default_environment()
+        if default_env:
+            candidate = str(default_env.get("id") or "")
+            if candidate in env_ids:
+                env_id = candidate
+                rev_id = _latest_rev_id(env_id)
+
+    if not env_id and envs:
+        env_id = str(envs[0].get("id") or "")
+        if env_id:
+            rev_id = _latest_rev_id(env_id)
+
+    return {"environment_id": env_id, "environment_revision_id": rev_id}
+
+
 def list_environment_revisions(environment_id: str) -> list[dict[str, Any]]:
     eid = environment_id.strip()
     if not eid:

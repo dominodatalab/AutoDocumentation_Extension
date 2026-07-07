@@ -405,6 +405,32 @@ class TestApiRoutes:
         assert body["error"] == "apiHost required"
 
     @pytest.mark.asyncio
+    async def test_environments_returns_json(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        client.list_self_environments.return_value = [
+            {"id": "env-1", "name": "Python 3.10"},
+        ]
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/environments"](req)
+        client.list_self_environments.assert_called_once()
+        body = json.loads(result.body)
+        assert body == [{"id": "env-1", "label": "Python 3.10"}]
+
+    @pytest.mark.asyncio
+    async def test_environments_default_returns_json(self, _mock_studio_modules):
+        mod = _import_routes_api()
+        routes = _register(mod, "register_api_routes")
+        client = _mock_studio_modules["state"].domino_client
+        client.get_default_environment.return_value = {"id": "env-default", "name": "Default Env"}
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/api/environments/default"](req)
+        client.get_default_environment.assert_called_once()
+        body = json.loads(result.body)
+        assert body == {"id": "env-default", "label": "Default Env"}
+
+    @pytest.mark.asyncio
     async def test_environment_revisions_returns_json(self, _mock_studio_modules):
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")

@@ -361,12 +361,14 @@ async def test_parse_request_project_id_only_from_query():
 
 
 @pytest.mark.asyncio
-async def test_parse_request_environment_from_env_not_body(monkeypatch):
+async def test_parse_request_environment_from_body(_mock_studio):
     je = _import_job_engine()
     from unittest.mock import MagicMock
 
-    monkeypatch.setenv("DOMINO_ENVIRONMENT_ID", "env-from-env")
-    monkeypatch.setenv("DOMINO_ENVIRONMENT_REVISION_ID", "rev-from-env")
+    _mock_studio.domino_client.resolve_job_environment_defaults.return_value = {
+        "environment_id": "env-default",
+        "environment_revision_id": "rev-default",
+    }
     req = MagicMock()
     req.query_params = {"projectId": "proj-x"}
     req.json = AsyncMock(
@@ -378,8 +380,30 @@ async def test_parse_request_environment_from_env_not_body(monkeypatch):
         }
     )
     jr = await je._parse_request(req)
-    assert jr.environment_id == "env-from-env"
-    assert jr.environment_revision_id == "rev-from-env"
+    assert jr.environment_id == "env123"
+    assert jr.environment_revision_id == "rev456"
+
+
+@pytest.mark.asyncio
+async def test_parse_request_environment_falls_back_to_resolver(_mock_studio):
+    je = _import_job_engine()
+    from unittest.mock import MagicMock
+
+    _mock_studio.domino_client.resolve_job_environment_defaults.return_value = {
+        "environment_id": "env-default",
+        "environment_revision_id": "rev-default",
+    }
+    req = MagicMock()
+    req.query_params = {"projectId": "proj-x"}
+    req.json = AsyncMock(
+        return_value={
+            "provider": "anthropic",
+            "model": "gpt-4",
+        }
+    )
+    jr = await je._parse_request(req)
+    assert jr.environment_id == "env-default"
+    assert jr.environment_revision_id == "rev-default"
 
 
 @pytest.mark.asyncio

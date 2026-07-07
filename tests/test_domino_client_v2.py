@@ -158,6 +158,58 @@ class TestListSelfEnvironments:
         assert dc.list_self_environments() == []
 
 
+class TestGetDefaultEnvironment:
+    @patch.object(dc, "_domino_request")
+    def test_returns_environment(self, mock_req):
+        mock_req.return_value = {"id": "env-default", "name": "Default Env"}
+        result = dc.get_default_environment()
+        assert result is not None
+        assert result["id"] == "env-default"
+        mock_req.assert_called_once_with("GET", "/v4/environments/defaultEnvironment")
+
+    @patch.object(dc, "_domino_request")
+    def test_error_returns_none(self, mock_req):
+        mock_req.side_effect = RuntimeError("timeout")
+        assert dc.get_default_environment() is None
+
+
+class TestResolveJobEnvironmentDefaults:
+    @patch.dict(os.environ, {"DOMINO_ENVIRONMENT_ID": "e1", "DOMINO_ENVIRONMENT_REVISION_ID": "r2"}, clear=False)
+    @patch.object(dc, "list_environment_revisions")
+    def test_uses_configured_env_and_revision_when_valid(self, mock_revs):
+        mock_revs.return_value = [{"id": "r1"}, {"id": "r2"}]
+        envs = [{"id": "e1", "name": "Configured"}]
+        result = dc.resolve_job_environment_defaults(env_list=envs)
+        assert result == {"environment_id": "e1", "environment_revision_id": "r2"}
+
+    @patch.dict(os.environ, {"DOMINO_ENVIRONMENT_ID": "e1", "DOMINO_ENVIRONMENT_REVISION_ID": "bad"}, clear=False)
+    @patch.object(dc, "list_environment_revisions")
+    def test_uses_latest_revision_when_configured_revision_invalid(self, mock_revs):
+        mock_revs.return_value = [{"id": "r9"}, {"id": "r8"}]
+        envs = [{"id": "e1", "name": "Configured"}]
+        result = dc.resolve_job_environment_defaults(env_list=envs)
+        assert result == {"environment_id": "e1", "environment_revision_id": "r9"}
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch.object(dc, "get_default_environment")
+    @patch.object(dc, "list_environment_revisions")
+    def test_falls_back_to_user_default_environment(self, mock_revs, mock_default):
+        mock_default.return_value = {"id": "e-default", "name": "Default"}
+        mock_revs.return_value = [{"id": "r1"}]
+        envs = [{"id": "e-default", "name": "Default"}, {"id": "e-other", "name": "Other"}]
+        result = dc.resolve_job_environment_defaults(env_list=envs)
+        assert result == {"environment_id": "e-default", "environment_revision_id": "r1"}
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch.object(dc, "get_default_environment", return_value=None)
+    @patch.object(dc, "list_environment_revisions")
+    def test_falls_back_to_first_self_environment(self, mock_revs, _mock_default):
+        mock_revs.return_value = [{"id": "r-first"}]
+        envs = [{"id": "e-first", "name": "First"}, {"id": "e-second", "name": "Second"}]
+        result = dc.resolve_job_environment_defaults(env_list=envs)
+        assert result == {"environment_id": "e-first", "environment_revision_id": "r-first"}
+
+
 # ---------------------------------------------------------------------------
 # list_environment_revisions
 # ---------------------------------------------------------------------------

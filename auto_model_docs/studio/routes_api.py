@@ -115,6 +115,27 @@ def register_api_routes(rt):
 
     rt("/api/hardware-tiers")(api_hardware_tiers)
 
+    async def api_environments_default(req: Request):
+        row = domino_client.get_default_environment()
+        if not row:
+            return Response(json.dumps({"id": "", "label": ""}), media_type="application/json")
+        eid = str(row.get("id") or "")
+        label = (row.get("name") or eid).strip()
+        return Response(json.dumps({"id": eid, "label": label}), media_type="application/json")
+
+    rt("/api/environments/default")(api_environments_default)
+
+    async def api_environments(req: Request):
+        rows = domino_client.list_self_environments() or []
+        result = []
+        for row in rows:
+            eid = row.get("id", "")
+            label = row.get("name") or eid
+            result.append({"id": eid, "label": label})
+        return Response(json.dumps(result), media_type="application/json")
+
+    rt("/api/environments")(api_environments)
+
     async def api_environment_revisions(req: Request):
         env_id = (req.query_params.get("environmentId") or "").strip()
         if not env_id:

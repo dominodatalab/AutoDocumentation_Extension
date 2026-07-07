@@ -69,7 +69,7 @@ app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 # Helper: build the advanced-options panel (collapsed <details>)
 # ---------------------------------------------------------------------------
 
-def _build_advanced_options(tier_options):
+def _build_advanced_options(tier_options, env_options, rev_options):
     _default_openai_base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
     _default_anthropic_base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 
@@ -121,6 +121,41 @@ def _build_advanced_options(tier_options):
                 ),
                 Select(*tier_options, name="hardware_tier", id="field-hardware_tier", cls="hw-tier-select"),
                 cls="field",
+            ),
+
+            Div(
+                Div(
+                    Div(
+                        Label("Environment", for_="field-environment_id"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Compute environment for the Domino job."),
+                        cls="label-row",
+                    ),
+                    Select(
+                        *env_options,
+                        name="environment_id",
+                        id="field-environment_id",
+                        onchange="reloadEnvironmentRevisions(this)",
+                    ),
+                    cls="field",
+                ),
+                Div(
+                    Div(
+                        Label("Revision", for_="field-environment_revision_id"),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Pinned environment revision for this job."),
+                        cls="label-row",
+                    ),
+                    Div(
+                        Select(
+                            *rev_options,
+                            name="environment_revision_id",
+                            id="field-environment_revision_id",
+                            cls="env-revision-select",
+                        ),
+                        id="environment-revision-slot",
+                    ),
+                    cls="field",
+                ),
+                cls="env-revision-row",
             ),
 
             Div(
@@ -297,7 +332,41 @@ async def index(req: Request):
     if not tier_options:
         tier_options = [Option("(default)", value="")]
 
-    advanced_opts = _build_advanced_options(tier_options)
+    env_rows: list[dict] = []
+    try:
+        env_rows = domino_client.list_self_environments() or []
+    except Exception:
+        pass
+    env_defaults = domino_client.resolve_job_environment_defaults(env_list=env_rows)
+    default_env_id = env_defaults.get("environment_id") or ""
+    default_rev_id = env_defaults.get("environment_revision_id") or ""
+
+    env_options = []
+    for row in env_rows:
+        eid = str(row.get("id") or "")
+        if not eid:
+            continue
+        label = (row.get("name") or eid).strip()
+        env_options.append(Option(label, value=eid, selected=(eid == default_env_id)))
+    if not env_options:
+        env_options = [Option("(no environments available)", value="", disabled=True)]
+
+    rev_options = []
+    if default_env_id:
+        try:
+            rev_rows = domino_client.list_environment_revisions(default_env_id) or []
+            for rev in rev_rows:
+                rid = str(rev.get("id") or "")
+                if not rid:
+                    continue
+                rev_label = (rev.get("option_label") or rid).strip()
+                rev_options.append(Option(rev_label, value=rid, selected=(rid == default_rev_id)))
+        except Exception:
+            pass
+    if not rev_options:
+        rev_options = [Option("(select environment first)", value="", disabled=True, selected=True)]
+
+    advanced_opts = _build_advanced_options(tier_options, env_options, rev_options)
 
     compute_env_errors = validate_studio_domino_compute_environment(domino_client)
 

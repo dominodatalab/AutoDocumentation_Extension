@@ -434,8 +434,11 @@ class TestSpecFileBrowserUi:
         assert "absoluteSpecFromRelative" in scripts
         assert "<th>Documents</th>" in scripts
         assert "renderJobHistory" in scripts
-        assert "field-environment_id" not in web
-        assert "environment-revision-slot" not in web
+        assert 'id="field-environment_id"' in web
+        assert 'id="environment-revision-slot"' in web
+        assert 'id="field-environment_revision_id"' in web
+        assert "reloadEnvironmentRevisions" in scripts
+        assert "environment_id:" in scripts
         assert "adv-opts-overlay" in web
         assert "adv-opts-open-btn" in scripts
         assert "gear-settings-btn" not in web

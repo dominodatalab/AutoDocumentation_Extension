@@ -1980,6 +1980,8 @@ MAIN_DOM_JS = r"""
                         filtered_model_names: val('filter-model-names'),
                         latest_only: chk('filter-latest-only'),
                         hardware_tier: val('field-hardware_tier'),
+                        environment_id: val('field-environment_id'),
+                        environment_revision_id: val('field-environment_revision_id'),
                         provider_base_url: val('field-provider_base_url'),
                         code_path: val('field-code_path'),
                         branch: val('field-branch'),
