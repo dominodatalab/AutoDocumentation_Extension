@@ -365,14 +365,6 @@ def register_api_routes(rt):
                 )
             dest_rel = spec_template_sync.dataset_rel_path(basename)
             DatasetManager.write_file(dataset_id, dest_rel, content)
-            try:
-                dest_snap = domino_datasets.get_rw_snapshot_id(dataset_id)
-                spec_template_sync.sync_builtins_to_autodoc_dataset(
-                    dataset_id,
-                    dest_snapshot_id=dest_snap,
-                )
-            except Exception:
-                logger.warning("sync built-ins after spec upload failed", exc_info=True)
             return Response(
                 json.dumps({
                     "path": dest_rel,

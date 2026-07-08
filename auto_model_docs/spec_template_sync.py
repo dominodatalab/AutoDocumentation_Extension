@@ -127,14 +127,9 @@ def sync_builtins_to_autodoc_dataset(dataset_id: str, dest_snapshot_id: str | No
         if not src.is_file():
             continue
         rel = dataset_rel_path(filename)
-        body = src.read_bytes()
         if DatasetManager.file_exists(dest_snapshot_id, rel):
-            try:
-                existing = DatasetManager.read_file(dest_snapshot_id, rel)
-            except Exception:
-                existing = None
-            if existing == body:
-                continue
+            continue
+        body = src.read_bytes()
         DatasetManager.write_file(dataset_id, rel, body)
 
 

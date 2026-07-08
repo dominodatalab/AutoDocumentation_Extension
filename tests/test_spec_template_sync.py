@@ -178,16 +178,32 @@ def test_catalog_from_dataset_matches_builtin_when_fileName_is_full_path(monkeyp
 
 
 @patch.object(st, "DatasetManager")
-def test_sync_builtins_overwrites_when_packaged_content_changed(mock_dm, tmp_path, monkeypatch):
+def test_catalog_from_dataset_returns_user_saved_template(mock_dm):
+    user_yaml = (
+        b"slug: executive\n"
+        b'card_title: "Executive Summary by bira"\n'
+        b"card_description: High-level model summary written for non-technical stakeholders and leadership.\n"
+        b"sections:\n  - Overview\n"
+    )
+    mock_dm.list_files.return_value = [
+        {"fileName": "doc_spec_executive.yaml", "isDirectory": False},
+    ]
+    mock_dm.read_file.return_value = user_yaml
+    got = st.catalog_from_dataset("snap-1")
+    assert len(got) == 1
+    assert got[0]["name"] == "Executive Summary by bira"
+
+
+@patch.object(st, "DatasetManager")
+def test_sync_builtins_skips_existing_file_even_when_content_differs(mock_dm, tmp_path, monkeypatch):
     monkeypatch.setattr(st, "_REPO_DIR", tmp_path)
     monkeypatch.setattr(st.domino_datasets, "get_rw_snapshot_id", lambda _ds: "snap-dst")
     (tmp_path / "doc_spec.yaml").write_bytes(
         b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - new\n"
     )
     mock_dm.file_exists.return_value = True
-    mock_dm.read_file.return_value = b"slug: s\ncard_title: T\ncard_description: D\nsections:\n  - old\n"
     st.sync_builtins_to_autodoc_dataset("ds-1")
-    mock_dm.write_file.assert_called_once()
+    mock_dm.write_file.assert_not_called()
 
 
 @patch.object(st, "DatasetManager")
