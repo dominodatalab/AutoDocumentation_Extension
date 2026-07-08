@@ -1680,14 +1680,18 @@ MAIN_DOM_JS = r"""
                 }
                 html += '</div>';
             } else if (status === 'failed') {
+                var failedDetail = latestJob.domino_status
+                    ? _esc(latestJob.domino_status)
+                    : 'Check the job logs in Domino for details.';
+                if (latestJob.job_url) {
+                    failedDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View job in Domino</a>.';
+                }
                 html += '<div class="results-failed">';
                 html += '<div class="results-failed-banner">'
                     + '<span class="material-symbols-outlined results-failed-icon">error</span>'
                     + '<div class="results-failed-text">'
                     + '<div class="results-failed-headline">Generation failed</div>'
-                    + '<div class="results-failed-detail">'
-                    + (latestJob.domino_status ? _esc(latestJob.domino_status) : 'Check the job logs in Domino for details.')
-                    + '</div>'
+                    + '<div class="results-failed-detail">' + failedDetail + '</div>'
                     + '</div></div>';
                 html += '</div>';
             } else if (status === 'cancelled') {

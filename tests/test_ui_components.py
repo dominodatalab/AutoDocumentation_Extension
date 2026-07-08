@@ -560,6 +560,14 @@ class TestGovernanceBundlePickerOptgroups:
         assert "terminal-status-unknown" in styles
         assert "history-status-unknown" in styles
 
+    def test_failed_job_status_includes_job_link(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        failed_idx = scripts_src.index("var failedDetail = latestJob.domino_status")
+        failed_block = scripts_src[failed_idx:failed_idx + 700]
+        assert "latestJob.job_url" in failed_block
+        assert "View job in Domino" in failed_block
+
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent
         web = (root / "auto_model_docs" / "web_app_studio.py").read_text()
