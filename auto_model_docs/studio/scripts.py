@@ -5,14 +5,48 @@ from __future__ import annotations
 
 MAIN_DOM_JS = r"""
     // ── Shared fetch helper ──────────────────────────────────────────
+    function _sessionRedirectMessage() {
+        return 'Session or consent required. Reload this page, complete any prompts, then try again.';
+    }
+
+    function _apiFetch(url, options) {
+        var opts = Object.assign({ credentials: 'include', redirect: 'manual' }, options || {});
+        return fetch(url, opts);
+    }
+
+    function _isRedirectResponse(r) {
+        return r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400);
+    }
+
     function _checkResp(r) {
+        if (_isRedirectResponse(r)) {
+            throw new Error(_sessionRedirectMessage());
+        }
         if (r.ok) return r;
         return r.text().then(function(txt) {
             try {
                 var data = JSON.parse(txt);
                 if (data && data.error) throw new Error(data.error);
-            } catch (e) {}
+            } catch (e) {
+                if (e instanceof Error && e.message && e.message !== txt) throw e;
+            }
             throw new Error(txt || ('Server error (' + r.status + ')'));
+        });
+    }
+
+    function _jsonResp(r) {
+        return Promise.resolve(_checkResp(r)).then(function(resp) {
+            return resp.json();
+        });
+    }
+
+    function _jsonRespWithOk(r) {
+        if (_isRedirectResponse(r)) {
+            throw new Error(_sessionRedirectMessage());
+        }
+        var ok = r.ok;
+        return r.json().then(function(body) {
+            return { ok: ok, body: body };
         });
     }
 
@@ -210,7 +244,7 @@ MAIN_DOM_JS = r"""
             if (!pid) return;
             var url = _adUrl('api/environment-revisions') + '?projectId=' + encodeURIComponent(pid)
                 + '&environmentId=' + encodeURIComponent(envId);
-            fetch(url).then(_checkResp).then(function(r) { return r.json(); })
+            _apiFetch(url).then(_jsonResp)
                 .then(function(revs) {
                     var html = '<select name="environment_revision_id" id="field-environment_revision_id" class="env-revision-select">';
                     if (!revs || !revs.length) {
@@ -344,8 +378,8 @@ MAIN_DOM_JS = r"""
             if (!pid) return;
             var qs = '?projectId=' + encodeURIComponent(pid);
             Promise.all([
-                fetch(_adUrl('api/code-paths') + qs).then(_checkResp).then(function(r) { return r.json(); }),
-                fetch(_adUrl('api/code-root') + qs).then(_checkResp).then(function(r) { return r.json(); }),
+                _apiFetch(_adUrl('api/code-paths') + qs).then(_jsonResp),
+                _apiFetch(_adUrl('api/code-root') + qs).then(_jsonResp),
             ])
                 .then(function(results) {
                     _codePathsLoaded = true;
@@ -473,13 +507,12 @@ MAIN_DOM_JS = r"""
                 };
             }
 
-            fetch(_adUrl('api/add-spec-template') + (pid ? '?projectId=' + encodeURIComponent(pid) : ''), {
+            _apiFetch(_adUrl('api/add-spec-template') + (pid ? '?projectId=' + encodeURIComponent(pid) : ''), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             })
-                .then(_checkResp)
-                .then(function(r) { return r.json(); })
+                .then(_jsonResp)
                 .then(function(data) {
                     if (!data || data.error) throw new Error((data && data.error) || 'Copy failed');
                     _showSpecConfirm(srcPath, 'browse');
@@ -526,8 +559,8 @@ MAIN_DOM_JS = r"""
             var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
             var fd = new FormData();
             fd.append('file', file, file.name);
-            fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
-                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+            _apiFetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
+                .then(_jsonRespWithOk)
                 .then(function(res) {
                     if (!res.ok || (res.body && res.body.error)) {
                         var msg = (res.body && res.body.error) || 'Upload failed';
@@ -830,9 +863,8 @@ MAIN_DOM_JS = r"""
             var url = _adUrl('api/governance/bundles')
                 + '?projectId=' + encodeURIComponent(pid)
                 + '&apiHost=' + encodeURIComponent(window.location.origin);
-            return fetch(url, { credentials: 'include' })
-                .then(_checkResp)
-                .then(function(r) { return r.json(); })
+            return _apiFetch(url)
+                .then(_jsonResp)
                 .then(function(data) {
                     var rows = (data && data.bundles) ? data.bundles : [];
                     _governanceBundles = rows.map(_normalizeGovernanceBundle).filter(Boolean);
@@ -874,8 +906,8 @@ MAIN_DOM_JS = r"""
             var pid = resolvedProjectId();
             var url = _adUrl('api/built-in-templates');
             if (pid) url += '?projectId=' + encodeURIComponent(pid);
-            return fetch(url)
-                .then(_checkResp).then(function(r) { return r.json(); })
+            return _apiFetch(url)
+                .then(_jsonResp)
                 .then(function(templates) {
                     if (!Array.isArray(templates)) throw new Error('bad response');
                     _builtinTemplates = templates;
@@ -992,8 +1024,8 @@ MAIN_DOM_JS = r"""
             fd.append('file', blob, filename);
             fd.append('filename', filename);
 
-            fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
-                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+            _apiFetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
+                .then(_jsonRespWithOk)
                 .then(function(res) {
                     if (!res.ok || (res.body && res.body.error)) {
                         var msg = (res.body && res.body.error) || 'Save failed';
@@ -1076,7 +1108,7 @@ MAIN_DOM_JS = r"""
             var yamlUrl = _adUrl('api/built-in-template') + '?template_file=' + tplFile + pidQs;
             var sectionsUrl = _adUrl('api/built-in-template-sections') + '?template_file=' + tplFile + pidQs;
 
-            var yamlPromise = fetch(yamlUrl)
+            var yamlPromise = _apiFetch(yamlUrl)
                 .then(_checkResp)
                 .then(function(r) { return r.text(); })
                 .then(function(text) {
@@ -1095,9 +1127,8 @@ MAIN_DOM_JS = r"""
                     _updateEditTplButtons();
                 });
 
-            var sectionsPromise = fetch(sectionsUrl)
-                .then(_checkResp)
-                .then(function(r) { return r.json(); })
+            var sectionsPromise = _apiFetch(sectionsUrl)
+                .then(_jsonResp)
                 .then(function(data) {
                     _renderTemplatePreviewSections(tpl, (data && data.sections) || [], (data && data.per_model_sections) || []);
                 })
@@ -1243,8 +1274,8 @@ MAIN_DOM_JS = r"""
         function loadDatasets() {
             var pid = resolvedProjectId();
             if (!pid) return;
-            fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
-                .then(_checkResp).then(function(r) { return r.json(); })
+            _apiFetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
+                .then(_jsonResp)
                 .then(function(datasets) {
                     if (!datasets || datasets.error || !datasets.length) return;
                     _specDatasets = datasets;
@@ -1263,11 +1294,11 @@ MAIN_DOM_JS = r"""
             var pid = resolvedProjectId();
             if (!pid) return;
 
-            var codeRootPromise = fetch(_adUrl('api/code-root') + '?projectId=' + encodeURIComponent(pid))
-                .then(_checkResp).then(function(r) { return r.json(); })
+            var codeRootPromise = _apiFetch(_adUrl('api/code-root') + '?projectId=' + encodeURIComponent(pid))
+                .then(_jsonResp)
                 .catch(function() { return null; });
-            var datasetsPromise = fetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
-                .then(_checkResp).then(function(r) { return r.json(); })
+            var datasetsPromise = _apiFetch(_adUrl('api/datasets') + '?projectId=' + encodeURIComponent(pid))
+                .then(_jsonResp)
                 .catch(function() { return []; });
 
             Promise.all([codeRootPromise, datasetsPromise]).then(function(results) {
@@ -1373,8 +1404,8 @@ MAIN_DOM_JS = r"""
                 fetchUrl = _adUrl('api/dataset-files') + queryApiDatasetFiles(path);
             }
 
-            return fetch(fetchUrl, { signal: ctrl.signal })
-                .then(_checkResp).then(function(r) { return r.json(); })
+            return _apiFetch(fetchUrl, { signal: ctrl.signal })
+                .then(_jsonResp)
                 .then(function(files) {
                     if (!Array.isArray(files)) {
                         specFileList.innerHTML = '<div class="spec-file-empty"><span class="spec-file-list-empty">'
@@ -1523,8 +1554,8 @@ MAIN_DOM_JS = r"""
                 fd.append('datasetId', uploadDsId);
                 fd.append('relativeDir', _specCurrentPath || '');
                 fd.append('file', file);
-                fetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
-                    .then(_checkResp).then(function(r) { return r.json(); })
+                _apiFetch(_adUrl('api/upload-spec-to-dataset') + qs, { method: 'POST', body: fd })
+                    .then(_jsonResp)
                     .then(function(result) {
                         if (result.error) throw new Error(result.error);
                         if (specUploadStatus) { specUploadStatus.textContent = 'Uploaded: ' + result.fileName; }
@@ -1545,8 +1576,8 @@ MAIN_DOM_JS = r"""
             fd.append('spec_upload', file);
             var resultEl = document.getElementById('spec-validation-result');
             if (resultEl) resultEl.innerHTML = '<span class="spec-validation-pending">Validating...</span>';
-            fetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
-                .then(_checkResp).then(function(r) { return r.json(); })
+            _apiFetch(_adUrl('validate-spec'), { method: 'POST', body: fd })
+                .then(_jsonResp)
                 .then(function(data) {
                     window._specValid = data.valid;
                     if (!resultEl) return;
@@ -1804,8 +1835,8 @@ MAIN_DOM_JS = r"""
                 if (cancelBtn) {
                     cancelBtn.addEventListener('click', function(e) {
                         e.preventDefault();
-                        fetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
-                            .then(_checkResp).then(function(r) { return r.json(); })
+                        _apiFetch(_adUrl('cancel-queued-jobs') + queryJobHistory(), { method: 'POST' })
+                            .then(_jsonResp)
                             .then(function(data) { onJobsUpdated(data.jobs || []); })
                             .catch(function() {});
                     });
@@ -1823,8 +1854,8 @@ MAIN_DOM_JS = r"""
         }
 
         function fetchJobHistory() {
-            fetch(_adUrl('job-history') + queryJobHistory())
-                .then(_checkResp).then(function(r) { return r.json(); })
+            _apiFetch(_adUrl('job-history') + queryJobHistory())
+                .then(_jsonResp)
                 .then(function(data) { onJobsUpdated(data.jobs || []); })
                 .catch(function() {});
         }
@@ -1840,8 +1871,8 @@ MAIN_DOM_JS = r"""
             _docPreviewRunId = runId;
             if (_docPreviewTimer) { clearTimeout(_docPreviewTimer); _docPreviewTimer = null; }
             var pid = resolvedProjectId();
-            fetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
-                .then(function(r) { return r.json(); })
+            _apiFetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+                .then(_jsonResp)
                 .then(function(data) {
                     var wrap = document.getElementById('doc-preview-wrap');
                     if (!wrap || _docPreviewRunId !== runId) return;
@@ -1888,8 +1919,8 @@ MAIN_DOM_JS = r"""
             var closeBtn = document.getElementById('landing-doc-preview-close');
             if (closeBtn) closeBtn.addEventListener('click', _closeLandingDocPreview);
             var pid = resolvedProjectId();
-            fetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
-                .then(function(r) { return r.json(); })
+            _apiFetch(_adUrl('api/preview-doc') + '?projectId=' + encodeURIComponent(pid) + '&runId=' + encodeURIComponent(runId))
+                .then(_jsonResp)
                 .then(function(data) {
                     var body = document.getElementById('landing-doc-preview-body');
                     if (!body) return;
@@ -2005,12 +2036,12 @@ MAIN_DOM_JS = r"""
                     }
 
                     var qs = pid ? ('?projectId=' + encodeURIComponent(pid)) : '';
-                    fetch(_adUrl('run') + qs, {
+                    _apiFetch(_adUrl('run') + qs, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(jsonPayload),
                     })
-                        .then(_checkResp).then(function(r) { return r.json(); })
+                        .then(_jsonResp)
                         .then(function(data) {
                             if (data.error) {
                                 if (panel) {

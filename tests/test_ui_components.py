@@ -486,6 +486,20 @@ class TestLandingDocPreviewRestoresEditYaml:
         assert "editArea.value = _landingPreviewOriginalEditYaml" in scripts_src
 
 
+class TestFetchJsonHelpers:
+    def test_api_fetch_uses_manual_redirect(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        assert "_apiFetch" in scripts_src
+        assert "redirect: 'manual'" in scripts_src
+        assert "_isRedirectResponse" in scripts_src
+        assert "_jsonResp" in scripts_src
+        assert "_looksLikeHtmlResponse" not in scripts_src
+        assert "_readJsonBody" not in scripts_src
+        api_fetch_fn = scripts_src.split("function _apiFetch(url, options) {", 1)[1].split("function _isRedirectResponse", 1)[0]
+        assert "return fetch(url, opts)" in api_fetch_fn
+
+
 class TestGovernanceBundlePickerOptgroups:
     def test_bundle_select_groups_by_model_with_optgroup(self):
         root = Path(__file__).resolve().parent.parent
