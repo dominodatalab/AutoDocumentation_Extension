@@ -9,6 +9,29 @@ MAIN_DOM_JS = r"""
         return 'Session or consent required. Reload this page, complete any prompts, then try again.';
     }
 
+    function _showReloadRequired() {
+        var msg = _sessionRedirectMessage();
+        var el = document.getElementById('studio-reload-banner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'studio-reload-banner';
+            el.className = 'inline-callout inline-callout-warning studio-reload-banner';
+            el.setAttribute('role', 'alert');
+            document.body.insertBefore(el, document.body.firstChild);
+        }
+        el.innerHTML = msg + ' <a href="#" class="terminal-action studio-reload-link">Reload page</a>';
+        el.style.display = '';
+        var link = el.querySelector('.studio-reload-link');
+        if (link && !link._studioReloadWired) {
+            link._studioReloadWired = true;
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.location.reload();
+            });
+        }
+        throw new Error(msg);
+    }
+
     function _apiFetch(url, options) {
         var opts = Object.assign({ credentials: 'include', redirect: 'manual' }, options || {});
         return fetch(url, opts);
@@ -20,7 +43,7 @@ MAIN_DOM_JS = r"""
 
     function _checkResp(r) {
         if (_isRedirectResponse(r)) {
-            throw new Error(_sessionRedirectMessage());
+            _showReloadRequired();
         }
         if (r.ok) return r;
         return r.text().then(function(txt) {
@@ -42,7 +65,7 @@ MAIN_DOM_JS = r"""
 
     function _jsonRespWithOk(r) {
         if (_isRedirectResponse(r)) {
-            throw new Error(_sessionRedirectMessage());
+            _showReloadRequired();
         }
         var ok = r.ok;
         return r.json().then(function(body) {

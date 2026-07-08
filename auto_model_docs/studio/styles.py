@@ -1776,6 +1776,16 @@ select.hw-tier-select option {
     border-left-color: var(--warning);
 }
 
+.studio-reload-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    margin: 0;
+    border-radius: 0;
+    border-left: none;
+    border-bottom: 1px solid var(--warning);
+}
+
 .spec-validation-success {
     color: var(--success);
     font-weight: 500;
