@@ -513,3 +513,39 @@ class TestSubmitJob:
         # Final payload (shared reference) should not have mainRepoGitRef
         final_payload = mock_req.call_args.kwargs["json"]
         assert "mainRepoGitRef" not in final_payload
+
+
+# ---------------------------------------------------------------------------
+# download_artifact_at_head
+# ---------------------------------------------------------------------------
+
+class TestDownloadArtifactAtHead:
+    @patch.object(dc, "_get_auth_headers", return_value={})
+    @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
+    @patch.object(dc, "_resolve_api_host", return_value="https://domino.example.com")
+    def test_logs_on_http_404(self, _mock_host, _mock_ctx, _mock_auth, caplog):
+        import logging
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        with patch("httpx.Client", return_value=mock_client):
+            with caplog.at_level(logging.WARNING):
+                result = dc.download_artifact_at_head("proj-123", "docs/6a4e6b6d/model_docs.docx")
+
+        assert result is None
+        assert any("download_artifact_at_head not found" in r.message for r in caplog.records)
+        assert any("http_status=404" in r.message for r in caplog.records)
+        assert any("owner=test_owner" in r.message for r in caplog.records)
+        assert any("project=test_project" in r.message for r in caplog.records)
+
+    @patch.object(dc, "_resolve_api_host", return_value=None)
+    def test_logs_when_api_host_missing(self, _mock_host, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING):
+            result = dc.download_artifact_at_head("proj-123", "docs/foo/model_docs.docx")
+        assert result is None
+        assert any("api host not configured" in r.message for r in caplog.records)

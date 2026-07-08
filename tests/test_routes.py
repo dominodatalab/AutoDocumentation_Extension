@@ -848,15 +848,21 @@ class TestPreviewDoc:
         assert "runId" in json.loads(result.body)["error"]
 
     @pytest.mark.asyncio
-    async def test_file_not_found_returns_404(self, _mock_studio_modules):
+    async def test_file_not_found_returns_404(self, _mock_studio_modules, caplog):
+        import logging
         _mock_studio_modules["state"].domino_client.download_artifact_at_head.return_value = None
         mod = _import_routes_api()
         routes = _register(mod, "register_api_routes")
         req = _make_request(query_params={"projectId": "proj-123", "runId": "run-abc"})
-        result = await routes["/api/preview-doc"](req)
+        with caplog.at_level(logging.WARNING):
+            result = await routes["/api/preview-doc"](req)
         assert result.status_code == 404
         body = json.loads(result.body)
         assert body["ready"] is False
+        assert any("api_preview_doc document not found" in r.message for r in caplog.records)
+        assert any("project_id=proj-123" in r.message for r in caplog.records)
+        assert any("run_id=run-abc" in r.message for r in caplog.records)
+        assert any("artifact_path=docs/run-abc/model_docs.docx" in r.message for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_returns_html_when_file_exists(self, _mock_studio_modules):

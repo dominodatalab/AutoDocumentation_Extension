@@ -880,28 +880,65 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
     """
     import httpx
 
+    path = (artifact_path or "").lstrip("/")
     api_host = _resolve_api_host()
     if not api_host:
+        logger.warning(
+            "download_artifact_at_head skipped: api host not configured project_id=%s artifact_path=%s",
+            project_id,
+            path,
+        )
         return None
     try:
         _, pname, powner = get_project_context(project_id)
     except ValueError:
+        logger.warning(
+            "download_artifact_at_head skipped: could not resolve project project_id=%s artifact_path=%s",
+            project_id,
+            path,
+        )
         return None
     if not powner or not pname:
+        logger.warning(
+            "download_artifact_at_head skipped: missing owner or project name project_id=%s artifact_path=%s",
+            project_id,
+            path,
+        )
         return None
 
-    path = (artifact_path or "").lstrip("/")
     url = f"{api_host}/u/{powner}/{pname}/raw/latest/{path}"
     headers = _get_auth_headers()
     try:
         with httpx.Client(timeout=_DEFAULT_TIMEOUT, **_HTTPX_CLIENT_KWARGS) as client:
             resp = client.get(url, params={"inline": "false"}, headers=headers)
             if resp.status_code == 404:
+                logger.warning(
+                    "download_artifact_at_head not found project_id=%s owner=%s project=%s artifact_path=%s http_status=404",
+                    project_id,
+                    powner,
+                    pname,
+                    path,
+                )
                 return None
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                logger.warning(
+                    "download_artifact_at_head http error project_id=%s owner=%s project=%s artifact_path=%s http_status=%s",
+                    project_id,
+                    powner,
+                    pname,
+                    path,
+                    resp.status_code,
+                )
+                resp.raise_for_status()
             return resp.content
     except Exception:
-        logger.exception("download_artifact_at_head failed for %s %s", project_id, artifact_path)
+        logger.exception(
+            "download_artifact_at_head failed project_id=%s owner=%s project=%s artifact_path=%s",
+            project_id,
+            powner,
+            pname,
+            path,
+        )
         return None
 
 

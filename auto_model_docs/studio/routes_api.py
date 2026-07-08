@@ -668,6 +668,12 @@ def register_api_routes(rt):
             artifact_path = f"docs/{short}/model_docs.docx"
             docx_bytes = domino_client.download_artifact_at_head(pid, artifact_path)
             if docx_bytes is None:
+                logger.warning(
+                    "api_preview_doc document not found project_id=%s run_id=%s artifact_path=%s",
+                    pid,
+                    run_id,
+                    artifact_path,
+                )
                 return Response(json.dumps({"error": "Document not found.", "ready": False}), status_code=404, media_type="application/json")
             import mammoth
             import io
