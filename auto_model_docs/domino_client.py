@@ -116,27 +116,19 @@ def _domino_request(
                     continue
                 resp.raise_for_status()
                 return resp.json()
-        except httpx.HTTPStatusError as e:
-            try:
-                body_preview = (e.response.text or "")[:2000]
-            except Exception:
-                body_preview = "(could not read body)"
-            logger.warning(
-                "Domino API HTTP %s %s status=%s url=%s response_body=%r",
-                method,
-                path,
-                e.response.status_code,
-                str(e.request.url),
-                body_preview,
-            )
+        except httpx.HTTPStatusError:
+            logger.exception("Domino API request failed")
             raise
         except Exception as exc:
             last_exc = exc
             if attempt < max_retries:
                 backoff = 2 ** attempt
                 logger.warning(
-                    "Domino API %s %s failed (%s), retrying in %ss (attempt %s/%s)",
-                    method, path, exc, backoff, attempt + 1, max_retries,
+                    "Domino API request failed, retrying in %ss (attempt %s/%s)",
+                    backoff,
+                    attempt + 1,
+                    max_retries,
+                    exc_info=True,
                 )
                 time.sleep(backoff)
                 continue
@@ -253,8 +245,8 @@ def get_code_paths(project_id: str) -> dict[str, Any]:
             loc = (repo or {}).get("location", "").strip()
             if loc and loc not in paths:
                 paths.append(loc)
-    except Exception as exc:
-        logger.warning("get_code_paths: gitBrowse failed: %s", exc)
+    except Exception:
+        logger.exception("get_code_paths: gitBrowse failed")
     return {"default": default_path, "paths": paths}
 
 
@@ -283,8 +275,8 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
             rid = main_repo.get("id")
             if rid:
                 repo_id = str(rid)
-        except Exception as exc:
-            logger.warning("get_code_source_info: mainRepository lookup failed: %s", exc)
+        except Exception:
+            logger.exception("get_code_source_info: mainRepository lookup failed")
     return {"is_git": is_git, "repo_id": repo_id, "location": location}
 
 
@@ -326,15 +318,15 @@ def browse_dfs_code(owner_username: str, project_name: str, file_path: str = "")
         for d in (dirs if isinstance(dirs, list) else []):
             if isinstance(d, dict):
                 result.append({"fileName": d.get("name", ""), "isDirectory": True})
-    except Exception as exc:
-        logger.warning("browse_dfs_code directories failed: %s", exc)
+    except Exception:
+        logger.exception("browse_dfs_code directories failed")
     try:
         files = _domino_request("GET", "/v4/files/browseFiles", params=params)
         for f in (files if isinstance(files, list) else []):
             if isinstance(f, dict):
                 result.append({"fileName": f.get("name", ""), "isDirectory": False})
-    except Exception as exc:
-        logger.warning("browse_dfs_code files failed: %s", exc)
+    except Exception:
+        logger.exception("browse_dfs_code files failed")
     return result
 
 
@@ -506,8 +498,8 @@ def list_hardware_tiers(project_id: Optional[str] = None) -> list[dict[str, Any]
                 "option_label": _hw_option_label(hw, cap),
             })
         return results
-    except Exception as exc:
-        logger.warning("Failed to list hardware tiers: %s", exc)
+    except Exception:
+        logger.exception("Failed to list hardware tiers")
         return []
 
 
@@ -578,8 +570,8 @@ def list_self_environments() -> list[dict[str, Any]]:
             name = (item.get("name") or str(eid)).strip()
             out.append({"id": str(eid), "name": name})
         return out
-    except Exception as exc:
-        logger.warning("Failed to list self environments: %s", exc)
+    except Exception:
+        logger.exception("Failed to list self environments")
         return []
 
 
@@ -588,8 +580,8 @@ def get_default_environment() -> dict[str, Any] | None:
         data = _domino_request("GET", "/v4/environments/defaultEnvironment")
         if isinstance(data, dict) and data.get("id") is not None:
             return data
-    except Exception as exc:
-        logger.warning("Failed to get default environment: %s", exc)
+    except Exception:
+        logger.exception("Failed to get default environment")
     return None
 
 
@@ -674,8 +666,8 @@ def list_environment_revisions(environment_id: str) -> list[dict[str, Any]]:
             revs.append(row)
         revs.sort(key=lambda x: (-(x.get("number") or 0), x.get("id") or ""))
         return revs
-    except Exception as exc:
-        logger.warning("Failed to list environment revisions: %s", exc)
+    except Exception:
+        logger.exception("Failed to list environment revisions")
         return []
 
 
@@ -754,8 +746,8 @@ def get_job_status(run_id: str) -> dict[str, Any]:
     """
     try:
         data = _domino_request("GET", f"/v4/jobs/{run_id}")
-    except Exception as exc:
-        logger.warning("Failed to get status for run %s: %s", run_id, exc)
+    except Exception:
+        logger.exception("Failed to get job status")
         return {"domino_status": "unknown", "local_status": "unknown"}
 
     raw = (
@@ -793,8 +785,8 @@ def stop_job(run_id: str, project_id: Optional[str] = None) -> None:
     payload: dict[str, Any] = {"jobId": run_id, "commitResults": True, "projectId": project_id}
     try:
         _domino_request("POST", "/v4/jobs/stop", json=payload)
-    except Exception as exc:
-        logger.warning("Failed to stop run %s: %s", run_id, exc)
+    except Exception:
+        logger.exception("Failed to stop job")
 
 
 # ---------------------------------------------------------------------------

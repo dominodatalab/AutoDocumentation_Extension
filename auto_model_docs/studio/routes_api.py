@@ -24,24 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 def _autodoc_dataset_and_snapshot(project_id: str) -> tuple[dict, str]:
-    logger.info("_autodoc_dataset_and_snapshot: start project_id=%r", project_id)
     require_project_write(project_id)
     ensured = domino_datasets.ensure_dataset(project_id)
     ds_id = str(ensured.get("id") or "").strip()
-    logger.info(
-        "_autodoc_dataset_and_snapshot: ensure_dataset returned id=%r name=%r rwSnapshotId=%r keys=%r",
-        ds_id,
-        (ensured.get("name") or "")[:80],
-        ensured.get("rwSnapshotId"),
-        sorted(ensured.keys()) if isinstance(ensured, dict) else type(ensured),
-    )
     if not ds_id:
         raise RuntimeError("autodoc dataset has no id")
     snap = ensured.get("rwSnapshotId") or domino_datasets.get_rw_snapshot_id(ds_id)
-    logger.info(
-        "_autodoc_dataset_and_snapshot: resolved snapshot_id=%r (from ensured or get_rw_snapshot_id)",
-        snap,
-    )
     if not snap:
         raise RuntimeError("Could not resolve read-write snapshot for autodoc dataset")
     return ensured, str(snap)
@@ -50,35 +38,15 @@ def _autodoc_dataset_and_snapshot(project_id: str) -> tuple[dict, str]:
 def _active_autodoc_snapshot_for_spec_templates(project_id: str) -> str:
     import spec_template_sync
 
-    logger.info("_active_autodoc_snapshot_for_spec_templates: start project_id=%r", project_id)
     ensured, initial_snap = _autodoc_dataset_and_snapshot(project_id)
     ds_id = str(ensured.get("id") or "").strip()
-    logger.info(
-        "_active_autodoc_snapshot_for_spec_templates: sync_builtins_to_autodoc_dataset dataset_id=%r",
-        ds_id,
-    )
     if not ds_id:
         raise RuntimeError("autodoc dataset has no id")
     spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id, dest_snapshot_id=initial_snap)
-    logger.info("_active_autodoc_snapshot_for_spec_templates: sync_builtins finished")
     fresh = domino_datasets.get_rw_snapshot_id(ds_id)
-    logger.info(
-        "_active_autodoc_snapshot_for_spec_templates: get_rw_snapshot_id returned %r (type=%s)",
-        fresh,
-        type(fresh).__name__,
-    )
     if isinstance(fresh, str) and fresh.strip():
-        logger.info(
-            "_active_autodoc_snapshot_for_spec_templates: using fresh snapshot_id=%r",
-            fresh.strip(),
-        )
         return fresh.strip()
     snap = str(ensured.get("rwSnapshotId") or "").strip()
-    logger.info(
-        "_active_autodoc_snapshot_for_spec_templates: fallback ensured.rwSnapshotId=%r initial_snap=%r",
-        snap,
-        initial_snap,
-    )
     if not snap:
         raise RuntimeError("Could not resolve read-write snapshot for autodoc dataset")
     return snap
@@ -523,17 +491,15 @@ def register_api_routes(rt):
         try:
             snap = _active_autodoc_snapshot_for_spec_templates(pid)
             rel = spec_template_sync.dataset_rel_path("doc_spec.yaml")
-            logger.info("api_download_template: snapshot_id=%r path=%r", snap, rel)
             raw = DatasetManager.read_file(
                 snap,
                 rel,
             )
-            logger.info("api_download_template: read %d bytes", len(raw or b""))
         except FileNotFoundError:
             return Response("Template not found", status_code=404)
-        except Exception as exc:
-            logger.warning("download-template read failed: %s", exc, exc_info=True)
-            return Response(str(exc), status_code=500)
+        except Exception:
+            logger.exception("download-template read failed")
+            return Response("Template read failed", status_code=500)
         return Response(
             content=raw,
             media_type="application/x-yaml",
@@ -547,13 +513,7 @@ def register_api_routes(rt):
         import spec_template_sync
 
         pid = (_resolve_request_project_id(req) or "").strip()
-        logger.info(
-            "api_built_in_templates: request query_params=%r resolved_project_id=%r",
-            dict(req.query_params),
-            pid or None,
-        )
         if not pid:
-            logger.info("api_built_in_templates: no project id, returning empty catalog")
             return Response(json.dumps([]), media_type="application/json")
         try:
             ensured, snap = _autodoc_dataset_and_snapshot(pid)
@@ -566,15 +526,10 @@ def register_api_routes(rt):
                 if isinstance(fresh, str) and fresh.strip():
                     snap = fresh.strip()
             mount_path = domino_datasets.resolve_dataset_mount_path(ensured)
-            logger.info(
-                "api_built_in_templates: catalog_from_dataset snapshot_id=%r mount_path=%r",
-                snap,
-                mount_path,
-            )
-        except Exception as exc:
-            logger.exception("api_built_in_templates: failed before catalog project_id=%r", pid)
+        except Exception:
+            logger.exception("api_built_in_templates failed before catalog")
             return Response(
-                json.dumps({"error": str(exc)}),
+                json.dumps({"error": "catalog failed"}),
                 status_code=500,
                 media_type="application/json",
             )
@@ -587,14 +542,9 @@ def register_api_routes(rt):
                 template_path = mount_path.rstrip("/") + ("/" + rel if rel else "")
                 uid = template_path
                 out.append({**c, "template_path": template_path, "uid": uid})
-            logger.info(
-                "api_built_in_templates: success entries=%d uids=%r",
-                len(out),
-                [c.get("uid") for c in out] if out else [],
-            )
             return Response(json.dumps(out), media_type="application/json")
         except Exception:
-            logger.exception("api_built_in_templates: catalog_from_dataset raised project_id=%r snap=%r", pid, snap)
+            logger.exception("api_built_in_templates catalog failed")
             return Response(
                 json.dumps({"error": "catalog failed"}),
                 status_code=500,
@@ -616,24 +566,12 @@ def register_api_routes(rt):
         if not base.lower().endswith((".yaml", ".yml")):
             return Response("Not found", status_code=404)
         try:
-            logger.info(
-                "api_built_in_template_yaml: project_id=%r template_file=%r base=%r",
-                pid,
-                raw_param,
-                base,
-            )
             snap = _active_autodoc_snapshot_for_spec_templates(pid)
             rel = spec_template_sync.dataset_rel_path(base)
-            logger.info(
-                "api_built_in_template_yaml: read_file snapshot_id=%r path=%r",
-                snap,
-                rel,
-            )
             raw = DatasetManager.read_file(snap, rel)
-            logger.info("api_built_in_template_yaml: read %d bytes", len(raw or b""))
-        except Exception as exc:
-            logger.warning("built-in-template read failed: %s", exc, exc_info=True)
-            return Response(str(exc), status_code=500)
+        except Exception:
+            logger.exception("built-in-template read failed")
+            return Response("Template read failed", status_code=500)
         return Response(content=raw, media_type="text/yaml; charset=utf-8")
 
     rt("/api/built-in-template")(api_built_in_template_yaml)
@@ -655,9 +593,9 @@ def register_api_routes(rt):
             snap = _active_autodoc_snapshot_for_spec_templates(pid)
             rel = spec_template_sync.dataset_rel_path(base)
             raw = DatasetManager.read_file(snap, rel)
-        except Exception as exc:
-            logger.warning("built-in-template-sections read failed: %s", exc, exc_info=True)
-            return Response(str(exc), status_code=500)
+        except Exception:
+            logger.exception("built-in-template-sections read failed")
+            return Response("Template read failed", status_code=500)
         text = (raw or b"").decode("utf-8", errors="replace").lstrip("\ufeff")
         try:
             parsed = yaml.safe_load(text)

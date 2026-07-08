@@ -104,9 +104,8 @@ def ensure_database() -> None:
             _ensure_schema(conn)
         finally:
             conn.close()
-        logger.info("Job history database initialized at %s", db_file)
     except Exception:
-        logger.exception("Failed to initialize job history database at %s", db_file)
+        logger.exception("Failed to initialize job history database")
 
 
 def _domino_client():

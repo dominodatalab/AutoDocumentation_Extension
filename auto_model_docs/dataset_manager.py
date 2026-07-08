@@ -106,11 +106,8 @@ class DatasetManager:
                             f"{base_url}/v4/datasetrw/datasets/{dataset_id}/snapshot/file/cancel/{upload_key}",
                             headers=_get_auth_headers(),
                         )
-                except Exception as cancel_exc:
-                    logger.warning(
-                        "Failed to cancel upload %s for dataset %s: %s",
-                        upload_key, dataset_id, cancel_exc,
-                    )
+                except Exception:
+                    logger.warning("Failed to cancel dataset upload", exc_info=True)
             raise
 
     @staticmethod
@@ -121,12 +118,6 @@ class DatasetManager:
         """
         base_url = _resolve_api_host().rstrip("/")
         url = f"{base_url}/v4/datasetrw/snapshot/{snapshot_id}/file/raw"
-        logger.info(
-            "DatasetManager.read_file: GET %s params=%r snapshot_id=%r",
-            url,
-            {"path": path},
-            snapshot_id,
-        )
         with httpx.Client(follow_redirects=True, timeout=60.0) as client:
             resp = client.get(
                 url,
@@ -134,15 +125,7 @@ class DatasetManager:
                 headers=_get_auth_headers(),
             )
             resp.raise_for_status()
-        hdrs = getattr(resp, "headers", {}) or {}
-        data = resp.content or b""
-        logger.info(
-            "DatasetManager.read_file: response status=%s content-type=%r len=%d",
-            getattr(resp, "status_code", 200),
-            (hdrs.get("content-type") or "")[:120],
-            len(data),
-        )
-        return data
+        return resp.content or b""
 
     @staticmethod
     def read_file_meta(snapshot_id: str, path: str) -> dict[str, Any]:
@@ -168,12 +151,6 @@ class DatasetManager:
         """
         base_url = _resolve_api_host().rstrip("/")
         url = f"{base_url}/v4/datasetrw/files/{snapshot_id}"
-        logger.info(
-            "DatasetManager.list_files: GET %s params=%r snapshot_id=%r",
-            url,
-            {"path": path},
-            snapshot_id,
-        )
         with httpx.Client(follow_redirects=True, timeout=30.0) as client:
             resp = client.get(
                 url,
@@ -184,12 +161,6 @@ class DatasetManager:
 
         data = resp.json()
         rows = data.get("rows", [])
-        logger.info(
-            "DatasetManager.list_files: rows=%d snapshot_id=%r path=%r",
-            len(rows),
-            snapshot_id,
-            path,
-        )
 
         path_prefix = (path.rstrip("/") + "/") if path else ""
         files: list[dict[str, Any]] = []
@@ -208,12 +179,6 @@ class DatasetManager:
                 "sizeInBytes": size_info.get("sizeInBytes") or name_info.get("sizeInBytes", 0),
                 "lastModified": row.get("lastModified"),
             })
-        names_out = [f["fileName"] for f in files]
-        logger.info(
-            "DatasetManager.list_files: normalized %d file entries fileNames=%r",
-            len(files),
-            names_out[:50],
-        )
         return files
 
     @staticmethod

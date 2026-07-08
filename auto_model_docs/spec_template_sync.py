@@ -116,18 +116,12 @@ def card_meta_from_yaml(content: bytes) -> dict[str, Any]:
 
 
 def sync_builtins_to_autodoc_dataset(dataset_id: str, dest_snapshot_id: str | None = None) -> None:
-    logger.info("sync_builtins_to_autodoc_dataset: start dataset_id=%r", dataset_id)
     if dest_snapshot_id is None:
         dest_snapshot_id = domino_datasets.get_rw_snapshot_id(dataset_id)
     if not dest_snapshot_id:
         raise RuntimeError("Could not resolve destination snapshot for model docs dataset")
 
     filenames = packaged_template_filenames()
-    logger.info(
-        "sync_builtins_to_autodoc_dataset: discovered %d packaged templates under %r",
-        len(filenames),
-        _REPO_DIR,
-    )
     for filename in filenames:
         src = _REPO_DIR / filename
         if not src.is_file():
@@ -140,100 +134,40 @@ def sync_builtins_to_autodoc_dataset(dataset_id: str, dest_snapshot_id: str | No
             except Exception:
                 existing = None
             if existing == body:
-                logger.info(
-                    "sync_builtins_to_autodoc_dataset: skip unchanged template filename=%r rel=%r",
-                    filename,
-                    rel,
-                )
                 continue
-        logger.info(
-            "sync_builtins_to_autodoc_dataset: write_file dataset_id=%r path=%r bytes=%d",
-            dataset_id,
-            rel,
-            len(body),
-        )
         DatasetManager.write_file(dataset_id, rel, body)
-    logger.info("sync_builtins_to_autodoc_dataset: done")
 
 
 def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
-    logger.info(
-        "catalog_from_dataset: listing via DatasetManager.list_files "
-        "GET /v4/datasetrw/files/{snapshot_id} path=%r snapshot_id=%r",
-        SPEC_TEMPLATES_PREFIX,
-        snapshot_id,
-    )
     try:
         rows = DatasetManager.list_files(snapshot_id, SPEC_TEMPLATES_PREFIX)
     except Exception:
-        logger.exception("catalog_from_dataset: DatasetManager.list_files failed")
+        logger.exception("catalog_from_dataset: list_files failed")
         return []
-
-    for i, row in enumerate(rows[:25]):
-        logger.info("catalog_from_dataset: list row[%d]=%r", i, row)
-    if len(rows) > 25:
-        logger.info("catalog_from_dataset: list row ... %d more rows omitted", len(rows) - 25)
 
     names: set[str] = set()
     for row in rows:
         fn_raw = (row.get("fileName") or "").strip().replace("\\", "/")
         if row.get("isDirectory"):
-            logger.info(
-                "catalog_from_dataset: list row skip directory fileName=%r",
-                fn_raw,
-            )
             continue
         if not fn_raw.lower().endswith((".yaml", ".yml")):
-            logger.info(
-                "catalog_from_dataset: list row skip non-yaml fileName=%r isDirectory=%r",
-                fn_raw,
-                row.get("isDirectory"),
-            )
             continue
         fn = fn_raw.split("/")[-1]
         if not fn:
-            logger.info("catalog_from_dataset: list row skip empty basename fileName=%r", fn_raw)
             continue
         names.add(fn)
-
-    logger.info(
-        "catalog_from_dataset: list returned %d rows, yaml basenames=%r",
-        len(rows),
-        sorted(names),
-    )
 
     out: list[dict[str, Any]] = []
     for filename in sorted(names):
         rel = dataset_rel_path(filename)
-        logger.info(
-            "catalog_from_dataset: read template %r snapshot_id=%r rel=%r",
-            filename,
-            snapshot_id,
-            rel,
-        )
         try:
             raw = DatasetManager.read_file(snapshot_id, rel)
         except Exception:
-            logger.warning(
-                "catalog_from_dataset: read_file failed for %r rel=%r snapshot_id=%r",
-                filename,
-                rel,
-                snapshot_id,
-                exc_info=True,
-            )
+            logger.exception("catalog_from_dataset: read_file failed")
             continue
-        logger.info(
-            "catalog_from_dataset: read_file ok %r raw_bytes=%d",
-            filename,
-            len(raw or b""),
-        )
         try:
             meta = validate_gallery_template_yaml(raw)
         except Exception:
-            logger.info(
-                "catalog_from_dataset: skip invalid gallery template filename=%r",
-                filename,
-            )
             continue
         out.append(
             {
@@ -244,5 +178,4 @@ def catalog_from_dataset(snapshot_id: str) -> list[dict[str, Any]]:
                 "section_count": int(meta.get("section_count") or 0),
             }
         )
-    logger.info("catalog_from_dataset: built %d catalog entries", len(out))
     return out
