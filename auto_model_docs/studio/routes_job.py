@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import json
-from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
 
 import auth_context
-from authorization import (
-    require_domino_job_list,
-    require_domino_job_start,
-)
 
 from .state import (
     _max_jobs,
@@ -35,17 +30,6 @@ def _current_owner_id() -> str:
 
 def _json(data, status_code: int = 200) -> Response:
     return Response(json.dumps(data), status_code=status_code, media_type="application/json")
-
-
-def _error_body(exc: HTTPException) -> str:
-    d = exc.detail
-    if isinstance(d, str):
-        return d
-    if isinstance(d, dict):
-        inner = d.get("detail")
-        if isinstance(inner, str):
-            return inner
-    return "Request failed."
 
 
 def _jobs_payload(project_id: str, owner_id: str) -> list:
@@ -85,10 +69,6 @@ def register_job_routes(rt):
         if not job_request.project_id:
             return _json({"error": "Project ID is required."}, 400)
         try:
-            require_domino_job_start(job_request.project_id)
-        except HTTPException as e:
-            return _json({"error": _error_body(e)}, e.status_code)
-        try:
             result = submit_or_enqueue(owner_id, job_request)
         except ValueError as e:
             return _json({"error": str(e)}, 400)
@@ -120,7 +100,6 @@ def register_job_routes(rt):
         project_id = _resolve_request_project_id(req)
         if not project_id:
             return _json({"jobs": []})
-        require_domino_job_list(project_id)
         jobs = _jobs_payload(project_id, owner_id)
         return _json({"jobs": jobs})
 
@@ -133,7 +112,6 @@ def register_job_routes(rt):
         project_id = _resolve_request_project_id(req)
         if not project_id:
             return _json({"ok": False, "error": "missing project_id", "jobs": []})
-        require_domino_job_list(project_id)
         domino_job_store.cancel_queued_jobs(project_id, owner_id)
         jobs = _jobs_payload(project_id, owner_id)
         return _json({"ok": True, "jobs": jobs})

@@ -16,6 +16,7 @@ import httpx
 
 from domino_auth import resolve_api_host as _resolve_api_host
 from domino_auth import current_auth as _current_auth
+from dataset_manager import AUTODOC_DATASET_NAME
 
 
 def _get_auth_headers() -> dict[str, str]:
@@ -23,7 +24,6 @@ def _get_auth_headers() -> dict[str, str]:
 
 logger = logging.getLogger(__name__)
 
-AUTODOC_SPECS_DATASET = "autodoc"  # Legacy alias — use dataset_store.AUTODOC_DATASET_NAME
 AUTODOC_SPECS_DESCRIPTION = (
     "Auto Model Docs artifacts — auto-created by Auto Model Docs Studio"
 )
@@ -167,7 +167,7 @@ def _create_dataset(
 
 def ensure_dataset(
     project_id: str,
-    name: str = AUTODOC_SPECS_DATASET,
+    name: str = AUTODOC_DATASET_NAME,
     description: str = AUTODOC_SPECS_DESCRIPTION,
 ) -> dict[str, Any]:
     """Return the named dataset if it exists; otherwise create it."""
@@ -191,7 +191,7 @@ def ensure_dataset(
 
 def get_existing_autodoc_dataset(
     project_id: str,
-    name: str = AUTODOC_SPECS_DATASET,
+    name: str = AUTODOC_DATASET_NAME,
 ) -> Optional[dict[str, Any]]:
     for row in list_datasets(project_id):
         if row.get("name") == name:

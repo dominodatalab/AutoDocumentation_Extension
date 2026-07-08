@@ -21,16 +21,6 @@ def get_request_auth_header() -> Optional[str]:
     return _auth_header_var.get()
 
 
-def get_user_auth_headers() -> dict[str, str]:
-    forwarded = get_request_auth_header()
-    if not forwarded:
-        raise RuntimeError(
-            "No forwarded user token available. "
-            "Domino API calls require a user token from the incoming request."
-        )
-    return {"Authorization": forwarded}
-
-
 @dataclass(frozen=True)
 class User:
     id: str

@@ -1,13 +1,9 @@
 """Domino API host resolution and auth provider configuration.
 
-- ``user_auth``: forwarded user JWT from the incoming HTTP request (Studio).
-- ``cli_auth``: API key from ``DOMINO_USER_API_KEY`` / ``DOMINO_API_KEY``.
-  Used by tests and optional dataset helpers when configured explicitly.
-  The ``main.py`` CLI does not call ``configure_auth``; governance uses the
-  API gateway sidecar via ``resolve_api_host()`` without client auth headers.
-
+``user_auth`` forwards the viewer JWT from the incoming HTTP request (Studio).
 Configure once via ``configure_auth(provider)``. Modules such as
 ``domino_client`` call ``current_auth()`` when making Domino API requests.
+Governance reads use ``resolve_api_host()`` without client auth headers.
 """
 
 from __future__ import annotations
@@ -64,8 +60,7 @@ def current_auth() -> AuthCredentials:
     """
     if _auth_provider is None:
         raise MissingAuthError(
-            "Auth provider not configured. Call configure_auth(user_auth) "
-            "or configure_auth(cli_auth) at process startup."
+            "Auth provider not configured. Call configure_auth(user_auth) at process startup."
         )
     return _auth_provider()
 
@@ -81,25 +76,9 @@ def get_user_token() -> str:
     return forwarded
 
 
-def get_cli_token() -> str:
-    """Return the CLI/job API key from env. Raises if absent."""
-    api_key = os.environ.get("DOMINO_USER_API_KEY") or os.environ.get("DOMINO_API_KEY") or ""
-    if not api_key:
-        raise MissingAuthError(
-            "DOMINO_USER_API_KEY is not set. "
-            "CLI and job containers require an API key."
-        )
-    return api_key
-
-
 def user_auth() -> AuthCredentials:
     """Provider: forwarded user JWT from the current request."""
     return AuthCredentials(kind="jwt", token=get_user_token())
-
-
-def cli_auth() -> AuthCredentials:
-    """Provider: API key from env. For CLI / job container use only."""
-    return AuthCredentials(kind="api_key", token=get_cli_token())
 
 
 def resolve_api_host() -> str:

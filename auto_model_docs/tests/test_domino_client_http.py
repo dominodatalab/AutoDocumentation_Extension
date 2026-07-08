@@ -13,15 +13,18 @@ for p in (_repo_root, _pkg_dir):
         sys.path.insert(0, p)
 
 import domino_client as dc
-from domino_auth import cli_auth, configure_auth, reset_auth
+from auth_context import set_request_auth_header
+from domino_auth import configure_auth, reset_auth, user_auth
 
 
 def setup_function():
     reset_auth()
-    configure_auth(cli_auth)
+    set_request_auth_header("Bearer test-jwt")
+    configure_auth(user_auth)
 
 
 def teardown_function():
+    set_request_auth_header(None)
     reset_auth()
 
 
@@ -34,13 +37,13 @@ def test_domino_request_uses_follow_redirects(mock_client_cls):
     mock_client.__enter__.return_value.request.return_value = mock_resp
     mock_client_cls.return_value = mock_client
 
-    with patch.object(dc, "_resolve_api_host", return_value="https://cluster.example.com"), patch.dict(
-        os.environ, {"DOMINO_USER_API_KEY": "test-key"}, clear=False
-    ):
+    with patch.object(dc, "_resolve_api_host", return_value="https://cluster.example.com"):
         result = dc._domino_request("GET", "/v4/jobs/job-1")
 
     assert result == {"id": "job-1"}
     mock_client_cls.assert_called_once_with(timeout=dc._DEFAULT_TIMEOUT, follow_redirects=True)
+    sent_headers = mock_client.__enter__.return_value.request.call_args.kwargs["headers"]
+    assert sent_headers["Authorization"] == "Bearer test-jwt"
 
 
 @patch("httpx.Client")

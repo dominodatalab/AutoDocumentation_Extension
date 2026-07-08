@@ -18,10 +18,8 @@ import domino_auth
 from domino_auth import (
     AuthCredentials,
     MissingAuthError,
-    cli_auth,
     configure_auth,
     current_auth,
-    get_cli_token,
     get_user_token,
     reset_auth,
     reset_ui_host,
@@ -145,35 +143,6 @@ class TestGetUserToken:
                 get_user_token()
 
 
-class TestGetCliToken:
-    def test_prefers_user_api_key(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "user-key")
-        monkeypatch.setenv("DOMINO_API_KEY", "generic-key")
-        assert get_cli_token() == "user-key"
-
-    def test_falls_back_to_domino_api_key(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_USER_API_KEY", raising=False)
-        monkeypatch.setenv("DOMINO_API_KEY", "generic-key")
-        assert get_cli_token() == "generic-key"
-
-    def test_raises_when_missing(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_USER_API_KEY", raising=False)
-        monkeypatch.delenv("DOMINO_API_KEY", raising=False)
-        with pytest.raises(MissingAuthError):
-            get_cli_token()
-
-    def test_raises_when_empty(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "")
-        monkeypatch.setenv("DOMINO_API_KEY", "")
-        with pytest.raises(MissingAuthError):
-            get_cli_token()
-
-    def test_ignores_forwarded_jwt(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "api-key")
-        with patch("domino_auth.get_request_auth_header", return_value="Bearer should-not-be-used"):
-            assert get_cli_token() == "api-key"
-
-
 class TestAuthCredentials:
     def test_jwt_headers_with_bearer_prefix(self):
         c = AuthCredentials(kind="jwt", token="Bearer abc123")
@@ -200,18 +169,6 @@ class TestUserAuth:
                 user_auth()
 
 
-class TestCliAuth:
-    def test_builds_api_key_credentials(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "k1")
-        assert cli_auth() == AuthCredentials(kind="api_key", token="k1")
-
-    def test_raises_without_key(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_USER_API_KEY", raising=False)
-        monkeypatch.delenv("DOMINO_API_KEY", raising=False)
-        with pytest.raises(MissingAuthError):
-            cli_auth()
-
-
 class TestConfiguredProvider:
     def test_current_auth_raises_when_not_configured(self):
         with pytest.raises(MissingAuthError, match="not configured"):
@@ -222,14 +179,10 @@ class TestConfiguredProvider:
         with patch("domino_auth.get_request_auth_header", return_value="Bearer abc"):
             assert current_auth() == AuthCredentials(kind="jwt", token="Bearer abc")
 
-    def test_configure_with_cli_auth(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "key")
-        configure_auth(cli_auth)
-        assert current_auth() == AuthCredentials(kind="api_key", token="key")
-
-    def test_reset_auth_clears_provider(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_USER_API_KEY", "key")
-        configure_auth(cli_auth)
+    def test_reset_auth_clears_provider(self):
+        configure_auth(user_auth)
+        with patch("domino_auth.get_request_auth_header", return_value="Bearer abc"):
+            assert current_auth().kind == "jwt"
         reset_auth()
         with pytest.raises(MissingAuthError):
             current_auth()

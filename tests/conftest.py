@@ -121,14 +121,13 @@ def _clean_env(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _configure_default_auth():
-    """Default to cli_auth for tests that do not opt in to a specific mode.
-
-    Individual tests can override by calling ``configure_auth`` themselves
-    or by using ``reset_auth``.
-    """
-    from domino_auth import cli_auth, configure_auth, reset_auth
-    configure_auth(cli_auth)
+    """Default to user_auth with a forwarded JWT, matching Studio."""
+    from auth_context import set_request_auth_header
+    from domino_auth import configure_auth, reset_auth, user_auth
+    set_request_auth_header("Bearer test-jwt")
+    configure_auth(user_auth)
     yield
+    set_request_auth_header(None)
     reset_auth()
 
 

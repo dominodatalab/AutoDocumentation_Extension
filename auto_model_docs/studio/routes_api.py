@@ -10,7 +10,6 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from autodoc.core.models import DocumentSpec
-from authorization import require_project_write
 from dataset_manager import DatasetManager
 import spec_template_sync
 
@@ -24,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 def _autodoc_dataset_and_snapshot(project_id: str) -> tuple[dict, str]:
-    require_project_write(project_id)
     ensured = domino_datasets.ensure_dataset(project_id)
     ds_id = str(ensured.get("id") or "").strip()
     if not ds_id:
@@ -143,7 +141,6 @@ def register_api_routes(rt):
                 media_type="application/json",
             )
         try:
-            require_project_write(pid)
             bundles = domino_client.list_bundles(pid)
             payload = {"bundles": [_governance_bundle_json(b) for b in bundles]}
             return Response(json.dumps(payload), media_type="application/json")
@@ -164,7 +161,6 @@ def register_api_routes(rt):
         (see domino_datasets.list_datasets; includeStorageInfo on that API).
         """
         pid = _resolve_request_project_id(req)
-        require_project_write(pid)
         try:
             datasets = domino_datasets.list_datasets(pid)
             return Response(json.dumps(datasets), media_type="application/json")
@@ -183,8 +179,6 @@ def register_api_routes(rt):
         snapshot_id = req.query_params.get("snapshotId", "")
         path = req.query_params.get("path", "")
         pid = _resolve_request_project_id(req)
-        require_project_write(pid)
-
         if not dataset_id:
             return Response(
                 json.dumps({"error": "datasetId required"}),
@@ -215,7 +209,6 @@ def register_api_routes(rt):
 
     async def api_code_root(req: Request):
         pid = _resolve_request_project_id(req)
-        require_project_write(pid)
         try:
             info = domino_client.get_code_source_info(pid)
             return Response(
@@ -229,7 +222,6 @@ def register_api_routes(rt):
 
     async def api_code_paths(req: Request):
         pid = _resolve_request_project_id(req)
-        require_project_write(pid)
         try:
             result = domino_client.get_code_paths(pid)
             return Response(json.dumps(result), media_type="application/json")
@@ -240,7 +232,6 @@ def register_api_routes(rt):
 
     async def api_code_files(req: Request):
         pid = _resolve_request_project_id(req)
-        require_project_write(pid)
         is_git = req.query_params.get("isGit", "").lower() in ("true", "1")
         repo_id = req.query_params.get("repoId", "").strip()
         path = req.query_params.get("path", "").strip()
@@ -272,7 +263,6 @@ def register_api_routes(rt):
         import spec_template_sync
 
         pid = _resolve_request_project_id(req)
-        require_project_write(pid)
         form = await req.form()
         file_upload = form.get("file")
 
@@ -373,8 +363,6 @@ def register_api_routes(rt):
         destination "spec-templates" directory of the autodoc dataset.
         """
         pid = (_resolve_request_project_id(req) or "").strip()
-        require_project_write(pid)
-
         try:
             payload = await req.json()
         except Exception:
@@ -648,7 +636,6 @@ def register_api_routes(rt):
         if not run_id:
             return Response(json.dumps({"error": "runId is required."}), status_code=400, media_type="application/json")
         try:
-            require_project_write(pid)
             short = run_id[:8]
             artifact_path = f"docs/{short}/model_docs.docx"
             docx_bytes = domino_client.download_artifact_at_head(pid, artifact_path)

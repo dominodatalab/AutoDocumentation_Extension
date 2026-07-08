@@ -172,7 +172,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     mock_datasets.resolve_dataset_mount_path = MagicMock(
         side_effect=lambda e: (e.get("datasetPath") or "").strip() or "/domino/datasets/local/autodoc",
     )
-    mock_datasets.AUTODOC_SPECS_DATASET = "autodoc-specs"
     mock_datasets.build_spec_mount_path.return_value = "/mnt/data/autodoc-specs/spec.yaml"
     mock_datasets.get_rw_snapshot_id.return_value = "snap-1"
     mock_datasets.get_dataset_detail.return_value = {"datasetPath": "/domino/datasets/local/autodoc"}
@@ -307,17 +306,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
     sys.modules["autodoc.core"] = ModuleType("autodoc.core")
     sys.modules["autodoc.core.models"] = mock_models
 
-    # Mock authorization module — default to "allow everything" so integration
-    # tests exercise route bodies. Tests that want to exercise deny behaviour
-    # can override the require_* attributes on this mock post-build.
-    mock_authz = ModuleType("authorization")
-    mock_authz.require_domino_job_start = MagicMock()
-    mock_authz.require_domino_job_stop = MagicMock()
-    mock_authz.require_domino_job_list = MagicMock()
-    mock_authz.require_project_write = MagicMock()
-    sys.modules["authorization"] = mock_authz
-
-    # Load route modules fresh
     for mod_name in ("studio.ui_components", "studio.job_engine",
                      "studio.routes_api", "studio.routes_job"):
         sys.modules.pop(mod_name, None)
@@ -409,7 +397,6 @@ def _build_test_app(tmp_path: Path, monkeypatch):
         "domino_datasets": mock_datasets,
         "auth_context": auth_context,
         "doc_spec": mock_doc_spec,
-        "authz": mock_authz,
         "_restore": None,
     }
 

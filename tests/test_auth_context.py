@@ -21,7 +21,6 @@ from auth_context import (
     _bearer_token,
     _decode_jwt_payload,
     get_request_auth_header,
-    get_user_auth_headers,
     get_viewing_user,
     set_request_auth_header,
 )
@@ -47,25 +46,6 @@ class TestSetGetAuthHeader:
         set_request_auth_header("Bearer token")
         set_request_auth_header(None)
         assert get_request_auth_header() is None
-
-
-class TestGetUserAuthHeaders:
-    def test_returns_auth_dict(self):
-        set_request_auth_header("Bearer my-jwt")
-        headers = get_user_auth_headers()
-        assert headers == {"Authorization": "Bearer my-jwt"}
-        set_request_auth_header(None)
-
-    def test_raises_when_no_token(self):
-        set_request_auth_header(None)
-        with pytest.raises(RuntimeError, match="No forwarded user token"):
-            get_user_auth_headers()
-
-    def test_preserves_exact_value(self):
-        set_request_auth_header("Token custom-scheme-value")
-        headers = get_user_auth_headers()
-        assert headers["Authorization"] == "Token custom-scheme-value"
-        set_request_auth_header(None)
 
 
 def _make_jwt(payload: dict) -> str:

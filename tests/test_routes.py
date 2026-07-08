@@ -226,14 +226,6 @@ def _mock_studio_modules(monkeypatch):
     mock_autodoc_models.DocumentSpec = MagicMock()
     mock_autodoc_models.LANGUAGE_PROFILES = {}
 
-    # authorization — default to "allow everything" so existing route tests pass.
-    # Tests that want to exercise deny behaviour override these via side_effect.
-    mock_authz = ModuleType("authorization")
-    mock_authz.require_domino_job_start = MagicMock()
-    mock_authz.require_domino_job_list = MagicMock()
-    mock_authz.require_project_write = MagicMock()
-
-    # studio package
     studio_pkg = ModuleType("studio")
     studio_pkg.__path__ = [os.path.join(_pkg_dir, "studio")]
     studio_pkg.__package__ = "studio"
@@ -244,7 +236,6 @@ def _mock_studio_modules(monkeypatch):
         "studio.routes_api", "studio.routes_job",
         "fasthtml", "fasthtml.common",
         "autodoc", "autodoc.core", "autodoc.core.models",
-        "authorization",
     )
     for key in mod_keys:
         saved[key] = sys.modules.get(key)
@@ -258,14 +249,12 @@ def _mock_studio_modules(monkeypatch):
     sys.modules["autodoc"] = ModuleType("autodoc")
     sys.modules["autodoc.core"] = ModuleType("autodoc.core")
     sys.modules["autodoc.core.models"] = mock_autodoc_models
-    sys.modules["authorization"] = mock_authz
 
     yield {
         "state": mock_state,
         "ui": mock_ui,
         "job_engine": mock_job_engine,
         "autodoc_models": mock_autodoc_models,
-        "authz": mock_authz,
     }
 
     for key, val in saved.items():
