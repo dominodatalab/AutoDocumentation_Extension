@@ -320,3 +320,27 @@ class TestStage4Merge:
         )
         assert "Uses XGBoost" in result.insights
         assert "StandardScaler applied" in result.insights
+
+    def test_merge_ignores_string_hyperparameters(self, sanitizer, mock_llm):
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=Path("/tmp"), profile=PYTHON_PROFILE,
+        )
+        result = scanner._merge_results(
+            [
+                {
+                    "model_classes": [], "features": [], "code_evidence": [],
+                    "target_variable": None, "ml_task_type": None,
+                    "hyperparameters": "n_estimators=100",
+                    "data_sources": [], "insights": "", "transformations": [],
+                },
+                {
+                    "model_classes": [], "features": [], "code_evidence": [],
+                    "target_variable": None, "ml_task_type": None,
+                    "hyperparameters": {"max_depth": 5},
+                    "data_sources": [], "insights": "", "transformations": [],
+                },
+            ],
+            ranked_paths=[],
+        )
+        assert result.hyperparameters == {"max_depth": 5}

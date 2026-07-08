@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[float], None]
 
 
+def _hyperparameters_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
 class CodeScanner:
     """Two-pass relevance-aware code scanner.
 
@@ -538,7 +544,7 @@ class CodeScanner:
             all_data_sources.extend(result.get("data_sources", []))
 
             # Merge hyperparameters (later batches don't overwrite)
-            for k, v in result.get("hyperparameters", {}).items():
+            for k, v in _hyperparameters_dict(result.get("hyperparameters")).items():
                 if k not in merged_hyperparams:
                     merged_hyperparams[k] = v
 
@@ -625,7 +631,7 @@ class CodeScanner:
             target_variable=result.get("target_variable"),
             transformations=result.get("transformations", []),
             ml_task_type=result.get("ml_task_type"),
-            hyperparameters=result.get("hyperparameters", {}),
+            hyperparameters=_hyperparameters_dict(result.get("hyperparameters")),
             data_sources=result.get("data_sources", []),
             insights=result.get("insights", ""),
             code_evidence=evidence_items,

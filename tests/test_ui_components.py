@@ -505,6 +505,13 @@ class TestGovernanceBundlePickerOptgroups:
         assert "filter-model-names" in scripts_src
         assert "applyGovernanceBundleSelection" in scripts_src
 
+    def test_bundle_leaf_label_uses_bundle_name_not_policy(self):
+        root = Path(__file__).resolve().parent.parent
+        scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
+        leaf_fn = scripts_src.split("function _bundleLeafLabel(bundle) {", 1)[1].split("function _bundleAutoLabel", 1)[0]
+        assert "bundle.name" in leaf_fn
+        assert "bundle.policyName" not in leaf_fn
+
     def test_model_name_filter_not_live_wired_to_bundle_picker(self):
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()

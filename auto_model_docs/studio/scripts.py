@@ -678,10 +678,10 @@ MAIN_DOM_JS = r"""
 
         function _bundleLeafLabel(bundle) {
             var parts = [];
-            if (bundle.policyName) parts.push(bundle.policyName);
+            if (bundle.name) parts.push(bundle.name);
             if (bundle.stage) parts.push(bundle.stage);
             if (bundle.state) parts.push(bundle.state);
-            return parts.length ? parts.join(' \u00b7 ') : (bundle.name || bundle.id);
+            return parts.length ? parts.join(' \u00b7 ') : (bundle.id || '');
         }
 
         function _bundleAutoLabel(bundle) {
@@ -710,7 +710,7 @@ MAIN_DOM_JS = r"""
             for (var g = 0; g < grouped.order.length; g++) {
                 var items = grouped.groups[grouped.order[g]].slice();
                 items.sort(function(a, b) {
-                    return String(a.policyName || '').localeCompare(String(b.policyName || ''));
+                    return String(a.name || '').localeCompare(String(b.name || ''));
                 });
                 for (var j = 0; j < items.length; j++) sorted.push(items[j]);
             }
@@ -730,7 +730,7 @@ MAIN_DOM_JS = r"""
                 var model = grouped.order[g];
                 var items = grouped.groups[model];
                 items.sort(function(a, b) {
-                    return String(a.policyName || '').localeCompare(String(b.policyName || ''));
+                    return String(a.name || '').localeCompare(String(b.name || ''));
                 });
                 html += '<optgroup label="' + _esc(model) + '">';
                 for (var j = 0; j < items.length; j++) {
