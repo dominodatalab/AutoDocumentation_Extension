@@ -1684,7 +1684,7 @@ MAIN_DOM_JS = r"""
                     ? _esc(latestJob.domino_status)
                     : 'Check the job logs in Domino for details.';
                 if (latestJob.job_url) {
-                    failedDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View job in Domino</a>.';
+                    failedDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View documentation job</a>.';
                 }
                 html += '<div class="results-failed">';
                 html += '<div class="results-failed-banner">'
