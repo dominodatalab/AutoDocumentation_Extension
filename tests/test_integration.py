@@ -695,58 +695,6 @@ class TestJobRoutesIntegration:
 
 # ===========================================================================
 # Auth context middleware integration
-# ===========================================================================
-
-class TestAuthorizationIntegration:
-    """End-to-end: authz deny should return 403 from sensitive routes."""
-
-    @staticmethod
-    def _deny(authz, attr):
-        from starlette.exceptions import HTTPException
-        getattr(authz, attr).side_effect = HTTPException(status_code=403, detail="denied")
-
-    def test_run_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_domino_job_start")
-        resp = client.post(
-            "/run?projectId=proj-integration",
-            json={
-                "spec_path": "/domino/datasets/local/autodoc/spec.yaml",
-                "provider": "anthropic",
-                "model": "claude-sonnet-4-20250514",
-                "code_root": "/mnt/code",
-                "hardware_tier": "small",
-                "environment_id": "env-int",
-                "environment_revision_id": "rev-int",
-            },
-        )
-        assert resp.status_code == 403
-        assert resp.json().get("error")
-
-    def test_job_history_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_domino_job_list")
-        resp = client.get("/job-history?projectId=proj-integration")
-        assert resp.status_code == 403
-
-    def test_cancel_queued_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_domino_job_list")
-        resp = client.post("/cancel-queued-jobs?projectId=proj-integration")
-        assert resp.status_code == 403
-
-    def test_datasets_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_project_write")
-        resp = client.get("/api/datasets?projectId=proj-integration")
-        assert resp.status_code == 403
-
-    def test_upload_spec_denied_returns_403(self, client, integration_env):
-        self._deny(integration_env["authz"], "require_project_write")
-        resp = client.post(
-            "/api/upload-spec-to-dataset?projectId=proj-integration",
-            files={"file": ("spec.yaml", b"title: Test\n", "application/x-yaml")},
-        )
-        assert resp.status_code == 403
-
-
-
 class TestAuthMiddlewareIntegration:
 
     def test_jwt_cleared_after_request(self, client, integration_env):

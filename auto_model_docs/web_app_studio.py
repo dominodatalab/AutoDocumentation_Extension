@@ -141,7 +141,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
                 Div(
                     Div(
                         Label("Revision", for_="field-environment_revision_id"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Pinned environment revision for the documentation job."),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Target environment revision for the documentation job."),
                         cls="label-row",
                     ),
                     Div(
