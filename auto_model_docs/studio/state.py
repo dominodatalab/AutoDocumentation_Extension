@@ -101,7 +101,6 @@ class JobRequest:
     backoff_jitter: float
     notebook_from_cache: bool
     bundle_id: str = ""
-    governance_api_host: str = ""
     branch: str = ""
     prompts_file: str = ""
 

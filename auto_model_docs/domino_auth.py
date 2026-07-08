@@ -2,9 +2,9 @@
 
 - ``user_auth``: forwarded user JWT from the incoming HTTP request (Studio).
 - ``cli_auth``: API key from ``DOMINO_USER_API_KEY`` / ``DOMINO_API_KEY``.
-  Used by dataset helpers when the process configures it (e.g. some jobs).
-  The ``main.py`` CLI entry does not call ``configure_auth``; it does not
-  use Domino REST APIs.
+  Used by tests and optional dataset helpers when configured explicitly.
+  The ``main.py`` CLI does not call ``configure_auth``; governance uses the
+  API gateway sidecar via ``resolve_api_host()`` without client auth headers.
 
 Configure once via ``configure_auth(provider)``. Modules such as
 ``domino_client`` call ``current_auth()`` when making Domino API requests.

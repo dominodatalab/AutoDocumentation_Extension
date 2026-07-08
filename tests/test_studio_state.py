@@ -101,7 +101,6 @@ class TestJobRequest:
             "max_retries", "initial_backoff", "max_backoff", "backoff_jitter",
             "notebook_from_cache",
             "bundle_id",
-            "governance_api_host",
         }
         assert expected.issubset(field_names)
 

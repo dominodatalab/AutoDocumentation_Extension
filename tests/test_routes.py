@@ -365,20 +365,13 @@ class TestApiRoutes:
         bundle.state = "Active"
         bundle.attachments = [attachment]
         client.list_bundles.return_value = [bundle]
-        client.normalize_governance_api_host.return_value = "https://cluster.example.com"
         req = _make_request(
             query_params={
                 "projectId": "proj-123",
-                "apiHost": "https://cluster.example.com",
             }
         )
         result = await routes["/api/governance/bundles"](req)
-        client.normalize_governance_api_host.assert_called_once_with(
-            "https://cluster.example.com"
-        )
-        client.list_bundles.assert_called_once_with(
-            "proj-123", api_host="https://cluster.example.com"
-        )
+        client.list_bundles.assert_called_once_with("proj-123")
         body = json.loads(result.body)
         assert len(body["bundles"]) == 1
         assert body["bundles"][0]["id"] == "bundle-1"
@@ -393,16 +386,6 @@ class TestApiRoutes:
         req = _make_request(query_params={})
         result = await routes["/api/governance/bundles"](req)
         assert result.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_governance_bundles_requires_api_host(self, _mock_studio_modules):
-        mod = _import_routes_api()
-        routes = _register(mod, "register_api_routes")
-        req = _make_request(query_params={"projectId": "proj-123"})
-        result = await routes["/api/governance/bundles"](req)
-        assert result.status_code == 400
-        body = json.loads(result.body)
-        assert body["error"] == "apiHost required"
 
     @pytest.mark.asyncio
     async def test_environments_returns_json(self, _mock_studio_modules):

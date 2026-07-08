@@ -192,7 +192,6 @@ async def _parse_request(req: Request) -> JobRequest:
         backoff_jitter=_form_float(body, "backoff_jitter", DEFAULT_LLM_BACKOFF_JITTER),
         notebook_from_cache=notebook_from_cache,
         bundle_id=_form_str(body, "bundle_id"),
-        governance_api_host=_form_str(body, "governance_api_host"),
         branch=_branch,
         prompts_file=_form_str(body, "prompts_file"),
     )

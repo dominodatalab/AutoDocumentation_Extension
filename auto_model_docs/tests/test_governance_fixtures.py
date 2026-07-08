@@ -16,7 +16,7 @@ for p in (str(_repo_root), str(_pkg_dir)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from domino_auth import cli_auth, configure_auth
+from domino_auth import reset_auth
 import domino_client
 from domino_client import compute_policy, get_findings, list_bundles
 
@@ -57,9 +57,8 @@ def bundles_for_model_id(bundles_payload: dict[str, Any], model_id: str) -> list
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    configure_auth(cli_auth)
-    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
-    monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
+    reset_auth()
+    monkeypatch.setenv("DOMINO_API_PROXY", "http://127.0.0.1:8899")
 
 
 def test_fixture_files_exist():
@@ -74,7 +73,7 @@ def test_fixture_files_exist():
 def test_list_bundles_fixture_parses():
     payload = _load("bundles-list.json")
     with patch.object(domino_client, "_governance_request", return_value=payload):
-        bundles = list_bundles(PROJECT_ID, api_host="https://domino.example.com")
+        bundles = list_bundles(PROJECT_ID)
     assert len(bundles) == 5
     assert bundles[0].id == PRIMARY_BUNDLE_ID
     assert bundles[0].attachments[0].identifier["name"] == PRIMARY_MODEL_ID
@@ -104,7 +103,6 @@ def test_compute_policy_fixture_latest_results_only():
         computed = compute_policy(
             PRIMARY_BUNDLE_ID,
             "a1111111-1111-1111-1111-111111111101",
-            api_host="https://domino.example.com",
         )
     assert computed is not None
     assert computed.bundle.name == "fraud-detector-v1-governance-bundle"
@@ -116,7 +114,7 @@ def test_compute_policy_fixture_latest_results_only():
 def test_findings_fixture_open_status_api_string():
     payload = _load("findings-open.json")
     with patch.object(domino_client, "_governance_request", return_value=payload):
-        findings = get_findings(PRIMARY_BUNDLE_ID, api_host="https://domino.example.com")
+        findings = get_findings(PRIMARY_BUNDLE_ID)
     assert len(findings) == 2
     statuses = {f.status for f in findings}
     assert OPEN_FINDING_STATUS in statuses

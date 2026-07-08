@@ -884,8 +884,7 @@ MAIN_DOM_JS = r"""
                 return Promise.resolve();
             }
             var url = _adUrl('api/governance/bundles')
-                + '?projectId=' + encodeURIComponent(pid)
-                + '&apiHost=' + encodeURIComponent(window.location.origin);
+                + '?projectId=' + encodeURIComponent(pid);
             return _apiFetch(url)
                 .then(_jsonResp)
                 .then(function(data) {

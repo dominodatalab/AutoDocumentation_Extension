@@ -156,11 +156,11 @@ def _filter_findings(
 def load_governance_context(
     bundle_id: str,
     *,
-    api_host: str | None = None,
-    use_user_host: bool = False,
     findings_scope: str = "open",
     project_id: Optional[str] = None,
 ) -> GovernanceContext:
+    from domino_auth import resolve_api_host
+
     bundle_id = (bundle_id or "").strip()
     if not bundle_id:
         raise GovernanceLoadError("bundle_id is required")
@@ -169,28 +169,25 @@ def load_governance_context(
     if not pid:
         raise GovernanceLoadError("DOMINO_PROJECT_ID is required to load governance context")
 
-    if use_user_host:
-        gov_kw: dict[str, Any] = {"use_user_host": True}
-    else:
-        host = (api_host or "").strip()
-        if not host:
-            raise GovernanceLoadError("governance api host is required")
-        gov_kw = {"api_host": host}
+    if not resolve_api_host():
+        raise GovernanceLoadError(
+            "DOMINO_USER_HOST or DOMINO_API_PROXY is required to load governance context"
+        )
 
     logger.info("Loading governance context for bundle %s", bundle_id)
 
-    bundles = list_bundles(pid, **gov_kw)
+    bundles = list_bundles(pid)
     bundle_row = next((b for b in bundles if str(b.id) == bundle_id), None)
     if bundle_row is None:
         raise GovernanceLoadError(f"Bundle {bundle_id} not found in project {pid}")
 
-    computed = compute_policy(bundle_id, str(bundle_row.policy_id), **gov_kw)
+    computed = compute_policy(bundle_id, str(bundle_row.policy_id))
     if computed is None:
         raise GovernanceLoadError(
             f"compute-policy failed for bundle {bundle_id} policy {bundle_row.policy_id}"
         )
 
-    raw_findings = get_findings(bundle_id, **gov_kw)
+    raw_findings = get_findings(bundle_id)
     evidence = _extract_evidence_items(computed)
     findings = _filter_findings(raw_findings, findings_scope)
 

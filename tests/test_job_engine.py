@@ -52,7 +52,6 @@ class JobRequest:
     backoff_jitter: float
     notebook_from_cache: bool
     bundle_id: str = ""
-    governance_api_host: str = ""
     branch: str = ""
     prompts_file: str = ""
 
@@ -83,7 +82,6 @@ _JR_DEFAULTS = {
     "backoff_jitter": 0.2,
     "notebook_from_cache": False,
     "bundle_id": "",
-    "governance_api_host": "",
     "branch": "",
     "prompts_file": "",
 }

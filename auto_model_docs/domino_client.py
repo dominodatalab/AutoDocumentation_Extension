@@ -920,49 +920,20 @@ _GOVERNANCE_BASE = "/api/governance/v1"
 _DEFAULT_BUNDLE_PAGE_LIMIT = 25
 
 
-def normalize_governance_api_host(raw: str) -> str:
-    from urllib.parse import urlparse, urlunparse
-
-    value = (raw or "").strip().rstrip("/")
-    if not value:
-        raise ValueError("governance api host is required")
-    candidate = value if "://" in value else f"https://{value}"
-    parsed = urlparse(candidate)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise ValueError(f"invalid governance api host: {raw!r}")
-    netloc = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
-    return urlunparse((parsed.scheme, netloc, "", "", "", "")).rstrip("/")
-
-
-def _strip_governance_base_url(raw: str) -> str:
-    value = (raw or "").strip().rstrip("/")
-    if not value:
-        raise ValueError("governance api host is required")
-    return value
-
-
 def _governance_request(
     method: str,
     path: str,
     *,
-    api_host: str | None = None,
-    use_user_host: bool = False,
-    auth: bool | None = None,
     json: Any = None,
     params: dict[str, Any] | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
     max_retries: int = _DEFAULT_MAX_RETRIES,
 ) -> Any:
-    if use_user_host:
-        from domino_auth import resolve_user_host
-
-        base_url = _strip_governance_base_url(resolve_user_host())
-        send_auth = False if auth is None else auth
-    elif api_host:
-        base_url = normalize_governance_api_host(api_host)
-        send_auth = True if auth is None else auth
-    else:
-        raise ValueError("api_host or use_user_host is required")
+    base_url = _resolve_api_host().rstrip("/")
+    if not base_url:
+        raise ValueError(
+            "Domino API host is not configured. Set DOMINO_USER_HOST or DOMINO_API_PROXY."
+        )
     return _domino_request(
         method,
         path,
@@ -971,7 +942,7 @@ def _governance_request(
         timeout=timeout,
         max_retries=max_retries,
         base_url=base_url,
-        auth=send_auth,
+        auth=False,
     )
 
 
@@ -1077,12 +1048,7 @@ def _governance_page_exhausted(data: dict[str, Any], offset: int, fetched_count:
     return offset + fetched_count >= total
 
 
-def list_bundles(
-    project_id: str,
-    *,
-    api_host: str | None = None,
-    use_user_host: bool = False,
-) -> "List[BundleSummary]":
+def list_bundles(project_id: str) -> "List[BundleSummary]":
     project_id = (project_id or "").strip()
     if not project_id:
         return []
@@ -1090,17 +1056,11 @@ def list_bundles(
     offset = 0
     limit = _DEFAULT_BUNDLE_PAGE_LIMIT
     all_bundles: list[Any] = []
-    gov_request_kw: dict[str, Any] = {}
-    if use_user_host:
-        gov_request_kw["use_user_host"] = True
-    elif api_host:
-        gov_request_kw["api_host"] = api_host
     try:
         while True:
             data = _governance_request(
                 "GET",
                 f"{_GOVERNANCE_BASE}/bundles",
-                **gov_request_kw,
                 params={"projectId": project_id, "offset": offset, "limit": limit},
             )
             items = _governance_bundle_items(data)
@@ -1116,26 +1076,13 @@ def list_bundles(
     return [b for b in all_bundles if str(b.project_id) == project_id]
 
 
-def compute_policy(
-    bundle_id: str,
-    policy_id: str,
-    *,
-    api_host: str | None = None,
-    use_user_host: bool = False,
-) -> "Optional[ComputedPolicy]":
+def compute_policy(bundle_id: str, policy_id: str) -> "Optional[ComputedPolicy]":
     from autodoc.core.models import ComputedPolicy
-
-    gov_request_kw: dict[str, Any] = {}
-    if use_user_host:
-        gov_request_kw["use_user_host"] = True
-    elif api_host:
-        gov_request_kw["api_host"] = api_host
 
     try:
         raw = _governance_request(
             "POST",
             f"{_GOVERNANCE_BASE}/rpc/compute-policy",
-            **gov_request_kw,
             json={"bundleId": bundle_id, "policyId": policy_id},
         )
         if not isinstance(raw, dict):
@@ -1169,23 +1116,11 @@ def compute_policy(
         return None
 
 
-def get_findings(
-    bundle_id: str,
-    *,
-    api_host: str | None = None,
-    use_user_host: bool = False,
-) -> "List[GovernanceFinding]":
-    gov_request_kw: dict[str, Any] = {}
-    if use_user_host:
-        gov_request_kw["use_user_host"] = True
-    elif api_host:
-        gov_request_kw["api_host"] = api_host
-
+def get_findings(bundle_id: str) -> "List[GovernanceFinding]":
     try:
         data = _governance_request(
             "GET",
             f"{_GOVERNANCE_BASE}/bundles/{bundle_id}/findings",
-            **gov_request_kw,
         )
         items = data if isinstance(data, list) else (data.get("data") if isinstance(data, dict) else [])
         if not isinstance(items, list):
