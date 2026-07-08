@@ -1990,10 +1990,9 @@ MAIN_DOM_JS = r"""
                         code_path: val('field-code_path'),
                         branch: val('field-branch'),
                     };
-                    if (_selectedBundleId) {
-                        jsonPayload.bundle_id = _selectedBundleId;
-                        jsonPayload.governance_api_host = window.location.origin;
-                    }
+                      if (_selectedBundleId) {
+                          jsonPayload.bundle_id = _selectedBundleId;
+                      }
 
                     var pid = resolvedProjectId();
                     showStep2();

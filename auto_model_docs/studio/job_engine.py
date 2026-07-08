@@ -263,9 +263,6 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         command += ["--prompts-file", prompts_path]
     if bundle_id:
         command += ["--bundle-id", bundle_id]
-        governance_api_host = (req.governance_api_host or "").strip()
-        if governance_api_host:
-            command += ["--governance-api-host", governance_api_host]
     return command
 
 
