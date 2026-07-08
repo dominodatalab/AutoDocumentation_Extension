@@ -162,6 +162,53 @@ class TestStage2Ranking:
         # Empty result → fallback
         assert len(ranked_paths) == len(cards)
 
+    @pytest.mark.asyncio
+    async def test_heuristic_fallback_on_null_ranked_files(self, tmp_code_root, sanitizer, mock_llm):
+        mock_llm.complete_json.return_value = {"ranked_files": None}
+
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=tmp_code_root, profile=PYTHON_PROFILE,
+        )
+        files = scanner._find_source_files()
+        cards = scanner._build_file_cards(files)
+        ranked_paths, roles = await scanner._rank_files(cards)
+
+        assert len(ranked_paths) == len(cards)
+
+    @pytest.mark.asyncio
+    async def test_heuristic_fallback_on_string_ranked_files(self, tmp_code_root, sanitizer, mock_llm):
+        mock_llm.complete_json.return_value = {"ranked_files": "train.py"}
+
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=tmp_code_root, profile=PYTHON_PROFILE,
+        )
+        files = scanner._find_source_files()
+        cards = scanner._build_file_cards(files)
+        ranked_paths, roles = await scanner._rank_files(cards)
+
+        assert len(ranked_paths) == len(cards)
+
+    @pytest.mark.asyncio
+    async def test_skips_non_dict_ranked_entries(self, tmp_code_root, sanitizer, mock_llm):
+        mock_llm.complete_json.return_value = {
+            "ranked_files": [
+                "bad",
+                {"path": "train.py", "role": "training"},
+            ]
+        }
+
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=tmp_code_root, profile=PYTHON_PROFILE,
+        )
+        files = scanner._find_source_files()
+        cards = scanner._build_file_cards(files)
+        ranked_paths, roles = await scanner._rank_files(cards)
+
+        assert ranked_paths == ["train.py"]
+        assert roles["train.py"] == "training"
 
 # ── Stage 3: Batched deep analysis ───────────────────────────────
 

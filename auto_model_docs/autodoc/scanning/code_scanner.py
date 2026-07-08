@@ -281,7 +281,9 @@ class CodeScanner:
                 timeout=self.analysis_timeout,
             )
 
-            ranked = result.get("ranked_files", [])
+            ranked = result.get("ranked_files") or []
+            if not isinstance(ranked, list):
+                ranked = []
             if not ranked:
                 raise ValueError("LLM returned empty ranked_files")
 
@@ -289,6 +291,8 @@ class CodeScanner:
             card_paths = {c.path for c in file_cards}
             ranked_paths = []
             for entry in ranked:
+                if not isinstance(entry, dict):
+                    continue
                 path = entry.get("path", "")
                 role = entry.get("role", "unknown")
                 if path in card_paths:

@@ -108,6 +108,41 @@ class SectionPlanner:
                 schema=SECTION_PLANNING_SCHEMA,
                 system=SYSTEM_SECTION_PLANNER,
             )
+
+            content_blocks = []
+            blocks = result.get("content_blocks") or []
+            if not isinstance(blocks, list):
+                blocks = []
+            for block_data in blocks:
+                if not isinstance(block_data, dict):
+                    continue
+                try:
+                    block_type = ContentType(block_data["type"])
+                except (ValueError, KeyError):
+                    block_type = ContentType.NARRATIVE
+
+                content_blocks.append(ContentBlock(
+                    type=block_type,
+                    purpose=block_data.get("purpose", ""),
+                    data_needed=block_data.get("data_needed", ""),
+                    specifics=block_data.get("specifics", {}) if isinstance(block_data.get("specifics"), dict) else {},
+                ))
+
+            if not content_blocks:
+                raise ValueError("LLM returned no usable content blocks")
+
+            title = result.get("section_title", section.name)
+            if context.model_name and context.model_name not in title:
+                title = f"{title} - {context.model_name}"
+
+            return SectionPlan(
+                number="",
+                name=section.name,
+                title=title,
+                model_name=context.model_name,
+                model_run_id=context.model_run_id,
+                content_blocks=content_blocks,
+            )
         except Exception as e:
             logger.warning(f"Failed to plan section {section.name}{model_suffix}: {e}. Using fallback plan for section {section.name}{model_suffix}")
             return SectionPlan(
@@ -124,33 +159,3 @@ class SectionPlanner:
                     )
                 ],
             )
-
-        # Convert result to SectionPlan
-        content_blocks = []
-        for block_data in result.get("content_blocks", []):
-            try:
-                block_type = ContentType(block_data["type"])
-            except ValueError:
-                block_type = ContentType.NARRATIVE
-
-            content_blocks.append(ContentBlock(
-                type=block_type,
-                purpose=block_data.get("purpose", ""),
-                data_needed=block_data.get("data_needed", ""),
-                specifics=block_data.get("specifics", {}),
-            ))
-
-        # Use model name in title for per-model sections
-        title = result.get("section_title", section.name)
-        if context.model_name and context.model_name not in title:
-            title = f"{title} - {context.model_name}"
-
-        plan = SectionPlan(
-            number="",  # Will be set by orchestrator
-            name=section.name,
-            title=title,
-            model_name=context.model_name,
-            model_run_id=context.model_run_id,
-            content_blocks=content_blocks,
-        )
-        return plan
