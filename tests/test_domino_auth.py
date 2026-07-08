@@ -24,8 +24,11 @@ from domino_auth import (
     get_cli_token,
     get_user_token,
     reset_auth,
+    reset_ui_host,
     resolve_api_host,
+    resolve_ui_host,
     resolve_user_host,
+    set_ui_host,
     user_auth,
 )
 
@@ -33,8 +36,10 @@ from domino_auth import (
 @pytest.fixture(autouse=True)
 def _reset_provider():
     reset_auth()
+    reset_ui_host()
     yield
     reset_auth()
+    reset_ui_host()
 
 
 class TestResolveApiHost:
@@ -93,6 +98,28 @@ class TestResolveUserHost:
     def test_strips_trailing_slash(self, monkeypatch):
         monkeypatch.setenv("DOMINO_USER_HOST", "http://127.0.0.1:8763/")
         assert resolve_user_host() == "http://127.0.0.1:8763"
+
+
+class TestResolveUiHost:
+    def test_prefers_cached_ui_host_over_env(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://env.example.com")
+        set_ui_host("apps.cached.example.com")
+        assert resolve_ui_host() == "https://cached.example.com"
+
+    def test_falls_back_to_user_host_env(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://cluster.example.com")
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        assert resolve_ui_host() == "https://cluster.example.com"
+
+    def test_does_not_fall_back_to_api_proxy(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        assert resolve_ui_host() == ""
+
+    def test_returns_empty_when_unset(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
+        assert resolve_ui_host() == ""
 
 
 class TestGetUserToken:

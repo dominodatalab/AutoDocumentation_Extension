@@ -68,8 +68,10 @@ _project_cache: dict[str, ProjectInfo] = {}
 # API host / auth resolution (delegated to domino_auth)
 # ---------------------------------------------------------------------------
 
-from domino_auth import resolve_api_host as _resolve_api_host
 from domino_auth import current_auth as _current_auth
+from domino_auth import resolve_api_host as _resolve_api_host
+from domino_auth import resolve_ui_host as _resolve_ui_host
+from domino_auth import set_ui_host
 
 
 def _get_auth_headers() -> dict[str, str]:
@@ -793,54 +795,25 @@ def stop_job(run_id: str, project_id: Optional[str] = None) -> None:
 # UI host resolution & job URL building
 # ---------------------------------------------------------------------------
 
-_ui_host: str | None = None
-
-
-def set_ui_host(request_host: str, scheme: str = "https") -> None:
-    """Cache the external UI host from an incoming request header."""
-    global _ui_host
-    if _ui_host is not None:
-        return
-
-    from urllib.parse import urlparse, urlunparse
-
-    raw = (request_host or "").strip()
-    if not raw:
-        return
-
-    if "://" not in raw:
-        raw = f"{scheme}://{raw}"
-
-    parsed = urlparse(raw)
-    hostname = (parsed.hostname or "").strip()
-    if not hostname:
-        return
-
-    if hostname.startswith("apps."):
-        hostname = hostname[len("apps."):]
-    if not hostname:
-        return
-
-    netloc = f"{hostname}:{parsed.port}" if parsed.port else hostname
-    _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
-
 
 def build_job_url(run_id: str, project_id: str) -> str | None:
     """Return the Domino UI URL for a job."""
-    if not _ui_host:
+    ui_host = _resolve_ui_host()
+    if not ui_host:
         return None
 
     _, pname, powner = get_project_context(project_id)
     if not powner or not pname:
         return None
-    return f"{_ui_host}/jobs/{powner}/{pname}/{run_id}/logs?status=all"
+    return f"{ui_host}/jobs/{powner}/{pname}/{run_id}/logs?status=all"
 
 
 def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str | None:
     """Return the Domino UI URL for the autodoc dataset data browser (rw upload path)."""
     from dataset_manager import AUTODOC_DATASET_NAME
 
-    if not _ui_host:
+    ui_host = _resolve_ui_host()
+    if not ui_host:
         return None
     ds = (dataset_id or "").strip()
     if not ds:
@@ -852,12 +825,13 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
     if not powner or not pname:
         return None
     seg = (AUTODOC_DATASET_NAME or "autodoc").strip()
-    return f"{_ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
+    return f"{ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
 
 
 def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
     """Return the Domino UI URL for the artifacts browser at docs/<run_id[:8]>."""
-    if not _ui_host:
+    ui_host = _resolve_ui_host()
+    if not ui_host:
         return None
     rid = (run_id or "").strip()
     if not rid:
@@ -869,7 +843,7 @@ def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
     if not powner or not pname:
         return None
     short = rid[:8]
-    return f"{_ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"
+    return f"{ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"
 
 
 def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | None:
@@ -881,10 +855,10 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
     import httpx
 
     path = (artifact_path or "").lstrip("/")
-    api_host = _resolve_api_host()
-    if not api_host:
+    ui_host = _resolve_ui_host()
+    if not ui_host:
         logger.warning(
-            "download_artifact_at_head skipped: api host not configured project_id=%s artifact_path=%s",
+            "download_artifact_at_head skipped: ui host not configured project_id=%s artifact_path=%s",
             project_id,
             path,
         )
@@ -906,7 +880,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
         )
         return None
 
-    url = f"{api_host}/u/{powner}/{pname}/raw/latest/{path}"
+    url = f"{ui_host}/u/{powner}/{pname}/raw/latest/{path}"
     headers = _get_auth_headers()
     try:
         with httpx.Client(timeout=_DEFAULT_TIMEOUT, **_HTTPX_CLIENT_KWARGS) as client:

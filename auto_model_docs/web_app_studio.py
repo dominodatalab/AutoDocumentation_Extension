@@ -222,7 +222,9 @@ def _build_advanced_options(tier_options, env_options, rev_options):
 async def index(req: Request):
     host = req.headers.get("x-forwarded-host") or req.headers.get("host") or ""
     scheme = req.headers.get("x-forwarded-proto", "https")
-    domino_client.set_ui_host(host, scheme)
+    from domino_auth import set_ui_host
+
+    set_ui_host(host, scheme)
 
     project_id = _resolve_request_project_id(req)
     if not project_id:

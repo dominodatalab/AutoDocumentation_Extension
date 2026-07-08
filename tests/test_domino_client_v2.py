@@ -20,6 +20,7 @@ for p in (_repo_root, _pkg_dir):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+import domino_auth
 import domino_client as dc
 
 
@@ -33,7 +34,7 @@ def _setup_env(monkeypatch):
     monkeypatch.setenv("DOMINO_PROJECT_NAME", "test_project")
     # Clear caches
     dc._project_cache.clear()
-    dc._ui_host = None  # type: ignore[assignment]
+    domino_auth.reset_ui_host()
     yield
 
 
@@ -350,41 +351,42 @@ class TestStopJob:
 
 class TestSetUiHost:
     def test_basic(self):
-        dc.set_ui_host("example.domino.tech")
-        assert dc._ui_host == "https://example.domino.tech"
+        domino_auth.set_ui_host("example.domino.tech")
+        assert domino_auth.resolve_ui_host() == "https://example.domino.tech"
 
     def test_strips_apps_prefix(self):
-        dc.set_ui_host("apps.domino.example.com")
-        assert dc._ui_host == "https://domino.example.com"
+        domino_auth.set_ui_host("apps.domino.example.com")
+        assert domino_auth.resolve_ui_host() == "https://domino.example.com"
 
     def test_with_scheme(self):
-        dc.set_ui_host("https://custom.host:8443")
-        assert dc._ui_host == "https://custom.host:8443"
+        domino_auth.set_ui_host("https://custom.host:8443")
+        assert domino_auth.resolve_ui_host() == "https://custom.host:8443"
 
     def test_caches_first_value(self):
-        dc.set_ui_host("first.example.com")
-        dc.set_ui_host("second.example.com")
-        assert "first" in dc._ui_host
+        domino_auth.set_ui_host("first.example.com")
+        domino_auth.set_ui_host("second.example.com")
+        assert "first" in domino_auth.resolve_ui_host()
 
     def test_empty_is_noop(self):
-        dc.set_ui_host("")
-        assert dc._ui_host is None
+        domino_auth.set_ui_host("")
+        assert domino_auth.resolve_ui_host() == "https://domino.example.com"
 
 
 class TestBuildJobUrl:
     def test_builds_url(self):
-        dc.set_ui_host("domino.example.com")
+        domino_auth.set_ui_host("domino.example.com")
         # build_job_url uses get_project_context which needs resolve_project
         with patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner")):
             url = dc.build_job_url("run-123", project_id="proj-123")
         assert url == "https://domino.example.com/jobs/test_owner/test_project/run-123/logs?status=all"
 
-    def test_none_without_ui_host(self):
+    def test_none_without_ui_host(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
         assert dc.build_job_url("run-123", project_id="proj-123") is None
 
     @patch.object(dc, "resolve_project")
     def test_with_cross_project(self, mock_resolve):
-        dc.set_ui_host("domino.example.com")
+        domino_auth.set_ui_host("domino.example.com")
         mock_resolve.return_value = dc.ProjectInfo(
             id="other-proj", name="other-model", owner_username="bob",
         )
@@ -394,16 +396,17 @@ class TestBuildJobUrl:
 
 class TestBuildAutodocDatasetDataPageUrl:
     def test_builds_url(self):
-        dc.set_ui_host("domino.example.com")
+        domino_auth.set_ui_host("domino.example.com")
         with patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner")):
             url = dc.build_autodoc_dataset_data_page_url("proj-123", "ds-uuid-1")
         assert url == "https://domino.example.com/u/test_owner/test_project/data/rw/upload/autodoc/ds-uuid-1/docs"
 
-    def test_none_without_ui_host(self):
+    def test_none_without_ui_host(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
         assert dc.build_autodoc_dataset_data_page_url("proj-123", "ds-1") is None
 
     def test_none_empty_dataset_id(self):
-        dc.set_ui_host("domino.example.com")
+        domino_auth.set_ui_host("domino.example.com")
         assert dc.build_autodoc_dataset_data_page_url("proj-123", "  ") is None
 
 
@@ -522,7 +525,7 @@ class TestSubmitJob:
 class TestDownloadArtifactAtHead:
     @patch.object(dc, "_get_auth_headers", return_value={})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
-    @patch.object(dc, "_resolve_api_host", return_value="https://domino.example.com")
+    @patch.object(dc, "_resolve_ui_host", return_value="https://nucleus.example.com")
     def test_logs_on_http_404(self, _mock_host, _mock_ctx, _mock_auth, caplog):
         import logging
         mock_resp = MagicMock()
@@ -542,10 +545,31 @@ class TestDownloadArtifactAtHead:
         assert any("owner=test_owner" in r.message for r in caplog.records)
         assert any("project=test_project" in r.message for r in caplog.records)
 
-    @patch.object(dc, "_resolve_api_host", return_value=None)
-    def test_logs_when_api_host_missing(self, _mock_host, caplog):
+    @patch.object(dc, "_resolve_ui_host", return_value=None)
+    def test_logs_when_ui_host_missing(self, _mock_host, caplog):
         import logging
         with caplog.at_level(logging.WARNING):
             result = dc.download_artifact_at_head("proj-123", "docs/foo/model_docs.docx")
         assert result is None
-        assert any("api host not configured" in r.message for r in caplog.records)
+        assert any("ui host not configured" in r.message for r in caplog.records)
+
+    @patch.object(dc, "_get_auth_headers", return_value={})
+    @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
+    def test_uses_ui_host_not_api_proxy(self, _mock_ctx, _mock_auth, monkeypatch):
+        domino_auth.set_ui_host("apps.nucleus.example.com")
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"docx"
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        with patch("httpx.Client", return_value=mock_client):
+            result = dc.download_artifact_at_head("proj-123", "docs/abc/model_docs.docx")
+
+        assert result == b"docx"
+        called_url = mock_client.get.call_args[0][0]
+        assert called_url.startswith("https://nucleus.example.com/u/test_owner/test_project/raw/latest/")
+        assert "localhost" not in called_url

@@ -114,3 +114,45 @@ def resolve_api_host() -> str:
 def resolve_user_host() -> str:
     return resolve_api_host()
 
+
+_ui_host: str | None = None
+
+
+def set_ui_host(request_host: str, scheme: str = "https") -> None:
+    global _ui_host
+    if _ui_host is not None:
+        return
+
+    from urllib.parse import urlparse, urlunparse
+
+    raw = (request_host or "").strip()
+    if not raw:
+        return
+
+    if "://" not in raw:
+        raw = f"{scheme}://{raw}"
+
+    parsed = urlparse(raw)
+    hostname = (parsed.hostname or "").strip()
+    if not hostname:
+        return
+
+    if hostname.startswith("apps."):
+        hostname = hostname[len("apps."):]
+    if not hostname:
+        return
+
+    netloc = f"{hostname}:{parsed.port}" if parsed.port else hostname
+    _ui_host = urlunparse((parsed.scheme or scheme, netloc, "", "", "", "")).rstrip("/")
+
+
+def reset_ui_host() -> None:
+    global _ui_host
+    _ui_host = None
+
+
+def resolve_ui_host() -> str:
+    if _ui_host:
+        return _ui_host
+    return (os.environ.get("DOMINO_USER_HOST") or "").rstrip("/")
+
