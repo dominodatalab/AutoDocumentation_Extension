@@ -35,10 +35,44 @@ logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[float], None]
 
 
-def _hyperparameters_dict(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    return {}
+def _list(value: Any) -> list:
+    return value if isinstance(value, list) else []
+
+
+def _dict(value: Any) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _dict_list(value: Any) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    return [x for x in value if isinstance(x, dict)]
+
+
+def _normalize_code_analysis_result(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {
+            "model_classes": [],
+            "features": [],
+            "target_variable": None,
+            "transformations": [],
+            "ml_task_type": None,
+            "hyperparameters": {},
+            "data_sources": [],
+            "insights": "",
+            "code_evidence": [],
+        }
+    return {
+        "model_classes": _list(raw.get("model_classes")),
+        "features": _list(raw.get("features")),
+        "target_variable": raw.get("target_variable"),
+        "transformations": _dict_list(raw.get("transformations")),
+        "ml_task_type": raw.get("ml_task_type"),
+        "hyperparameters": _dict(raw.get("hyperparameters")),
+        "data_sources": _list(raw.get("data_sources")),
+        "insights": raw.get("insights") or "",
+        "code_evidence": _dict_list(raw.get("code_evidence")),
+    }
 
 
 class CodeScanner:
@@ -389,8 +423,9 @@ class CodeScanner:
         if result is None:
             raise ScannerError("Batch analysis exhausted all retries")
 
-        # Post-hoc line number resolution
-        evidence = result.get("code_evidence", []) or []
+        result = _normalize_code_analysis_result(result)
+
+        evidence = result["code_evidence"]
         self._resolve_line_numbers(evidence, raw_contents)
 
         return result
@@ -506,13 +541,16 @@ class CodeScanner:
         List fields: union with deduplication.
         Single-valued fields: prefer batch containing highest-ranked file.
         """
-        if len(batch_results) == 1:
-            return self._parse_result(batch_results[0])
+        normalized_results = [
+            _normalize_code_analysis_result(result) for result in batch_results
+        ]
 
-        # Determine batch rank: min rank of files in each batch's evidence
+        if len(normalized_results) == 1:
+            return self._parse_result(normalized_results[0])
+
         def batch_rank(result: Dict[str, Any]) -> int:
             evidence_files = {
-                e.get("file", "") for e in result.get("code_evidence", [])
+                e.get("file", "") for e in result["code_evidence"]
             }
             ranks = [
                 ranked_paths.index(f) if f in ranked_paths else 999
@@ -521,7 +559,7 @@ class CodeScanner:
             return min(ranks) if ranks else 999
 
         # Sort batch results by rank (best first)
-        sorted_results = sorted(batch_results, key=batch_rank)
+        sorted_results = sorted(normalized_results, key=batch_rank)
 
         # Merge list fields (union)
         all_model_classes: List[str] = []
@@ -538,29 +576,25 @@ class CodeScanner:
         ml_task_type = None
 
         for result in sorted_results:
-            all_model_classes.extend(result.get("model_classes", []))
-            all_features.extend(result.get("features", []))
-            all_transformations.extend(result.get("transformations", []))
-            all_data_sources.extend(result.get("data_sources", []))
+            all_model_classes.extend(result["model_classes"])
+            all_features.extend(result["features"])
+            all_transformations.extend(result["transformations"])
+            all_data_sources.extend(result["data_sources"])
 
-            # Merge hyperparameters (later batches don't overwrite)
-            for k, v in _hyperparameters_dict(result.get("hyperparameters")).items():
+            for k, v in result["hyperparameters"].items():
                 if k not in merged_hyperparams:
                     merged_hyperparams[k] = v
 
-            # Single-valued: first (highest-ranked) wins
             if target_variable is None and result.get("target_variable"):
                 target_variable = result["target_variable"]
             if ml_task_type is None and result.get("ml_task_type"):
                 ml_task_type = result["ml_task_type"]
 
-            # Insights: concatenate
-            insight = result.get("insights", "")
+            insight = result["insights"]
             if insight:
                 all_insights.append(insight)
 
-            # Evidence
-            for item in result.get("code_evidence", []) or []:
+            for item in result["code_evidence"]:
                 try:
                     all_evidence.append(CodeEvidence(
                         path=item.get("file", ""),
@@ -610,8 +644,10 @@ class CodeScanner:
 
     def _parse_result(self, result: Dict[str, Any]) -> CodeContext:
         """Parse a single batch result into CodeContext."""
+        result = _normalize_code_analysis_result(result)
+
         evidence_items = []
-        for item in result.get("code_evidence", []) or []:
+        for item in result["code_evidence"]:
             try:
                 evidence_items.append(CodeEvidence(
                     path=item.get("file", ""),
@@ -626,14 +662,14 @@ class CodeScanner:
 
         return CodeContext(
             files=[],
-            model_classes=result.get("model_classes", []),
-            features=result.get("features", []),
-            target_variable=result.get("target_variable"),
-            transformations=result.get("transformations", []),
-            ml_task_type=result.get("ml_task_type"),
-            hyperparameters=_hyperparameters_dict(result.get("hyperparameters")),
-            data_sources=result.get("data_sources", []),
-            insights=result.get("insights", ""),
+            model_classes=result["model_classes"],
+            features=result["features"],
+            target_variable=result["target_variable"],
+            transformations=result["transformations"],
+            ml_task_type=result["ml_task_type"],
+            hyperparameters=result["hyperparameters"],
+            data_sources=result["data_sources"],
+            insights=result["insights"],
             code_evidence=evidence_items,
         )
 

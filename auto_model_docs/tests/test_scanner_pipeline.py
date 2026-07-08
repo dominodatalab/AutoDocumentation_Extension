@@ -344,3 +344,90 @@ class TestStage4Merge:
             ranked_paths=[],
         )
         assert result.hyperparameters == {"max_depth": 5}
+
+    def test_merge_null_list_fields(self, sanitizer, mock_llm):
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=Path("/tmp"), profile=PYTHON_PROFILE,
+        )
+        result = scanner._merge_results(
+            [
+                {
+                    "model_classes": None,
+                    "features": None,
+                    "code_evidence": [],
+                    "target_variable": None,
+                    "ml_task_type": None,
+                    "hyperparameters": {},
+                    "data_sources": None,
+                    "insights": "",
+                    "transformations": None,
+                },
+                {
+                    "model_classes": ["RF"],
+                    "features": ["x1"],
+                    "code_evidence": [],
+                    "target_variable": None,
+                    "ml_task_type": None,
+                    "hyperparameters": {},
+                    "data_sources": [],
+                    "insights": "",
+                    "transformations": [],
+                },
+            ],
+            ranked_paths=[],
+        )
+        assert result.model_classes == ["RF"]
+        assert result.features == ["x1"]
+
+    def test_merge_string_code_evidence_in_batch_rank(self, sanitizer, mock_llm):
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=Path("/tmp"), profile=PYTHON_PROFILE,
+        )
+        result = scanner._merge_results(
+            [
+                {
+                    "model_classes": [], "features": [], "code_evidence": "bad",
+                    "target_variable": None, "ml_task_type": None,
+                    "hyperparameters": {}, "data_sources": [], "insights": "",
+                    "transformations": [],
+                },
+                {
+                    "model_classes": ["XGB"], "features": ["x1"], "code_evidence": [
+                        {"file": "train.py", "statement": "fits model"},
+                    ],
+                    "target_variable": "y", "ml_task_type": "classification",
+                    "hyperparameters": {}, "data_sources": [], "insights": "",
+                    "transformations": [],
+                },
+            ],
+            ranked_paths=["train.py"],
+        )
+        assert result.model_classes == ["XGB"]
+        assert result.target_variable == "y"
+        assert len(result.code_evidence) == 1
+
+    def test_merge_string_model_classes_not_corrupted(self, sanitizer, mock_llm):
+        scanner = CodeScanner(
+            llm=mock_llm, sanitizer=sanitizer,
+            code_root=Path("/tmp"), profile=PYTHON_PROFILE,
+        )
+        result = scanner._merge_results(
+            [
+                {
+                    "model_classes": "XGB", "features": [], "code_evidence": [],
+                    "target_variable": None, "ml_task_type": None,
+                    "hyperparameters": {}, "data_sources": [], "insights": "",
+                    "transformations": [],
+                },
+                {
+                    "model_classes": ["RF"], "features": [], "code_evidence": [],
+                    "target_variable": None, "ml_task_type": None,
+                    "hyperparameters": {}, "data_sources": [], "insights": "",
+                    "transformations": [],
+                },
+            ],
+            ranked_paths=[],
+        )
+        assert result.model_classes == ["RF"]
