@@ -248,7 +248,8 @@ class TestValidateEnvironment:
 
     def test_warns_when_domino_api_host_missing(self, _mock_dependencies, monkeypatch):
         monkeypatch.setenv("DOMINO_PROJECT_ID", "proj-1")
-        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
         ui = _import_ui()
         with patch.object(Path, "exists", return_value=True):

@@ -38,64 +38,55 @@ def _reset_provider():
 
 
 class TestResolveApiHost:
-    def test_returns_host_from_env(self, monkeypatch):
+    def test_returns_user_host_from_env(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
         assert resolve_api_host() == "https://domino.example.com"
 
     def test_strips_trailing_slash(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com/")
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com/")
         assert resolve_api_host() == "https://domino.example.com"
 
     def test_strips_multiple_trailing_slashes(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com///")
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com///")
         assert resolve_api_host() == "https://domino.example.com"
 
     def test_returns_empty_when_unset(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         assert resolve_api_host() == ""
 
     def test_returns_empty_when_blank(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "")
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-        monkeypatch.setenv("DOMINO_API_HOST", "")
         assert resolve_api_host() == ""
 
-    def test_prefers_proxy_over_host(self, monkeypatch):
+    def test_prefers_user_host_over_proxy(self, monkeypatch):
+        monkeypatch.setenv("DOMINO_USER_HOST", "http://127.0.0.1:8763")
         monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
-        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
-        assert resolve_api_host() == "http://localhost:8899"
+        assert resolve_api_host() == "http://127.0.0.1:8763"
 
-    def test_falls_back_to_host_when_proxy_unset(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
-        assert resolve_api_host() == "https://nucleus:80"
+    def test_falls_back_to_proxy_when_user_host_unset(self, monkeypatch):
+        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
+        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
+        assert resolve_api_host() == "http://localhost:8899"
 
 
 class TestResolveUserHost:
-    def test_prefers_user_host(self, monkeypatch):
+    def test_matches_resolve_api_host(self, monkeypatch):
         monkeypatch.setenv("DOMINO_USER_HOST", "http://127.0.0.1:8763")
-        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
         monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
-        assert resolve_user_host() == "http://127.0.0.1:8763"
-
-    def test_falls_back_to_api_host(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
-        monkeypatch.setenv("DOMINO_API_HOST", "https://nucleus:80")
-        monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
-        assert resolve_user_host() == "https://nucleus:80"
+        assert resolve_user_host() == resolve_api_host()
 
     def test_falls_back_to_proxy(self, monkeypatch):
         monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
-        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
         monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
         assert resolve_user_host() == "http://localhost:8899"
 
     def test_returns_empty_when_unset(self, monkeypatch):
         monkeypatch.delenv("DOMINO_USER_HOST", raising=False)
-        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         assert resolve_user_host() == ""
 

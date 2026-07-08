@@ -96,7 +96,9 @@ def _domino_request(
 
     resolved_base = (base_url if base_url is not None else _resolve_api_host()).rstrip("/")
     if not resolved_base:
-        raise RuntimeError("Domino API host is not configured. Set DOMINO_API_HOST.")
+        raise RuntimeError(
+            "Domino API host is not configured. Set DOMINO_USER_HOST or DOMINO_API_PROXY."
+        )
 
     url = f"{resolved_base}{path}"
     last_exc: Exception | None = None

@@ -109,7 +109,7 @@ except ImportError:
 def _clean_env(monkeypatch):
     """Ensure Domino env vars are set to safe defaults for every test."""
     defaults = {
-        "DOMINO_API_HOST": "https://domino.example.com",
+        "DOMINO_USER_HOST": "https://domino.example.com",
         "DOMINO_API_PROXY": "http://localhost:8899",
         "DOMINO_USER_API_KEY": "test-api-key",
         "DOMINO_PROJECT_OWNER": "test_owner",

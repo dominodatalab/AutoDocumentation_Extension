@@ -46,7 +46,7 @@ from domino_client import (
 
 @pytest.fixture(autouse=True)
 def _setup_env(monkeypatch):
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-api-key")
     monkeypatch.setenv("DOMINO_PROJECT_ID", "proj-123")
     monkeypatch.setenv("DOMINO_PROJECT_OWNER", "test_owner")
@@ -602,7 +602,7 @@ class TestBrowseDfsCode:
 
 class TestReadGbpFileRaw:
     def test_returns_response_content(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
         monkeypatch.setenv("DOMINO_USER_API_KEY", "key")
         dc._project_cache.clear()
 

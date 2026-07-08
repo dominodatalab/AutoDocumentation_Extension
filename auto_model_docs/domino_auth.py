@@ -103,28 +103,14 @@ def cli_auth() -> AuthCredentials:
 
 
 def resolve_api_host() -> str:
-    """Return the Domino API host.
-
-    Priority: ``DOMINO_API_PROXY`` > ``DOMINO_API_HOST``. Inside a Domino App
-    container, ``DOMINO_API_PROXY`` points at the local sidecar that handles
-    identity propagation; ``DOMINO_API_HOST`` is the nucleus URL.
-    """
-    host = os.environ.get("DOMINO_API_PROXY") or os.environ.get("DOMINO_API_HOST") or ""
-    return host.rstrip("/")
-
-
-def resolve_user_host() -> str:
-    """Return the user-facing Domino API host for gateway-sidecar calls.
-
-    Priority: ``DOMINO_USER_HOST`` > ``DOMINO_API_HOST`` > ``DOMINO_API_PROXY``.
-    Job containers with the API gateway set ``DOMINO_USER_HOST`` to the local
-    gateway (e.g. ``http://127.0.0.1:8763``); identity is injected server-side.
-    """
     host = (
         os.environ.get("DOMINO_USER_HOST")
-        or os.environ.get("DOMINO_API_HOST")
         or os.environ.get("DOMINO_API_PROXY")
         or ""
     )
     return host.rstrip("/")
+
+
+def resolve_user_host() -> str:
+    return resolve_api_host()
 

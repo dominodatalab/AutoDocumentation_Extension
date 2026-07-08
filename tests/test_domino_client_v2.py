@@ -26,7 +26,7 @@ import domino_client as dc
 @pytest.fixture(autouse=True)
 def _setup_env(monkeypatch):
     monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-api-key")
     monkeypatch.setenv("DOMINO_PROJECT_ID", "proj-123")
     monkeypatch.setenv("DOMINO_PROJECT_OWNER", "test_owner")
@@ -46,7 +46,7 @@ class TestHostResolution:
         assert dc._resolve_api_host() == "https://domino.example.com"
 
     def test_api_host_strips_trailing_slash(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com/")
+        monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com/")
         assert dc._resolve_api_host() == "https://domino.example.com"
 
 

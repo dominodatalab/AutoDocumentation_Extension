@@ -16,13 +16,10 @@ for p in (_repo_root, _pkg_dir):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from unittest.mock import MagicMock, patch
-
 from auth_context import (
     User,
     _bearer_token,
     _decode_jwt_payload,
-    _jwt_claim_snapshot,
     get_request_auth_header,
     get_user_auth_headers,
     get_viewing_user,
@@ -86,18 +83,10 @@ class TestJwtHelpers:
         assert _bearer_token("Bearer abc.def.ghi") == "abc.def.ghi"
 
     def test_decode_jwt_payload(self):
-        token = _make_jwt({"userId": "jwt-1", "userName": "alice"})
-        assert _decode_jwt_payload(token) == {"userId": "jwt-1", "userName": "alice"}
-
-    def test_jwt_claim_snapshot_filters_known_keys(self):
-        payload = {
-            "userId": "jwt-1",
-            "userName": "alice",
-            "roles": ["admin"],
-        }
-        assert _jwt_claim_snapshot(payload) == {
-            "userId": "jwt-1",
-            "userName": "alice",
+        token = _make_jwt({"sub": "uid-1", "preferred_username": "alice"})
+        assert _decode_jwt_payload(token) == {
+            "sub": "uid-1",
+            "preferred_username": "alice",
         }
 
 
@@ -105,86 +94,45 @@ class TestGetViewingUser:
     def teardown_method(self):
         set_request_auth_header(None)
 
-    def test_fetches_from_self_endpoint(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
-        set_request_auth_header("Bearer jwt")
+    def test_reads_sub_and_preferred_username_from_jwt(self):
+        jwt = _make_jwt(
+            {
+                "sub": "6a3939d1dd4c875bd6f5e0e4",
+                "preferred_username": "integration-test",
+            }
+        )
+        set_request_auth_header(f"Bearer {jwt}")
 
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"id": "uid-42", "userName": "bob"}
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_resp
+        u = get_viewing_user()
 
-        from domino_auth import configure_auth, user_auth
-        configure_auth(user_auth)
+        assert u.id == "6a3939d1dd4c875bd6f5e0e4"
+        assert u.user_name == "integration-test"
 
-        with patch("httpx.Client", return_value=mock_client):
-            u = get_viewing_user()
+    def test_falls_back_to_userName_claim(self):
+        jwt = _make_jwt({"sub": "uid-42", "userName": "bob"})
+        set_request_auth_header(f"Bearer {jwt}")
+
+        u = get_viewing_user()
 
         assert u.id == "uid-42"
         assert u.user_name == "bob"
-        call_url = mock_client.get.call_args.args[0]
-        assert call_url.endswith("/v4/users/self")
 
-    def test_raises_without_jwt(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+    def test_raises_without_jwt(self):
         set_request_auth_header(None)
-        from domino_auth import MissingAuthError, configure_auth, user_auth
-        configure_auth(user_auth)
+        from domino_auth import MissingAuthError
+
         with pytest.raises(MissingAuthError):
             get_viewing_user()
 
-    def test_raises_when_host_missing(self, monkeypatch):
-        monkeypatch.delenv("DOMINO_API_HOST", raising=False)
-        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
-        with pytest.raises(RuntimeError, match="DOMINO_API_HOST"):
-            get_viewing_user()
-
-    def test_raises_when_response_has_no_id(self, monkeypatch):
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
-        set_request_auth_header("Bearer jwt")
-
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"userName": "alice"}
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_resp
-
-        from domino_auth import configure_auth, user_auth
-        configure_auth(user_auth)
-
-        with patch("httpx.Client", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="no id"):
-                get_viewing_user()
-
-    def test_logs_users_self_and_jwt_comparison(self, monkeypatch, caplog):
-        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
-        jwt = _make_jwt({"userId": "jwt-99", "userName": "jwt-bob", "sub": "sub-99"})
+    def test_raises_when_jwt_has_no_sub(self):
+        jwt = _make_jwt({"preferred_username": "alice"})
         set_request_auth_header(f"Bearer {jwt}")
 
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"id": "api-42", "userName": "bob"}
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_resp
+        with pytest.raises(RuntimeError, match="no sub claim"):
+            get_viewing_user()
 
-        from domino_auth import configure_auth, user_auth
-        configure_auth(user_auth)
+    def test_raises_when_auth_header_is_not_bearer(self):
+        set_request_auth_header("Token not-a-jwt")
 
-        with patch("httpx.Client", return_value=mock_client):
-            with caplog.at_level("INFO"):
-                u = get_viewing_user()
-
-        assert u.id == "api-42"
-        assert any(
-            "viewing_user comparison" in record.message
-            and "users_self_id=api-42" in record.message
-            and "'userId': 'jwt-99'" in record.message
-            for record in caplog.records
-        )
+        with pytest.raises(RuntimeError, match="not a bearer token"):
+            get_viewing_user()

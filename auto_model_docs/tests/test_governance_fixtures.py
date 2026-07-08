@@ -58,7 +58,7 @@ def bundles_for_model_id(bundles_payload: dict[str, Any], model_id: str) -> list
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     configure_auth(cli_auth)
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
 
 

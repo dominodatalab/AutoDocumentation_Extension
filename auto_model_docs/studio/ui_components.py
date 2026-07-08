@@ -9,6 +9,7 @@ from typing import Optional
 from fasthtml.common import *
 
 from domino_job_store import job_db_not_configured_msg
+from domino_auth import resolve_api_host
 
 from .state import (
     DominoJobRecord,
@@ -91,7 +92,7 @@ def _validate_environment() -> list:
             action="Document generation will use code analysis only.",
         ))
 
-    if not os.environ.get("DOMINO_API_HOST"):
+    if not resolve_api_host():
         warnings.append(EnvironmentWarning(
             level="warning",
             message="Domino API host not configured.",

@@ -109,7 +109,7 @@ class JobRequest:
 @dataclass
 class DominoJobRecord:
     id: str                              # local UUID
-    owner_id: str                        # Domino user id (from /v4/users/self)
+    owner_id: str
     domino_run_id: Optional[str] = None
     hardware_tier: Optional[str] = None
     status: str = "queued"               # queued | submitted | running | succeeded | failed | cancelled

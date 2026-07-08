@@ -28,7 +28,7 @@ import domino_datasets as ds
 @pytest.fixture(autouse=True)
 def _setup_env(monkeypatch):
     """Set safe Domino env defaults and a valid auth token for every test."""
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_API_PROXY", "http://localhost:8899")
     monkeypatch.setenv("DOMINO_PROJECT_ID", "proj-123")
     set_request_auth_header("Bearer test-jwt")

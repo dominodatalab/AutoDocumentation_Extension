@@ -422,7 +422,7 @@ def _build_test_app(tmp_path: Path, monkeypatch):
 @pytest.fixture
 def integration_env(tmp_path, monkeypatch):
     """Provide a wired test app with real HTTP transport."""
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.test")
+    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.test")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
     monkeypatch.setenv("AUTODOC_MAX_JOBS", "2")
     monkeypatch.setenv("DOMINO_DATASETS_DIR", str(tmp_path / "domino_datasets"))

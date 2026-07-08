@@ -128,7 +128,7 @@ def _findings_raw():
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+    monkeypatch.setenv("DOMINO_USER_HOST", "https://domino.example.com")
     monkeypatch.setenv("DOMINO_USER_API_KEY", "test-key")
     monkeypatch.setenv("DOMINO_PROJECT_ID", PROJECT_ID)
 
