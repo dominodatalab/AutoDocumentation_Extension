@@ -9,9 +9,17 @@
 
 from __future__ import annotations
 
+import base64
+import json
+import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+_USER_ID_CLAIM_KEYS = ("id", "userId", "user_id", "sub", "dominoUserId")
+_USERNAME_CLAIM_KEYS = ("userName", "username", "preferred_username", "name")
 
 _auth_header_var: ContextVar[Optional[str]] = ContextVar(
     "forwarded_authorization_header", default=None
@@ -47,6 +55,32 @@ class User:
     user_name: str
 
 
+def _bearer_token(auth_header: Optional[str]) -> Optional[str]:
+    if not auth_header:
+        return None
+    parts = auth_header.split(None, 1)
+    if len(parts) != 2:
+        return None
+    return parts[1]
+
+
+def _decode_jwt_payload(token: str) -> dict[str, Any]:
+    segments = token.split(".")
+    if len(segments) < 2:
+        return {}
+    padding = "=" * (-len(segments[1]) % 4)
+    raw = base64.urlsafe_b64decode(segments[1] + padding)
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _jwt_claim_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    keys = _USER_ID_CLAIM_KEYS + _USERNAME_CLAIM_KEYS
+    return {key: payload[key] for key in keys if key in payload}
+
+
 def get_viewing_user() -> User:
     """Resolve the current request's Domino user via ``/v4/users/self``.
 
@@ -69,4 +103,19 @@ def get_viewing_user() -> User:
     uname = data.get("userName") or ""
     if not uid:
         raise RuntimeError("Domino /v4/users/self returned no id.")
+
+    jwt_claims: dict[str, Any] = {}
+    token = _bearer_token(get_request_auth_header())
+    if token:
+        try:
+            jwt_claims = _jwt_claim_snapshot(_decode_jwt_payload(token))
+        except Exception as exc:
+            logger.warning("viewing_user jwt decode failed: %s", exc)
+    logger.info(
+        "viewing_user comparison users_self_id=%s users_self_userName=%s jwt_claims=%s",
+        uid,
+        uname,
+        jwt_claims,
+    )
+
     return User(id=uid, user_name=uname)

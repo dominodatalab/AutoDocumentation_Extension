@@ -5,6 +5,9 @@ from __future__ import annotations
 import sys
 import os
 
+import base64
+import json
+
 import pytest
 
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +20,9 @@ from unittest.mock import MagicMock, patch
 
 from auth_context import (
     User,
+    _bearer_token,
+    _decode_jwt_payload,
+    _jwt_claim_snapshot,
     get_request_auth_header,
     get_user_auth_headers,
     get_viewing_user,
@@ -63,6 +69,36 @@ class TestGetUserAuthHeaders:
         headers = get_user_auth_headers()
         assert headers["Authorization"] == "Token custom-scheme-value"
         set_request_auth_header(None)
+
+
+def _make_jwt(payload: dict) -> str:
+    header = base64.urlsafe_b64encode(
+        json.dumps({"alg": "none"}).encode()
+    ).rstrip(b"=").decode()
+    body = base64.urlsafe_b64encode(
+        json.dumps(payload).encode()
+    ).rstrip(b"=").decode()
+    return f"{header}.{body}.sig"
+
+
+class TestJwtHelpers:
+    def test_bearer_token_strips_scheme(self):
+        assert _bearer_token("Bearer abc.def.ghi") == "abc.def.ghi"
+
+    def test_decode_jwt_payload(self):
+        token = _make_jwt({"userId": "jwt-1", "userName": "alice"})
+        assert _decode_jwt_payload(token) == {"userId": "jwt-1", "userName": "alice"}
+
+    def test_jwt_claim_snapshot_filters_known_keys(self):
+        payload = {
+            "userId": "jwt-1",
+            "userName": "alice",
+            "roles": ["admin"],
+        }
+        assert _jwt_claim_snapshot(payload) == {
+            "userId": "jwt-1",
+            "userName": "alice",
+        }
 
 
 class TestGetViewingUser:
@@ -124,3 +160,31 @@ class TestGetViewingUser:
         with patch("httpx.Client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="no id"):
                 get_viewing_user()
+
+    def test_logs_users_self_and_jwt_comparison(self, monkeypatch, caplog):
+        monkeypatch.setenv("DOMINO_API_HOST", "https://domino.example.com")
+        jwt = _make_jwt({"userId": "jwt-99", "userName": "jwt-bob", "sub": "sub-99"})
+        set_request_auth_header(f"Bearer {jwt}")
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"id": "api-42", "userName": "bob"}
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        from domino_auth import configure_auth, user_auth
+        configure_auth(user_auth)
+
+        with patch("httpx.Client", return_value=mock_client):
+            with caplog.at_level("INFO"):
+                u = get_viewing_user()
+
+        assert u.id == "api-42"
+        assert any(
+            "viewing_user comparison" in record.message
+            and "users_self_id=api-42" in record.message
+            and "'userId': 'jwt-99'" in record.message
+            for record in caplog.records
+        )
