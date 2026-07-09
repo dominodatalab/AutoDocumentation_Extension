@@ -10,7 +10,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ENV DOMINO_USER=$DUSER
 ENV DOMINO_GROUP=$DGROUP
-ENV APP_WORK_DIR="/home/$DOMINO_USER"
+ENV DOMINO_MDOCS_CLI_INSTALL_DIR="/home/$DOMINO_USER"
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -20,7 +20,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p $APP_WORK_DIR
+RUN mkdir -p $DOMINO_MDOCS_CLI_INSTALL_DIR
 
 # Ensure the DOMINO_USER/DOMINO_GROUP exists inside the container.
 RUN if ! id 12574 >/dev/null 2>&1; then \
@@ -28,13 +28,13 @@ RUN if ! id 12574 >/dev/null 2>&1; then \
         useradd -u 12574 -g 12574 -m -N -s /bin/bash ${DOMINO_USER}; \
     fi
 
-RUN chown -R ${DOMINO_USER}:${DOMINO_GROUP} $APP_WORK_DIR
+RUN chown -R ${DOMINO_USER}:${DOMINO_GROUP} $DOMINO_MDOCS_CLI_INSTALL_DIR
 
 
 # Cleanup after apt package installs
 RUN rm -rf /var/lib/apt/lists/*
 
-WORKDIR ${APP_WORK_DIR}
+WORKDIR ${DOMINO_MDOCS_CLI_INSTALL_DIR}
 
 USER $DOMINO_USER
 

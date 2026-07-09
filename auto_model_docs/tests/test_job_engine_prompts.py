@@ -52,3 +52,10 @@ def test_build_job_command_omits_prompts_file_when_empty():
     req = _sample_request(prompts_file="")
     cmd = _build_job_command(req, "/spec.yaml")
     assert "--prompts-file" not in cmd
+
+
+def test_build_job_command_uses_domino_mdocs_cli_install_dir(monkeypatch):
+    monkeypatch.setenv("DOMINO_MDOCS_CLI_INSTALL_DIR", "/opt/autodoc")
+    req = _sample_request()
+    cmd = _build_job_command(req, "/spec.yaml")
+    assert cmd[0] == "/opt/autodoc/cli.sh"
