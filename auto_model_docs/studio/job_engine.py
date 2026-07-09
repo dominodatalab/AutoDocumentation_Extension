@@ -206,8 +206,8 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         raise ValueError("internal: spec_path is required to build the job command")
 
     code_root_arg = (req.code_root or "").strip()
-    app_work_dir = os.environ.get("APP_WORK_DIR", ".")
-    cli_sh = f"{app_work_dir}/cli.sh"
+    domino_mdocs_cli_install_dir = os.environ.get("DOMINO_MDOCS_CLI_INSTALL_DIR", ".")
+    cli_sh = f"{domino_mdocs_cli_install_dir}/cli.sh"
 
     command = [
         cli_sh,
