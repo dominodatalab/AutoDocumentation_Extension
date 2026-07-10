@@ -523,35 +523,67 @@ class TestSubmitJob:
 # ---------------------------------------------------------------------------
 
 class TestDfsRawDownloadPath:
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
-    def test_gbp_prefixes_artifacts(self, _mock_info):
+    def setup_method(self):
+        dc._code_source_info_cache.clear()
+
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": None, "location": "/mnt/code"})
+    def test_gbp_prefixes_artifacts(self, _mock):
         assert dc.dfs_raw_download_path("proj-1", "docs/abc/model_docs.docx") == (
             "artifacts/docs/abc/model_docs.docx"
         )
 
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": False})
-    def test_dfs_keeps_logical_path(self, _mock_info):
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": False, "repo_id": None, "location": "/mnt"})
+    def test_dfs_keeps_logical_path(self, _mock):
         assert dc.dfs_raw_download_path("proj-1", "docs/abc/model_docs.docx") == (
             "docs/abc/model_docs.docx"
         )
 
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
-    def test_already_prefixed_unchanged(self, _mock_info):
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": None, "location": "/mnt/code"})
+    def test_already_prefixed_unchanged(self, _mock):
         path = "artifacts/docs/abc/model_docs.docx"
         assert dc.dfs_raw_download_path("proj-1", path) == path
 
+    @patch.object(dc, "get_code_source_info", side_effect=ValueError("nope"))
+    def test_unresolvable_project_defaults_to_dfs_path(self, _mock):
+        assert dc.dfs_raw_download_path("proj-x", "docs/abc/model_docs.docx") == (
+            "docs/abc/model_docs.docx"
+        )
+
+
+class TestCodeSourceInfoCache:
+    def setup_method(self):
+        dc._code_source_info_cache.clear()
+
+    @patch.object(dc, "_domino_request", return_value={"mainRepository": {"id": "repo-1"}})
+    @patch.object(dc, "browse_code")
+    @patch.object(dc, "resolve_project")
+    def test_gbp_fetched_once_then_cached(self, mock_resolve, mock_browse, mock_req):
+        mock_resolve.return_value = dc.ProjectInfo(
+            id="proj-1", name="model", owner_username="alice",
+        )
+        mock_browse.return_value = {"projectSettings": {"isGitBasedProject": True}}
+        info1 = dc.get_code_source_info("proj-1")
+        info2 = dc.get_code_source_info("proj-1")
+        assert info1 == info2
+        assert info1 == {"is_git": True, "repo_id": "repo-1", "location": "/mnt/code"}
+        assert mock_browse.call_count == 1
+        assert mock_req.call_count == 1
+
 
 class TestBuildAutodocArtifactsRunUrl:
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": False})
+    def setup_method(self):
+        dc._code_source_info_cache.clear()
+
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": False, "repo_id": None, "location": "/mnt"})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
-    def test_dfs_url(self, _mock_ctx, _mock_info):
+    def test_dfs_url(self, _mock_ctx, _mock):
         domino_auth.set_ui_host("domino.example.com")
         url = dc.build_autodoc_artifacts_run_url("proj-123", "6a171f74cf54ab6ccad5e5f9")
         assert url == "https://domino.example.com/u/test_owner/test_project/dfs/code/docs/6a171f74"
 
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": "r1", "location": "/mnt/code"})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
-    def test_gbp_url(self, _mock_ctx, _mock_info):
+    def test_gbp_url(self, _mock_ctx, _mock):
         domino_auth.set_ui_host("domino.example.com")
         url = dc.build_autodoc_artifacts_run_url("proj-123", "6a171f74cf54ab6ccad5e5f9")
         assert url == (
@@ -595,9 +627,10 @@ class TestDownloadArtifactAtHead:
         assert any("ui host not configured" in r.message for r in caplog.records)
 
     @patch.object(dc, "_get_auth_headers", return_value={})
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": "r1", "location": "/mnt/code"})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
     def test_gbp_uses_artifacts_prefix_in_url(self, _mock_ctx, _mock_info, _mock_auth, monkeypatch):
+        dc._code_source_info_cache.clear()
         domino_auth.set_ui_host("apps.nucleus.example.com")
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
         mock_resp = MagicMock()

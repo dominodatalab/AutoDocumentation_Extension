@@ -458,6 +458,9 @@ class TestBuildJobCommandStr:
 # ===================================================================
 
 class TestGetCodeSourceInfo:
+    def setup_method(self):
+        dc._code_source_info_cache.clear()
+
     def _make_proj(self):
         from domino_client import ProjectInfo
         return ProjectInfo(id="proj-1", name="myproj", owner_username="alice")
@@ -506,6 +509,15 @@ class TestGetCodeSourceInfo:
         with patch.object(dc, "resolve_project", return_value=None):
             with pytest.raises(ValueError, match="Could not resolve"):
                 get_code_source_info("proj-bad")
+
+    def test_second_call_uses_cache(self):
+        browse_resp = {"projectSettings": {"isGitBasedProject": False}}
+        with patch.object(dc, "resolve_project", return_value=self._make_proj()), \
+             patch.object(dc, "browse_code", return_value=browse_resp) as mock_browse:
+            info1 = get_code_source_info("proj-1")
+            info2 = get_code_source_info("proj-1")
+        assert info1 == info2
+        assert mock_browse.call_count == 1
 
 
 # ===================================================================

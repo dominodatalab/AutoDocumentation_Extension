@@ -62,6 +62,7 @@ class ProjectInfo:
 
 
 _project_cache: dict[str, ProjectInfo] = {}
+_code_source_info_cache: dict[str, dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +263,14 @@ def get_project_code_root(owner_username: str, project_name: str) -> str:
 
 def get_code_source_info(project_id: str) -> dict[str, Any]:
     """Return {is_git, repo_id, location} for the project's default code source."""
+    cached = _code_source_info_cache.get(project_id)
+    if cached is not None:
+        return cached
+
     info = resolve_project(project_id)
     if not info:
         raise ValueError(f"Could not resolve project {project_id}")
+
     browse = browse_code(info.owner_username, info.name)
     ps = browse.get("projectSettings") or {}
     is_git = bool(ps.get("isGitBasedProject"))
@@ -279,7 +285,10 @@ def get_code_source_info(project_id: str) -> dict[str, Any]:
                 repo_id = str(rid)
         except Exception:
             logger.exception("get_code_source_info: mainRepository lookup failed")
-    return {"is_git": is_git, "repo_id": repo_id, "location": location}
+
+    result = {"is_git": is_git, "repo_id": repo_id, "location": location}
+    _code_source_info_cache[project_id] = result
+    return result
 
 
 def browse_gbp_code(project_id: str, repo_id: str, directory: str = "") -> list[dict[str, Any]]:
@@ -831,7 +840,7 @@ def dfs_raw_download_path(project_id: str, logical_path: str) -> str:
     if not rel or rel.startswith("artifacts/"):
         return rel
     try:
-        if get_code_source_info(project_id).get("is_git"):
+        if get_code_source_info(project_id)["is_git"]:
             return f"artifacts/{rel}"
     except ValueError:
         pass
