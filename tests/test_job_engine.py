@@ -544,9 +544,7 @@ class TestBuildJobCommand:
         assert cmd[0].endswith("/cli.sh")
         assert "--spec" in cmd
         assert "/path/spec.yaml" in cmd
-        assert "--output_dir" in cmd
-        i = cmd.index("--output_dir")
-        assert cmd[i + 1] == "/mnt"
+        assert "--output_dir" not in cmd
         assert "--provider" in cmd
         assert "--notebook" in cmd
         assert "--verbose" in cmd
@@ -562,13 +560,12 @@ class TestBuildJobCommand:
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "gpt-4"
 
-    def test_uses_domino_artifacts_dir_when_set(self, monkeypatch):
+    def test_does_not_pass_output_dir_even_when_domino_artifacts_dir_set(self, monkeypatch):
         monkeypatch.setenv("DOMINO_ARTIFACTS_DIR", "/mnt/artifacts")
         je = _import_job_engine()
         req = _jr(provider="anthropic", code_root="/mnt/code")
         cmd = je._build_job_command(req, "/path/spec.yaml")
-        i = cmd.index("--output_dir")
-        assert cmd[i + 1] == "/mnt/artifacts"
+        assert "--output_dir" not in cmd
 
     def test_notebook_unchecked_omits_flag(self):
         je = _import_job_engine()
@@ -834,7 +831,7 @@ class TestSubmitDominoJob:
         assert url == "https://domino/jobs/run-abc"
         client.submit_job.assert_called_once()
         cmd = client.submit_job.call_args[0][0]
-        assert "--output_dir /mnt" in cmd
+        assert "--output_dir" not in cmd
         client.build_job_url.assert_called_once_with("run-abc", project_id="proj-123")
 
     @pytest.mark.asyncio

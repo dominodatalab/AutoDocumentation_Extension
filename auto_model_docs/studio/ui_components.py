@@ -250,11 +250,10 @@ def _render_warnings_banner(warnings: list) -> list:
 # ---------------------------------------------------------------------------
 
 def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
-    """Render the terminal panel for a documentation job."""
     if not record:
         return Div(
             Div(
-                H3("Documentation job"),
+                H3("Auto documentation job"),
                 cls="terminal-header",
             ),
             Div(
@@ -311,7 +310,7 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
 
     return Div(
         Div(
-            H3("Documentation job"),
+            H3("Auto documentation job"),
             cls="terminal-header",
         ),
         Div(status.upper(), cls=badge_cls),

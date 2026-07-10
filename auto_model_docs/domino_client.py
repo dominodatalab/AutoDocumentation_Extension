@@ -685,7 +685,6 @@ def submit_job(
     environment_id: str,
     environment_revision_id: str,
 ) -> str:
-    """Submit a documentation job via the v1 jobs API and return the job ID."""
     pid, pname, _ = get_project_context(project_id)
 
     title = f"Model Docs: {pname or pid}" + (f" ({branch})" if branch else "")
@@ -731,7 +730,7 @@ def submit_job(
         or data.get("jobId")
     )
     if not run_id:
-        raise ValueError(f"Starting a documentation job returned unexpected response: {data!r}")
+        raise ValueError(f"Starting an auto documentation job returned unexpected response: {data!r}")
 
     return str(run_id)
 
@@ -781,7 +780,6 @@ def get_job_status(run_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def stop_job(run_id: str, project_id: Optional[str] = None) -> None:
-    """Stop a running documentation job. Requires project_id."""
     if not project_id:
         raise ValueError("project_id is required to stop a job")
     payload: dict[str, Any] = {"jobId": run_id, "commitResults": True, "projectId": project_id}
@@ -828,6 +826,18 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
     return f"{ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
 
 
+def dfs_raw_download_path(project_id: str, logical_path: str) -> str:
+    rel = (logical_path or "").lstrip("/")
+    if not rel or rel.startswith("artifacts/"):
+        return rel
+    try:
+        if get_code_source_info(project_id).get("is_git"):
+            return f"artifacts/{rel}"
+    except ValueError:
+        pass
+    return rel
+
+
 def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
     """Return the Domino UI URL for the artifacts browser at docs/<run_id[:8]>."""
     ui_host = _resolve_ui_host()
@@ -843,7 +853,8 @@ def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
     if not powner or not pname:
         return None
     short = rid[:8]
-    return f"{ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"
+    dfs_dir = dfs_raw_download_path(project_id, f"docs/{short}")
+    return f"{ui_host}/u/{powner}/{pname}/dfs/code/{dfs_dir}"
 
 
 def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | None:
@@ -854,13 +865,14 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
     """
     import httpx
 
-    path = (artifact_path or "").lstrip("/")
+    logical_path = (artifact_path or "").lstrip("/")
+    path = dfs_raw_download_path(project_id, logical_path)
     ui_host = _resolve_ui_host()
     if not ui_host:
         logger.warning(
             "download_artifact_at_head skipped: ui host not configured project_id=%s artifact_path=%s",
             project_id,
-            path,
+            logical_path,
         )
         return None
     try:
@@ -869,14 +881,14 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
         logger.warning(
             "download_artifact_at_head skipped: could not resolve project project_id=%s artifact_path=%s",
             project_id,
-            path,
+            logical_path,
         )
         return None
     if not powner or not pname:
         logger.warning(
             "download_artifact_at_head skipped: missing owner or project name project_id=%s artifact_path=%s",
             project_id,
-            path,
+            logical_path,
         )
         return None
 
@@ -891,7 +903,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
                     project_id,
                     powner,
                     pname,
-                    path,
+                    logical_path,
                 )
                 return None
             if resp.status_code >= 400:
@@ -900,7 +912,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
                     project_id,
                     powner,
                     pname,
-                    path,
+                    logical_path,
                     resp.status_code,
                 )
                 resp.raise_for_status()
@@ -911,7 +923,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
             project_id,
             powner,
             pname,
-            path,
+            logical_path,
         )
         return None
 

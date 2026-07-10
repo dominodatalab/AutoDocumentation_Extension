@@ -1,4 +1,3 @@
-"""Documentation job submission and command building."""
 
 from __future__ import annotations
 
@@ -30,8 +29,6 @@ _MAX_JOB_MAX_FILES = 1_000_000
 _MAX_JOB_WORKERS = 512
 _MAX_JOB_TIMEOUT_SEC = 7 * 24 * 3600
 _MAX_JOB_MAX_RETRIES = 100
-from artifact_layout import get_artifacts_root
-
 from .state import (
     JobRequest,
     _resolve_request_project_id,
@@ -197,9 +194,6 @@ async def _parse_request(req: Request) -> JobRequest:
     )
 
 
-# ---------------------------------------------------------------------------
-# Documentation job command building
-# ---------------------------------------------------------------------------
 
 def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
     if not spec_path or not str(spec_path).strip():
@@ -213,8 +207,6 @@ def _build_job_command(req: JobRequest, spec_path: str) -> list[str]:
         cli_sh,
         "--spec",
         spec_path,
-        "--output_dir",
-        get_artifacts_root(),
         "--code-root",
         code_root_arg,
         "--provider",
@@ -271,10 +263,6 @@ def _build_job_command_str(req: JobRequest, spec_path: str) -> str:
     return " ".join(shlex.quote(p) for p in parts)
 
 
-# ---------------------------------------------------------------------------
-# Documentation job submission
-# ---------------------------------------------------------------------------
-
 def launch_domino_job_run(
     command_str: str,
     *,
@@ -319,7 +307,7 @@ def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
         )
         return run_id, job_url or ""
     except Exception as exc:
-        logger.error("Documentation job submission failed: %s", exc, exc_info=True)
+        logger.error("Auto documentation job submission failed: %s", exc, exc_info=True)
         raise
 
 def build_queue_payload(req: JobRequest, spec_path: str) -> dict[str, Any]:

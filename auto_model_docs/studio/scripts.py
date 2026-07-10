@@ -1737,7 +1737,7 @@ MAIN_DOM_JS = r"""
                     ? _esc(latestJob.domino_status)
                     : 'Check the job logs in Domino for details.';
                 if (latestJob.job_url) {
-                    failedDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View documentation job</a>.';
+                    failedDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View auto documentation job</a>.';
                 }
                 html += '<div class="results-failed">';
                 html += '<div class="results-failed-banner">'
@@ -1752,20 +1752,20 @@ MAIN_DOM_JS = r"""
                     + '<div class="results-failed-banner">'
                     + '<span class="material-symbols-outlined results-failed-icon">cancel</span>'
                     + '<div class="results-failed-text">'
-                    + '<div class="results-failed-headline">Job cancelled</div>'
+                    + '<div class="results-failed-headline">Auto documentation job cancelled</div>'
                     + '</div></div></div>';
             } else if (status === 'unknown') {
                 var unknownDetail = 'Status checks failed. The job may still be running or may have finished.';
                 if (latestJob.job_url) {
-                    unknownDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View job logs</a> for details.';
+                    unknownDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View auto documentation job logs</a> for details.';
                 } else {
-                    unknownDetail += ' Check job logs in Domino for details.';
+                    unknownDetail += ' Check auto documentation job logs in Domino for details.';
                 }
                 html += '<div class="results-unknown">';
                 html += '<div class="results-unknown-banner">'
                     + '<span class="material-symbols-outlined results-unknown-icon">help</span>'
                     + '<div class="results-unknown-text">'
-                    + '<div class="results-unknown-headline">Could not verify job status</div>'
+                    + '<div class="results-unknown-headline">Could not verify auto documentation job status</div>'
                     + '<div class="results-unknown-detail">' + unknownDetail + '</div>'
                     + '</div></div>';
                 html += '</div>';

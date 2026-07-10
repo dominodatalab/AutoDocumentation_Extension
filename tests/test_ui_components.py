@@ -587,7 +587,7 @@ class TestGovernanceBundlePickerOptgroups:
         failed_idx = scripts_src.index("var failedDetail = latestJob.domino_status")
         failed_block = scripts_src[failed_idx:failed_idx + 700]
         assert "latestJob.job_url" in failed_block
-        assert "View documentation job" in failed_block
+        assert "View auto documentation job" in failed_block
 
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent

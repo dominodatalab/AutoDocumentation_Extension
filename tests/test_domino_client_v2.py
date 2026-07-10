@@ -519,6 +519,47 @@ class TestSubmitJob:
 
 
 # ---------------------------------------------------------------------------
+# dfs_raw_download_path / build_autodoc_artifacts_run_url
+# ---------------------------------------------------------------------------
+
+class TestDfsRawDownloadPath:
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
+    def test_gbp_prefixes_artifacts(self, _mock_info):
+        assert dc.dfs_raw_download_path("proj-1", "docs/abc/model_docs.docx") == (
+            "artifacts/docs/abc/model_docs.docx"
+        )
+
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": False})
+    def test_dfs_keeps_logical_path(self, _mock_info):
+        assert dc.dfs_raw_download_path("proj-1", "docs/abc/model_docs.docx") == (
+            "docs/abc/model_docs.docx"
+        )
+
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
+    def test_already_prefixed_unchanged(self, _mock_info):
+        path = "artifacts/docs/abc/model_docs.docx"
+        assert dc.dfs_raw_download_path("proj-1", path) == path
+
+
+class TestBuildAutodocArtifactsRunUrl:
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": False})
+    @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
+    def test_dfs_url(self, _mock_ctx, _mock_info):
+        domino_auth.set_ui_host("domino.example.com")
+        url = dc.build_autodoc_artifacts_run_url("proj-123", "6a171f74cf54ab6ccad5e5f9")
+        assert url == "https://domino.example.com/u/test_owner/test_project/dfs/code/docs/6a171f74"
+
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
+    @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
+    def test_gbp_url(self, _mock_ctx, _mock_info):
+        domino_auth.set_ui_host("domino.example.com")
+        url = dc.build_autodoc_artifacts_run_url("proj-123", "6a171f74cf54ab6ccad5e5f9")
+        assert url == (
+            "https://domino.example.com/u/test_owner/test_project/dfs/code/artifacts/docs/6a171f74"
+        )
+
+
+# ---------------------------------------------------------------------------
 # download_artifact_at_head
 # ---------------------------------------------------------------------------
 
@@ -552,6 +593,27 @@ class TestDownloadArtifactAtHead:
             result = dc.download_artifact_at_head("proj-123", "docs/foo/model_docs.docx")
         assert result is None
         assert any("ui host not configured" in r.message for r in caplog.records)
+
+    @patch.object(dc, "_get_auth_headers", return_value={})
+    @patch.object(dc, "get_code_source_info", return_value={"is_git": True})
+    @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
+    def test_gbp_uses_artifacts_prefix_in_url(self, _mock_ctx, _mock_info, _mock_auth, monkeypatch):
+        domino_auth.set_ui_host("apps.nucleus.example.com")
+        monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"docx"
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+
+        with patch("httpx.Client", return_value=mock_client):
+            result = dc.download_artifact_at_head("proj-123", "docs/abc/model_docs.docx")
+
+        assert result == b"docx"
+        called_url = mock_client.get.call_args[0][0]
+        assert called_url.endswith("/raw/latest/artifacts/docs/abc/model_docs.docx")
 
     @patch.object(dc, "_get_auth_headers", return_value={})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
