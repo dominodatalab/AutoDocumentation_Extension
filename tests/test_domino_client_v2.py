@@ -519,36 +519,8 @@ class TestSubmitJob:
 
 
 # ---------------------------------------------------------------------------
-# dfs_raw_download_path / build_autodoc_artifacts_run_url
+# build_autodoc_artifacts_run_url
 # ---------------------------------------------------------------------------
-
-class TestDfsRawDownloadPath:
-    def setup_method(self):
-        dc._code_source_info_cache.clear()
-
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": None, "location": "/mnt/code"})
-    def test_gbp_prefixes_artifacts(self, _mock):
-        assert dc.dfs_raw_download_path("proj-1", "docs/abc/model_docs.docx") == (
-            "artifacts/docs/abc/model_docs.docx"
-        )
-
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": False, "repo_id": None, "location": "/mnt"})
-    def test_dfs_keeps_logical_path(self, _mock):
-        assert dc.dfs_raw_download_path("proj-1", "docs/abc/model_docs.docx") == (
-            "docs/abc/model_docs.docx"
-        )
-
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": None, "location": "/mnt/code"})
-    def test_already_prefixed_unchanged(self, _mock):
-        path = "artifacts/docs/abc/model_docs.docx"
-        assert dc.dfs_raw_download_path("proj-1", path) == path
-
-    @patch.object(dc, "get_code_source_info", side_effect=ValueError("nope"))
-    def test_unresolvable_project_defaults_to_dfs_path(self, _mock):
-        assert dc.dfs_raw_download_path("proj-x", "docs/abc/model_docs.docx") == (
-            "docs/abc/model_docs.docx"
-        )
-
 
 class TestCodeSourceInfoCache:
     def setup_method(self):
@@ -571,24 +543,11 @@ class TestCodeSourceInfoCache:
 
 
 class TestBuildAutodocArtifactsRunUrl:
-    def setup_method(self):
-        dc._code_source_info_cache.clear()
-
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": False, "repo_id": None, "location": "/mnt"})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
-    def test_dfs_url(self, _mock_ctx, _mock):
+    def test_url(self, _mock_ctx):
         domino_auth.set_ui_host("domino.example.com")
         url = dc.build_autodoc_artifacts_run_url("proj-123", "6a171f74cf54ab6ccad5e5f9")
         assert url == "https://domino.example.com/u/test_owner/test_project/dfs/code/docs/6a171f74"
-
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": "r1", "location": "/mnt/code"})
-    @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
-    def test_gbp_url(self, _mock_ctx, _mock):
-        domino_auth.set_ui_host("domino.example.com")
-        url = dc.build_autodoc_artifacts_run_url("proj-123", "6a171f74cf54ab6ccad5e5f9")
-        assert url == (
-            "https://domino.example.com/u/test_owner/test_project/dfs/code/artifacts/docs/6a171f74"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -627,9 +586,8 @@ class TestDownloadArtifactAtHead:
         assert any("ui host not configured" in r.message for r in caplog.records)
 
     @patch.object(dc, "_get_auth_headers", return_value={})
-    @patch.object(dc, "get_code_source_info", return_value={"is_git": True, "repo_id": "r1", "location": "/mnt/code"})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))
-    def test_gbp_uses_artifacts_prefix_in_url(self, _mock_ctx, _mock_info, _mock_auth, monkeypatch):
+    def test_uses_logical_path_in_url(self, _mock_ctx, _mock_auth, monkeypatch):
         dc._code_source_info_cache.clear()
         domino_auth.set_ui_host("apps.nucleus.example.com")
         monkeypatch.delenv("DOMINO_API_PROXY", raising=False)
@@ -642,11 +600,12 @@ class TestDownloadArtifactAtHead:
         mock_client.get.return_value = mock_resp
 
         with patch("httpx.Client", return_value=mock_client):
-            result = dc.download_artifact_at_head("proj-123", "docs/abc/model_docs.docx")
+            with patch.object(dc, "_resolve_ui_host", return_value="https://nucleus.example.com"):
+                result = dc.download_artifact_at_head("proj-123", "docs/abc/model_docs.docx")
 
         assert result == b"docx"
         called_url = mock_client.get.call_args[0][0]
-        assert called_url.endswith("/raw/latest/artifacts/docs/abc/model_docs.docx")
+        assert called_url.endswith("/raw/latest/docs/abc/model_docs.docx")
 
     @patch.object(dc, "_get_auth_headers", return_value={})
     @patch.object(dc, "get_project_context", return_value=("proj-123", "test_project", "test_owner"))

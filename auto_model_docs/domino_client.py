@@ -835,18 +835,6 @@ def build_autodoc_dataset_data_page_url(project_id: str, dataset_id: str) -> str
     return f"{ui_host}/u/{powner}/{pname}/data/rw/upload/{seg}/{ds}/docs"
 
 
-def dfs_raw_download_path(project_id: str, logical_path: str) -> str:
-    rel = (logical_path or "").lstrip("/")
-    if not rel or rel.startswith("artifacts/"):
-        return rel
-    try:
-        if get_code_source_info(project_id)["is_git"]:
-            return f"artifacts/{rel}"
-    except ValueError:
-        pass
-    return rel
-
-
 def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
     """Return the Domino UI URL for the artifacts browser at docs/<run_id[:8]>."""
     ui_host = _resolve_ui_host()
@@ -862,8 +850,7 @@ def build_autodoc_artifacts_run_url(project_id: str, run_id: str) -> str | None:
     if not powner or not pname:
         return None
     short = rid[:8]
-    dfs_dir = dfs_raw_download_path(project_id, f"docs/{short}")
-    return f"{ui_host}/u/{powner}/{pname}/dfs/code/{dfs_dir}"
+    return f"{ui_host}/u/{powner}/{pname}/dfs/code/docs/{short}"
 
 
 def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | None:
@@ -874,14 +861,13 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
     """
     import httpx
 
-    logical_path = (artifact_path or "").lstrip("/")
-    path = dfs_raw_download_path(project_id, logical_path)
+    path = (artifact_path or "").lstrip("/")
     ui_host = _resolve_ui_host()
     if not ui_host:
         logger.warning(
             "download_artifact_at_head skipped: ui host not configured project_id=%s artifact_path=%s",
             project_id,
-            logical_path,
+            path,
         )
         return None
     try:
@@ -890,14 +876,14 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
         logger.warning(
             "download_artifact_at_head skipped: could not resolve project project_id=%s artifact_path=%s",
             project_id,
-            logical_path,
+            path,
         )
         return None
     if not powner or not pname:
         logger.warning(
             "download_artifact_at_head skipped: missing owner or project name project_id=%s artifact_path=%s",
             project_id,
-            logical_path,
+            path,
         )
         return None
 
@@ -912,7 +898,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
                     project_id,
                     powner,
                     pname,
-                    logical_path,
+                    path,
                 )
                 return None
             if resp.status_code >= 400:
@@ -921,7 +907,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
                     project_id,
                     powner,
                     pname,
-                    logical_path,
+                    path,
                     resp.status_code,
                 )
                 resp.raise_for_status()
@@ -932,7 +918,7 @@ def download_artifact_at_head(project_id: str, artifact_path: str) -> bytes | No
             project_id,
             powner,
             pname,
-            logical_path,
+            path,
         )
         return None
 
