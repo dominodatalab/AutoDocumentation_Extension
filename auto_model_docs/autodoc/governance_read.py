@@ -92,7 +92,8 @@ def _extract_evidence_items(computed: ComputedPolicy) -> list[EvidenceItem]:
                 if str(artifact.get("artifactType", "")).lower() != "input":
                     continue
                 art_id = str(artifact.get("id", ""))
-                question = (artifact.get("details") or {}).get("text", "")
+                details = artifact.get("details") or {}
+                question = details.get("label") or details.get("text") or ""
                 if not question:
                     continue
                 result = results_by_key.get((ev_id, art_id))
