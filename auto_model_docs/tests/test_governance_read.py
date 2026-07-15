@@ -24,6 +24,7 @@ from autodoc.core.models import (
 )
 from autodoc.governance_read import (
     GovernanceLoadError,
+    _extract_evidence_items,
     load_governance_context,
     merge_scan_model_names,
 )
@@ -202,3 +203,89 @@ class TestMergeScanModelNames:
 
     def test_deduplicates_overlap(self):
         assert merge_scan_model_names(["same", "other"], ["same"]) == ["same", "other"]
+
+
+class TestExtractEvidenceItems:
+    def test_uses_details_label_when_text_missing(self):
+        computed = ComputedPolicy(
+            bundle=_bundle_summary(),
+            policy_id=POLICY_ID,
+            policy_name="ml-governance-policy",
+            policy_stages=[
+                {
+                    "name": "Stage 1",
+                    "evidenceSet": [
+                        {
+                            "id": "ev-label-1",
+                            "name": "Business benefits",
+                            "artifacts": [
+                                {
+                                    "id": "art-label-1",
+                                    "artifactType": "input",
+                                    "details": {
+                                        "label": "Describe business benefits",
+                                        "type": "Text",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            results=[
+                ArtifactResult(
+                    id="result-label-1",
+                    evidence_id="ev-label-1",
+                    bundle_id=BUNDLE_ID,
+                    artifact_id="art-label-1",
+                    artifact_content="AUTODOC_GOV_A1",
+                    is_latest=True,
+                )
+            ],
+        )
+        items = _extract_evidence_items(computed)
+        assert len(items) == 1
+        assert items[0].question == "Describe business benefits"
+        assert items[0].answer == "AUTODOC_GOV_A1"
+
+    def test_prefers_label_over_text_when_both_present(self):
+        computed = ComputedPolicy(
+            bundle=_bundle_summary(),
+            policy_id=POLICY_ID,
+            policy_name="ml-governance-policy",
+            policy_stages=[
+                {
+                    "name": "Stage 1",
+                    "evidenceSet": [
+                        {
+                            "id": "ev-both-1",
+                            "name": "Training",
+                            "artifacts": [
+                                {
+                                    "id": "art-both-1",
+                                    "artifactType": "input",
+                                    "details": {
+                                        "label": "Preferred question",
+                                        "text": "Legacy question",
+                                        "type": "Text",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            results=[
+                ArtifactResult(
+                    id="result-both-1",
+                    evidence_id="ev-both-1",
+                    bundle_id=BUNDLE_ID,
+                    artifact_id="art-both-1",
+                    artifact_content="answer",
+                    is_latest=True,
+                )
+            ],
+        )
+        items = _extract_evidence_items(computed)
+        assert len(items) == 1
+        assert items[0].question == "Preferred question"
