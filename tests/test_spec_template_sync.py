@@ -18,8 +18,16 @@ import spec_template_sync as st
 
 
 def test_allowed_template_filenames():
-    assert "doc_spec.yaml" in st.allowed_template_filenames()
-    assert "unknown.yaml" not in st.allowed_template_filenames()
+    names = st.allowed_template_filenames()
+    assert "doc_spec.yaml" in names
+    assert "doc_spec_regulated.yaml" in names
+    assert "unknown.yaml" not in names
+
+
+def test_packaged_template_count():
+    names = st.packaged_template_filenames()
+    assert len(names) == 2
+    assert set(names) == {"doc_spec.yaml", "doc_spec_regulated.yaml"}
 
 
 def test_card_meta_from_yaml_reads_slug_sections():

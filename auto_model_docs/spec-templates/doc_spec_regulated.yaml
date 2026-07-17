@@ -1,0 +1,117 @@
+slug: regulated_ai
+card_title: "Regulated AI Documentation"
+card_description: "Technical documentation for data sovereignty, risk controls, and audit-ready AI governance."
+
+title: "Regulated AI System Documentation"
+authors: "Model Risk & Compliance"
+
+sections:
+  - Executive Summary
+  - System Description & Intended Purpose
+  - Data Governance & Sovereignty
+  - "Development History: per_model"
+  - Model Development & Architecture
+  - Risk Management & Impact Assessment
+  - "Performance & Validation: per_model"
+  - Human Oversight & Explainability
+  - Cybersecurity & Access Controls
+  - Infrastructure & Operational Sovereignty
+  - Post-Deployment Monitoring & Incident Response
+  - Governance & Risk
+  - Documentation Traceability
+  - Appendix
+
+hints:
+  "Executive Summary": >
+    Summarize business purpose and high-level technical posture in plain language.
+    SOVEREIGNTY AND COMPLIANCE RULE: Only document controls, jurisdictions,
+    certifications, residency, localization, or regulatory status that appear in
+    project context (code, configuration comments, MLflow tags, governance evidence,
+    README or policy files). Never state compliance claims without explicit evidence.
+    If a topic cannot be assessed, state what is unknown. Do not state risk tier,
+    approval state, or other governance status in this section; see Governance & Risk.
+  "System Description & Intended Purpose": >
+    Describe what the system does, intended users, interfaces, integrations, and
+    explicit out-of-scope or prohibited uses from code and documentation. SOVEREIGNTY
+    AND COMPLIANCE RULE: Only document facts evidenced in project context. Never invent
+    deployment context or regulatory classification. Do not state risk tier, approval
+    state, or other governance status in this section; see Governance & Risk.
+  "Data Governance & Sovereignty": >
+    Document data provenance, PII handling, retention signals, and training versus
+    inference data flows from code evidence. Distinguish data residency, data sovereignty,
+    and data localization only when evidence supports each claim. Map data flows from
+    training through registry to inference. Note cross-border transfers only if code or
+    configuration shows them. SOVEREIGNTY AND COMPLIANCE RULE: Never claim GDPR, EU AI Act,
+    or regional compliance without explicit evidence. If residency or localization cannot
+    be assessed from the repository, state that clearly. Do not state risk tier, approval
+    state, or other governance status in this section; see Governance & Risk.
+  "Development History": >
+    Document the models and versions explored during development, as found in the
+    MLflow experiment history and code. Describe what was tried, how candidates
+    compared, and which model was ultimately promoted. These are development candidates
+    — describe them from code and MLflow evidence only. Do not assign them a risk
+    classification, approval state, or any governance status; they were not governed.
+    The absence of governance data here is expected, not a gap. See Governance & Risk
+    for governed model status.
+  "Model Development & Architecture": >
+    Document design rationale, algorithms, training process, and compute requirements
+    from code and MLflow evidence only. SOVEREIGNTY AND COMPLIANCE RULE: Do not invent
+    architecture or methodology. If evidence is thin, keep the section brief. Do not state
+    risk tier, approval state, or other governance status in this section; see Governance
+    & Risk.
+  "Risk Management & Impact Assessment": >
+    Document identified risks, mitigations, and foreseeable misuse scenarios supported by
+    code or governance evidence. Report fairness or bias metrics, protected attributes,
+    disparate impact, or statistical parity only when present in code or metrics; otherwise
+    write one short limitation paragraph. Do not invent risk registers or impact scores.
+    SOVEREIGNTY AND COMPLIANCE RULE: Do not fabricate compliance posture. Do not state risk
+    tier, approval state, or other governance status in this section; see Governance & Risk.
+  "Performance & Validation": >
+    Present validation procedures, test datasets, metrics, and performance limitations by
+    population from evidenced results only. Do not invent benchmarks or population slices.
+    SOVEREIGNTY AND COMPLIANCE RULE: If validation evidence is missing, state what would be
+    needed. Do not state risk tier, approval state, or other governance status in this
+    section; see Governance & Risk.
+  "Human Oversight & Explainability": >
+    Document human-in-the-loop workflows, override mechanisms, review paths, and
+    interpretability methods found in code. Do not claim that humans review all outputs
+    unless implemented. SOVEREIGNTY AND COMPLIANCE RULE: Only document evidenced controls.
+    Do not state risk tier, approval state, or other governance status in this section;
+    see Governance & Risk.
+  "Cybersecurity & Access Controls": >
+    Document authentication patterns, secrets handling, encryption signals, and network
+    egress from code scan evidence. Do not claim HSM, TEE, or customer-managed keys without
+    evidence. SOVEREIGNTY AND COMPLIANCE RULE: Never invent security certifications. Do not
+    state risk tier, approval state, or other governance status in this section; see
+    Governance & Risk.
+  "Infrastructure & Operational Sovereignty": >
+    Document where compute runs, artifact storage paths, external API calls, third-party
+    model providers, and RAG or vector stores from code evidence. Name subprocessors only
+    when referenced in code or governance evidence. SOVEREIGNTY AND COMPLIANCE RULE: Do not
+    assert data never leaves a region without evidence. Do not state risk tier, approval
+    state, or other governance status in this section; see Governance & Risk.
+  "Post-Deployment Monitoring & Incident Response": >
+    Document drift monitoring, logging, alerting, retraining triggers, and escalation paths
+    found in code. Recommendations are allowed if labeled as recommendations, not as
+    implemented controls. SOVEREIGNTY AND COMPLIANCE RULE: Only document evidenced
+    instrumentation. Do not state risk tier, approval state, or other governance status in
+    this section; see Governance & Risk.
+  "Governance & Risk": >
+    This section describes the governed model(s) of record named in
+    [@governance.model_of_record] — the model(s) tied to the selected governance
+    bundle. State risk tier, intended use, validation status, approval state, and
+    any open findings VERBATIM from the Governance Evidence block, each with its
+    citation. Always name the governed model(s) so governance facts are never read
+    as applying to a development candidate. Do not infer governance facts from
+    code or MLflow; if a fact is not in the Governance Evidence block, omit it.
+  "Documentation Traceability": >
+    Record model versions covered, evidence sources used (code scan, MLflow, registry,
+    governance bundle), and generation context available in the project. SOVEREIGNTY AND
+    COMPLIANCE RULE: Do not invent audit identifiers or certification references. Do not
+    state risk tier, approval state, or other governance status in this section; see
+    Governance & Risk.
+  "Appendix": >
+    Include supporting tables, metric definitions, and file or run references when present
+    in project context. SOVEREIGNTY AND COMPLIANCE RULE: Do not pad with generic compliance
+    appendices. Do not state risk tier, approval state, or other governance status in this
+    section; see Governance & Risk.
