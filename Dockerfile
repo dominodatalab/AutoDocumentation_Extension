@@ -1,3 +1,7 @@
+#
+# Required Domino Environment Base Image: python:3.13-slim-bullseye
+#
+
 LABEL maintainer="Domino Data Lab"
 LABEL description="Auto Model Docs extension environment for Domino Data Lab"
 ARG EXTENSION_VERSION=main
