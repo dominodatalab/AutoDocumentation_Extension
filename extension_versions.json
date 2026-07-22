@@ -1,0 +1,14 @@
+{
+  "versionRegistrySchemaVersion": 1,
+  "installDisplayName": "Automatic Model Documentation",
+  "versions": [
+    {
+      "manifestSchemaVersion": 1,
+      "version": "1.0.0",
+      "releaseTag": "v1.0.0",
+      "isProvisional": false,
+      "minDominoVersion": "6.3.0",
+      "testedWithDominoVersions": ["6.3.0"]
+    }
+  ]
+}
