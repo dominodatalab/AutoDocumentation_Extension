@@ -1,0 +1,61 @@
+{
+  "manifestSchemaVersion": 1,
+  "project": {
+    "name": "Domino_Official_Automatic_Model_Documentation_Extension",
+    "description": "Contains the app for the Automatic Model Documentation Extension.",
+    "visibility": "Private",
+    "isRestricted": false
+  },
+  "app": {
+    "computeEnvironment": {
+      "type": "custom",
+      "customEnvironment": {
+        "name": "Automatic Model Documentation Extension Compute Environment",
+        "dockerfilePath": "Dockerfile",
+        "baseImage": "python:3.10-slim-bullseye",
+        "autoCompatibleWithDomino": false,
+        "visibility": "global",
+        "buildArgs": {
+          "EXTENSION_VERSION": "v1.0.0"
+        }
+      }
+    },
+    "appName": "Domino Automatic Model Documentation App",
+    "appDescription": "Automatic Model Documentation drafts structured documentation for machine learning models using model code, training artifacts, and governance records.",
+    "appVersionDescription": "Automatic Model Documentation 1.0.0",
+    "vanityUrl": "modeldocs",
+    "entryPoint": "app.sh",
+    "visibility": "authenticated",
+    "enableDeepLinking": true,
+    "discoverable": true,
+    "mountDatasets": true,
+    "mountNetAppVolumes": false,
+    "externalVolumeMounts": [],
+    "hardwareTierIdSuggestion": "medium-k8s",
+    "autoscalingSpec": {
+      "enabled": false
+    }
+  },
+  "extension": {
+    "name": "Automatic Model Documentation",
+    "description": "Draft structured model documentation from code, MLflow artifacts, and Domino Governance bundles. Generate Word documents and optional Jupyter notebooks with citations to source code and governance records.",
+    "enabled": true,
+    "uiMountPointTypeConfigs": {
+      "projectSidebar": {
+        "enabled": true,
+        "allProjects": true,
+        "urlConfig": {
+          "route": null,
+          "contextualQueryParams": ["projectId"]
+        }
+      },
+      "model": {
+        "enabled": true,
+        "urlConfig": {
+          "route": null,
+          "contextualQueryParams": ["modelId", "modelVersionId", "projectId"]
+        }
+      }
+    }
+  }
+}
