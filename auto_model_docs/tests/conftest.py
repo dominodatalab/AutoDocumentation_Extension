@@ -1,4 +1,4 @@
-"""Shared fixtures for Auto Model Docs tests."""
+"""Shared fixtures for Auto Model Documentation tests."""
 
 import pytest
 from pathlib import Path

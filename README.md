@@ -1,6 +1,6 @@
 # Auto Model Documentation
 
-Model Docs is a Domino extension that drafts structured documentation for machine learning models. It draws on model code, training artifacts, and governance records to produce documents that explain what a model does, how it was built, and how it is governed.
+Auto Model Documentation is a Domino extension that drafts structured documentation for machine learning models. It draws on model code, training artifacts, and governance records to produce documents that explain what a model does, how it was built, and how it is governed.
 
 **Features**
 

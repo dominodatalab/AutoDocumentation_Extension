@@ -1,4 +1,4 @@
-"""FastHTML UI component helpers for Model Docs Studio."""
+"""FastHTML UI component helpers for Auto Model Documentation."""
 
 from __future__ import annotations
 
@@ -160,7 +160,7 @@ def render_studio_bootstrap_error_page(
 
     logo_svg = (pathlib.Path(__file__).resolve().parent.parent.parent / "domino-logo.svg").read_text()
     return (
-        Title("Model Docs — Domino"),
+        Title("Auto Model Documentation — Domino"),
         Style(STUDIO_CSS),
         Div(Div(NotStr(logo_svg), cls="domino-header-inner"), cls="domino-header"),
         Div(
@@ -253,7 +253,7 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
     if not record:
         return Div(
             Div(
-                H3("Auto documentation job"),
+                H3("Auto Model Documentation job"),
                 cls="terminal-header",
             ),
             Div(
@@ -310,7 +310,7 @@ def _render_domino_status(record: Optional[DominoJobRecord]) -> FT:
 
     return Div(
         Div(
-            H3("Auto documentation job"),
+            H3("Auto Model Documentation job"),
             cls="terminal-header",
         ),
         Div(status.upper(), cls=badge_cls),
