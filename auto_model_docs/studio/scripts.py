@@ -1733,9 +1733,18 @@ MAIN_DOM_JS = r"""
                 }
                 html += '</div>';
             } else if (status === 'failed') {
-                var failedDetail = latestJob.domino_status
-                    ? _esc(latestJob.domino_status)
-                    : 'Check the job logs in Domino for details.';
+                var failedHeadline = 'Generation failed';
+                var failedDetail;
+                if (latestJob.failure_hint) {
+                    failedHeadline = latestJob.failure_hint.headline || failedHeadline;
+                    failedDetail = _esc(latestJob.failure_hint.message || '')
+                        + ' '
+                        + _esc(latestJob.failure_hint.detail || '');
+                } else {
+                    failedDetail = latestJob.domino_status
+                        ? _esc(latestJob.domino_status)
+                        : 'Check the job logs in Domino for details.';
+                }
                 if (latestJob.job_url) {
                     failedDetail += ' <a href="' + _esc(latestJob.job_url) + '" target="_blank" rel="noopener">View Auto Model Documentation job</a>.';
                 }
@@ -1743,7 +1752,7 @@ MAIN_DOM_JS = r"""
                 html += '<div class="results-failed-banner">'
                     + '<span class="material-symbols-outlined results-failed-icon">error</span>'
                     + '<div class="results-failed-text">'
-                    + '<div class="results-failed-headline">Generation failed</div>'
+                    + '<div class="results-failed-headline">' + _esc(failedHeadline) + '</div>'
                     + '<div class="results-failed-detail">' + failedDetail + '</div>'
                     + '</div></div>';
                 html += '</div>';

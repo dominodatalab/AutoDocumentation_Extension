@@ -25,6 +25,22 @@ def job_db_not_configured_msg() -> str | None:
     return None
 
 
+def job_store_availability() -> str | None:
+    if job_db_not_configured_msg():
+        return "not_configured"
+    db_file = _db_path()
+    if db_file is None:
+        return "not_configured"
+    try:
+        db_file.parent.mkdir(parents=True, exist_ok=True)
+        probe = db_file.parent / ".write_probe"
+        probe.write_text("ok")
+        probe.unlink(missing_ok=True)
+        return None
+    except OSError:
+        return "not_accessible"
+
+
 def _mount_root(datasets_dir: str) -> Path:
     root = Path(datasets_dir)
     local = root / "local"

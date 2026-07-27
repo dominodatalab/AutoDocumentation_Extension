@@ -8,7 +8,7 @@ from typing import Optional
 
 from fasthtml.common import *
 
-from domino_job_store import job_db_not_configured_msg
+from domino_job_store import job_store_availability
 from domino_auth import resolve_api_host
 
 from .state import (
@@ -132,21 +132,67 @@ def validate_studio_domino_compute_environment(domino_client_mod: Any) -> list[s
     return []
 
 
-def studio_job_store_config_error() -> tuple[str, str, str] | None:
-    missing = job_db_not_configured_msg()
-    if not missing:
+_EXTENSION_DATASETS_HEADING = "Dataset access required"
+_EXTENSION_DATASETS_MESSAGE = (
+    "Automatic Model Documentation needs access to Domino datasets "
+    "to run jobs and store results."
+)
+_EXTENSION_DATASETS_DETAIL = (
+    "Please contact your Domino administrator to complete extension setup "
+    "or restore dataset access."
+)
+
+_PROJECT_DATASETS_HEADING = "Cannot access project datasets"
+_PROJECT_DATASETS_MESSAGE = (
+    "Automatic Model Documentation needs access to datasets in this project."
+)
+_PROJECT_DATASETS_DETAIL = (
+    "Ask your project owner for dataset access, or contact your Domino administrator."
+)
+
+
+def studio_extension_datasets_error() -> tuple[str, str, str] | None:
+    status = job_store_availability()
+    if status is None:
         return None
-    if "DOMINO_DATASETS_DIR" in missing:
-        return (
-            "Job history not configured",
-            "This app requires DOMINO_DATASETS_DIR so job history can be stored on a Domino dataset mount.",
-            "If you're running this as a Domino App, contact your administrator to configure the app environment.",
-        )
     return (
-        "Job history not configured",
-        "This app requires DOMINO_PROJECT_NAME so job history can be stored for this deployment.",
-        "If you're running this as a Domino App, contact your administrator to configure the app environment.",
+        _EXTENSION_DATASETS_HEADING,
+        _EXTENSION_DATASETS_MESSAGE,
+        _EXTENSION_DATASETS_DETAIL,
     )
+
+
+def studio_project_datasets_error(project_id: str) -> tuple[str, str, str] | None:
+    pid = (project_id or "").strip()
+    if not pid:
+        return None
+    from .state import domino_datasets
+
+    try:
+        ensured = domino_datasets.ensure_dataset(pid)
+        ds_id = (ensured.get("id") or "").strip()
+        if ds_id:
+            return None
+    except Exception:
+        pass
+    return (
+        _PROJECT_DATASETS_HEADING,
+        _PROJECT_DATASETS_MESSAGE,
+        _PROJECT_DATASETS_DETAIL,
+    )
+
+
+def studio_datasets_blocking_error(project_id: str | None = None) -> tuple[str, str, str] | None:
+    extension_err = studio_extension_datasets_error()
+    if extension_err:
+        return extension_err
+    if project_id:
+        return studio_project_datasets_error(project_id)
+    return None
+
+
+def studio_job_store_config_error() -> tuple[str, str, str] | None:
+    return studio_extension_datasets_error()
 
 
 def render_studio_bootstrap_error_page(

@@ -39,7 +39,8 @@ from studio.ui_components import (
     _validate_environment,
     format_project_context_label,
     render_studio_bootstrap_error_page,
-    studio_job_store_config_error,
+    studio_datasets_blocking_error,
+    studio_project_datasets_error,
     validate_studio_domino_compute_environment,
 )
 from studio.routes_api import register_api_routes
@@ -303,7 +304,7 @@ async def index(req: Request):
             ),
         )
 
-    config_err = studio_job_store_config_error()
+    config_err = studio_datasets_blocking_error(project_id)
     if config_err:
         heading, message, detail = config_err
         return render_studio_bootstrap_error_page(heading, message, detail)
@@ -385,13 +386,10 @@ async def index(req: Request):
                 else:
                     spec_template_sync.sync_builtins_to_autodoc_dataset(ds_id)
         except Exception:
-            page_warnings.append(
-                EnvironmentWarning(
-                    level="error",
-                    message="Access to this project's Datasets is required.",
-                    action="Ask the project owner for access, or contact your administrator.",
-                )
-            )
+            project_err = studio_project_datasets_error(project_id)
+            if project_err:
+                heading, message, detail = project_err
+                return render_studio_bootstrap_error_page(heading, message, detail)
 
     return (
         Title("Auto Model Documentation — Domino"),

@@ -19,6 +19,28 @@ from .job_engine import (
     submit_from_queue_payload,
     submit_or_enqueue,
 )
+from .ui_components import studio_datasets_blocking_error
+
+_FAILURE_HINT_CACHE: dict[str, dict[str, str] | None] = {}
+
+
+def _failure_hint_for_job(job: dict) -> dict[str, str] | None:
+    status = (job.get("status") or "").strip().lower()
+    if status != "failed":
+        return None
+    run_id = str(job.get("domino_run_id") or "").strip()
+    if not run_id:
+        return None
+    if run_id in _FAILURE_HINT_CACHE:
+        return _FAILURE_HINT_CACHE[run_id]
+
+    import domino_client
+    from job_failure_hints import failure_hint_dict
+
+    log_text = domino_client.get_job_log_text(run_id)
+    hint = failure_hint_dict(log_text)
+    _FAILURE_HINT_CACHE[run_id] = hint
+    return hint
 
 
 def _current_owner_id() -> str:
@@ -52,6 +74,9 @@ def _jobs_payload(project_id: str, owner_id: str) -> list:
             domino_client.build_autodoc_artifacts_run_url(project_id, run_id) or ""
             if run_id else ""
         )
+        hint = _failure_hint_for_job(j)
+        if hint:
+            j["failure_hint"] = hint
         j.pop("dataset_url", None)
     return jobs
 
@@ -68,6 +93,10 @@ def register_job_routes(rt):
             return _json({"error": str(e)}, 400)
         if not job_request.project_id:
             return _json({"error": "Project ID is required."}, 400)
+        datasets_err = studio_datasets_blocking_error(job_request.project_id)
+        if datasets_err:
+            _heading, message, detail = datasets_err
+            return _json({"error": message, "detail": detail}, 503)
         try:
             result = submit_or_enqueue(owner_id, job_request)
         except ValueError as e:

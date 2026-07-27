@@ -174,6 +174,7 @@ def _mock_studio_modules(monkeypatch):
     mock_ui._db_record_to_dataclass = lambda row: _MockDominoJobRecord(
         id=row["id"], owner_id=row["owner_id"],
     )
+    mock_ui.studio_datasets_blocking_error = lambda project_id=None: None
 
     # job_engine module
     mock_job_engine = ModuleType("studio.job_engine")
@@ -891,6 +892,22 @@ class TestJobRoutes:
         assert len(body.get("jobs") or []) == 1
 
     @pytest.mark.asyncio
+    async def test_run_datasets_unavailable_returns_503(self, _mock_studio_modules):
+        _mock_studio_modules["ui"].studio_datasets_blocking_error = lambda project_id=None: (
+            "Dataset access required",
+            "Automatic Model Documentation needs access to Domino datasets to run jobs and store results.",
+            "Please contact your Domino administrator to complete extension setup or restore dataset access.",
+        )
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        req = _make_request()
+        result = await routes["/run"](req)
+        assert result.status_code == 503
+        body = json.loads(result.body.decode())
+        assert "administrator" in body.get("detail", "").lower()
+        _mock_studio_modules["job_engine"].submit_or_enqueue.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_run_validation_error_returns_400(self, _mock_studio_modules):
         mod = _import_routes_job()
         routes = _register(mod, "register_job_routes")
@@ -915,6 +932,32 @@ class TestJobRoutes:
         assert result.status_code == 500
         body = json.loads(result.body.decode())
         assert "error" in body
+
+    @pytest.mark.asyncio
+    async def test_job_history_attach_failure_hint(self, _mock_studio_modules, monkeypatch):
+        mod = _import_routes_job()
+        routes = _register(mod, "register_job_routes")
+        mod._FAILURE_HINT_CACHE.clear()
+        _mock_studio_modules["state"].domino_job_store.get_user_jobs.return_value = [
+            {
+                "id": "1",
+                "status": "failed",
+                "domino_run_id": "run-fail",
+                "job_url": "https://jobs.example/run-fail/logs",
+            }
+        ]
+        monkeypatch.setattr(
+            "domino_client.get_job_log_text",
+            lambda run_id: "OPENAI_API_KEY not set",
+        )
+        monkeypatch.setattr(
+            "domino_client.build_autodoc_artifacts_run_url",
+            lambda project_id, run_id: "",
+        )
+        req = _make_request(query_params={"projectId": "proj-123"})
+        result = await routes["/job-history"](req)
+        body = json.loads(result.body.decode())
+        assert body["jobs"][0]["failure_hint"]["headline"] == "LLM API key not configured"
 
     @pytest.mark.asyncio
     async def test_job_history(self, _mock_studio_modules):

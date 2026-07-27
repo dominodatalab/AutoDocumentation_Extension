@@ -135,6 +135,32 @@ def test_refresh_persists_unknown_status(monkeypatch, tmp_path):
     assert jobs[0]["status"] == "unknown"
 
 
+def test_job_store_availability_not_configured(monkeypatch):
+    monkeypatch.delenv("DOMINO_DATASETS_DIR", raising=False)
+    monkeypatch.delenv("DOMINO_PROJECT_NAME", raising=False)
+    assert store.job_store_availability() == "not_configured"
+
+
+def test_job_store_availability_not_writable(monkeypatch, tmp_path):
+    root = tmp_path / "data"
+    root.mkdir()
+    root.chmod(0o555)
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+    try:
+        assert store.job_store_availability() == "not_accessible"
+    finally:
+        root.chmod(0o755)
+
+
+def test_job_store_availability_ok(monkeypatch, tmp_path):
+    root = tmp_path / "datasets"
+    root.mkdir()
+    monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+    monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+    assert store.job_store_availability() is None
+
+
 def test_job_db_not_configured_msg(monkeypatch):
     monkeypatch.delenv("DOMINO_DATASETS_DIR", raising=False)
     monkeypatch.delenv("DOMINO_PROJECT_NAME", raising=False)

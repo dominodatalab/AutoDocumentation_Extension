@@ -323,6 +323,37 @@ class TestGetJobStatus:
 
 
 # ---------------------------------------------------------------------------
+# get_job_log_text
+# ---------------------------------------------------------------------------
+
+class TestGetJobLogText:
+    @patch.object(dc, "_domino_request")
+    def test_concatenates_log_lines(self, mock_req):
+        mock_req.return_value = {
+            "logset": {
+                "logContent": [
+                    {"logType": "stdout", "log": "line one"},
+                    {"logType": "stderr", "log": "line two"},
+                ]
+            }
+        }
+        assert dc.get_job_log_text("run-1") == "line one\nline two"
+        mock_req.assert_called_once_with(
+            "GET",
+            "/v4/jobs/run-1/logsWithProblemSuggestions",
+            params={"logType": "complete"},
+        )
+
+    @patch.object(dc, "_domino_request")
+    def test_empty_on_error(self, mock_req):
+        mock_req.side_effect = RuntimeError("boom")
+        assert dc.get_job_log_text("run-1") == ""
+
+    def test_empty_without_run_id(self):
+        assert dc.get_job_log_text("") == ""
+
+
+# ---------------------------------------------------------------------------
 # stop_job
 # ---------------------------------------------------------------------------
 

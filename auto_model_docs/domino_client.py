@@ -784,6 +784,38 @@ def get_job_status(run_id: str) -> dict[str, Any]:
     return {"domino_status": raw, "local_status": local}
 
 
+def get_job_log_text(run_id: str) -> str:
+    rid = (run_id or "").strip()
+    if not rid:
+        return ""
+    try:
+        data = _domino_request(
+            "GET",
+            f"/v4/jobs/{rid}/logsWithProblemSuggestions",
+            params={"logType": "complete"},
+        )
+    except Exception:
+        logger.exception("Failed to fetch job logs for run %s", rid)
+        return ""
+
+    logset = data.get("logset") or {}
+    if not isinstance(logset, dict):
+        return ""
+
+    chunks = logset.get("logContent") or []
+    if not isinstance(chunks, list):
+        return ""
+
+    lines: list[str] = []
+    for item in chunks:
+        if not isinstance(item, dict):
+            continue
+        line = item.get("log")
+        if line:
+            lines.append(str(line))
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Job stop
 # ---------------------------------------------------------------------------

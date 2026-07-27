@@ -584,8 +584,9 @@ class TestGovernanceBundlePickerOptgroups:
     def test_failed_job_status_includes_job_link(self):
         root = Path(__file__).resolve().parent.parent
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
-        failed_idx = scripts_src.index("var failedDetail = latestJob.domino_status")
-        failed_block = scripts_src[failed_idx:failed_idx + 700]
+        failed_idx = scripts_src.index("} else if (status === 'failed') {")
+        failed_block = scripts_src[failed_idx:failed_idx + 900]
+        assert "latestJob.failure_hint" in failed_block
         assert "latestJob.job_url" in failed_block
         assert "View Auto Model Documentation job" in failed_block
 
@@ -616,22 +617,53 @@ class TestStudioJobStoreConfigError:
         ui = _import_ui()
         monkeypatch.delenv("DOMINO_DATASETS_DIR", raising=False)
         monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
-        err = ui.studio_job_store_config_error()
+        err = ui.studio_extension_datasets_error()
         assert err is not None
-        assert err[0] == "Job history not configured"
-        assert "DOMINO_DATASETS_DIR" in err[1]
+        assert err[0] == "Dataset access required"
+        assert "administrator" in err[2].lower()
+        assert "DOMINO_DATASETS_DIR" not in err[1]
 
-    def test_missing_project_name(self, monkeypatch):
+    def test_missing_project_name(self, monkeypatch, tmp_path):
         ui = _import_ui()
-        monkeypatch.setenv("DOMINO_DATASETS_DIR", "/mnt/datasets")
+        root = tmp_path / "datasets"
+        root.mkdir()
+        monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
         monkeypatch.delenv("DOMINO_PROJECT_NAME", raising=False)
-        err = ui.studio_job_store_config_error()
+        err = ui.studio_extension_datasets_error()
         assert err is not None
-        assert "DOMINO_PROJECT_NAME" in err[1]
+        assert "administrator" in err[2].lower()
 
-    def test_ok_when_configured(self, monkeypatch):
+    def test_not_writable(self, monkeypatch, tmp_path):
         ui = _import_ui()
-        monkeypatch.setenv("DOMINO_DATASETS_DIR", "/mnt/datasets")
+        root = tmp_path / "data"
+        root.mkdir()
+        root.chmod(0o555)
+        monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
         monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
-        assert ui.studio_job_store_config_error() is None
+        try:
+            err = ui.studio_extension_datasets_error()
+            assert err is not None
+            assert err[0] == "Dataset access required"
+            assert "administrator" in err[2].lower()
+        finally:
+            root.chmod(0o755)
+
+    def test_ok_when_configured(self, monkeypatch, tmp_path):
+        ui = _import_ui()
+        root = tmp_path / "datasets"
+        root.mkdir()
+        monkeypatch.setenv("DOMINO_DATASETS_DIR", str(root))
+        monkeypatch.setenv("DOMINO_PROJECT_NAME", "studio-app")
+        assert ui.studio_extension_datasets_error() is None
+
+    def test_project_datasets_error(self, _mock_dependencies):
+        mock_state = _mock_dependencies["state"]
+        mock_datasets = MagicMock()
+        mock_datasets.ensure_dataset.side_effect = RuntimeError("denied")
+        mock_state.domino_datasets = mock_datasets
+        ui = _import_ui()
+        err = ui.studio_project_datasets_error("proj-123")
+        assert err is not None
+        assert err[0] == "Cannot access project datasets"
+        assert "administrator" in err[2].lower()
 
