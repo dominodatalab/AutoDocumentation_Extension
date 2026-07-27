@@ -307,7 +307,7 @@ def _submit_domino_job(req: JobRequest) -> tuple[str, str]:
         )
         return run_id, job_url or ""
     except Exception as exc:
-        logger.error("Auto documentation job submission failed: %s", exc, exc_info=True)
+        logger.error("Auto Model Documentation job submission failed: %s", exc, exc_info=True)
         raise
 
 def build_queue_payload(req: JobRequest, spec_path: str) -> dict[str, Any]:

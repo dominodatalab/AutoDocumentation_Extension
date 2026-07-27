@@ -25,7 +25,7 @@ def _get_auth_headers() -> dict[str, str]:
 logger = logging.getLogger(__name__)
 
 AUTODOC_SPECS_DESCRIPTION = (
-    "Auto Model Docs artifacts — auto-created by Auto Model Docs Studio"
+    "Auto Model Documentation artifacts — auto-created by Auto Model Documentation"
 )
 
 _RETRYABLE_STATUS_CODES = (408, 502, 503, 504)

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 AUTODOC_DATASET_NAME = "autodoc"
 AUTODOC_DATASET_DESCRIPTION = (
-    "Auto Model Docs artifacts - generated docs, specs, and internal state"
+    "Auto Model Documentation artifacts - generated docs, specs, and internal state"
 )
 
 

@@ -696,7 +696,7 @@ def submit_job(
 ) -> str:
     pid, pname, _ = get_project_context(project_id)
 
-    title = f"Model Docs: {pname or pid}" + (f" ({branch})" if branch else "")
+    title = f"Auto Model Documentation: {pname or pid}" + (f" ({branch})" if branch else "")
 
     command_str = " ".join(command) if isinstance(command, list) else command
 
@@ -739,7 +739,7 @@ def submit_job(
         or data.get("jobId")
     )
     if not run_id:
-        raise ValueError(f"Starting an auto documentation job returned unexpected response: {data!r}")
+        raise ValueError(f"Starting an Auto Model Documentation job returned unexpected response: {data!r}")
 
     return str(run_id)
 

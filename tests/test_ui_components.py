@@ -576,7 +576,7 @@ class TestGovernanceBundlePickerOptgroups:
         scripts_src = (root / "auto_model_docs" / "studio" / "scripts.py").read_text()
         styles = (root / "auto_model_docs" / "studio" / "styles.py").read_text()
         assert "status === 'unknown'" in scripts_src
-        assert "Could not verify job status" in scripts_src
+        assert "Could not verify Auto Model Documentation job status" in scripts_src
         assert "results-unknown-banner" in scripts_src
         assert "terminal-status-unknown" in styles
         assert "history-status-unknown" in styles
@@ -587,7 +587,7 @@ class TestGovernanceBundlePickerOptgroups:
         failed_idx = scripts_src.index("var failedDetail = latestJob.domino_status")
         failed_block = scripts_src[failed_idx:failed_idx + 700]
         assert "latestJob.job_url" in failed_block
-        assert "View auto documentation job" in failed_block
+        assert "View Auto Model Documentation job" in failed_block
 
     def test_filters_accordion_open_by_default(self):
         root = Path(__file__).resolve().parent.parent

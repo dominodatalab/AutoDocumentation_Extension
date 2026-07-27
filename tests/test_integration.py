@@ -686,6 +686,7 @@ class TestAuthMiddlewareIntegration:
     def test_jwt_cleared_after_request(self, client, integration_env):
         """Auth middleware should clear the JWT after each request."""
         ac = integration_env["auth_context"]
+        ac.set_request_auth_header(None)
         assert ac.get_request_auth_header() is None
 
         client.get(

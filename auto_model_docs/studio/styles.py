@@ -1,4 +1,4 @@
-"""Studio UI styles for Model Docs."""
+"""Studio UI styles for Auto Model Documentation."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 #
 
 LABEL maintainer="Domino Data Lab"
-LABEL description="Auto Model Docs extension environment for Domino Data Lab"
+LABEL description="Auto Model Documentation extension environment for Domino Data Lab"
 ARG EXTENSION_VERSION=main
 LABEL version=$EXTENSION_VERSION
 

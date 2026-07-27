@@ -77,7 +77,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
             Div(
                 Div(
                     Label("Branch (optional)", for_="field-branch"),
-                    Span("\u24d8", cls="info-tooltip", data_tooltip="Git branch for the auto documentation job. Leave blank to use the project default."),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Git branch for the Auto Model Documentation job. Leave blank to use the project default."),
                     cls="label-row",
                 ),
                 Input(
@@ -116,7 +116,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
             Div(
                 Div(
                     Label("Hardware tier", for_="field-hardware_tier"),
-                    Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the auto documentation job."),
+                    Span("\u24d8", cls="info-tooltip", data_tooltip="Compute tier for the Auto Model Documentation job."),
                     cls="label-row",
                 ),
                 Select(*tier_options, name="hardware_tier", id="field-hardware_tier", cls="hw-tier-select"),
@@ -127,7 +127,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
                 Div(
                     Div(
                         Label("Environment", for_="field-environment_id"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Compute environment for the auto documentation job."),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Compute environment for the Auto Model Documentation job."),
                         cls="label-row",
                     ),
                     Select(
@@ -141,7 +141,7 @@ def _build_advanced_options(tier_options, env_options, rev_options):
                 Div(
                     Div(
                         Label("Revision", for_="field-environment_revision_id"),
-                        Span("\u24d8", cls="info-tooltip", data_tooltip="Target environment revision for the auto documentation job."),
+                        Span("\u24d8", cls="info-tooltip", data_tooltip="Target environment revision for the Auto Model Documentation job."),
                         cls="label-row",
                     ),
                     Div(
@@ -229,7 +229,7 @@ async def index(req: Request):
     project_id = _resolve_request_project_id(req)
     if not project_id:
         return (
-            Title("Model Docs — Domino"),
+            Title("Auto Model Documentation — Domino"),
             Style(STUDIO_CSS),
             Script(r"""
                 (function() {
@@ -394,7 +394,7 @@ async def index(req: Request):
             )
 
     return (
-        Title("Model Docs — Domino"),
+        Title("Auto Model Documentation — Domino"),
         # Header
         Div(
             Div(NotStr(_LOGO_SVG), cls="domino-header-inner"),
@@ -412,7 +412,7 @@ async def index(req: Request):
                     Div(
                         Div(
                             Div(
-                                Span("Model Docs", cls="page-title-text"),
+                                Span("Auto Model Documentation", cls="page-title-text"),
                                 Span(
                                     project_display_name,
                                     cls="page-title-project",
