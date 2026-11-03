@@ -12,17 +12,17 @@
       "customEnvironment": {
         "name": "Auto Model Documentation Extension Compute Environment",
         "dockerfilePath": "Dockerfile",
-        "baseImage": "python:3.10-slim-bullseye",
+        "baseImage": "python:3.13-slim-trixie",
         "autoCompatibleWithDomino": false,
         "visibility": "global",
         "buildArgs": {
-          "EXTENSION_VERSION": "v1.0.0"
+          "EXTENSION_VERSION": "v1.0.1"
         }
       }
     },
     "appName": "Domino Auto Model Documentation App",
     "appDescription": "Auto Model Documentation drafts structured documentation for machine learning models using model code, training artifacts, and governance records.",
-    "appVersionDescription": "Auto Model Documentation 1.0.0",
+    "appVersionDescription": "Auto Model Documentation 1.0.1",
     "vanityUrl": "modeldocs",
     "entryPoint": "app.sh",
     "visibility": "authenticated",
