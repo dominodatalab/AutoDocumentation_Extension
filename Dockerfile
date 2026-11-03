@@ -1,5 +1,5 @@
 #
-# Required Domino Environment Base Image: python:3.13-slim-bullseye
+# Required Domino Environment Base Image: python:3.13-slim-trixie
 #
 
 LABEL maintainer="Domino Data Lab"
@@ -43,8 +43,10 @@ WORKDIR ${DOMINO_MDOCS_CLI_INSTALL_DIR}
 USER $DOMINO_USER
 
 RUN set -eu; \
-    git clone "https://github.com/${GITHUB_ORG}/AutoDocumentation_Extension.git" .; \
-    git checkout "${EXTENSION_VERSION}"
+    git clone "https://github.com/${GITHUB_ORG}/AutoDocumentation_Extension.git" autodoc-src && \
+    cd autodoc-src && git checkout "${EXTENSION_VERSION}" && \
+    cp -a . .. && \
+    cd .. && rm -rf autodoc-src
 
 RUN chmod +x ./app.sh && chmod +x ./setup-deps.sh && chmod +x ./auto_model_docs/app_studio.sh && chmod +x ./cli.sh
 RUN ./setup-deps.sh
