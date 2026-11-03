@@ -6,7 +6,7 @@ pip install --no-cache-dir \
   "openai==2.26.0" \
   "mlflow==3.2.0" \
   "python-docx==1.2.0" \
-  "matplotlib==3.8.4" \
+  "matplotlib==3.10.0" \
   "pydantic==2.10.6" \
   "pydantic-settings==2.13.1" \
   "pyyaml==6.0.1" \
